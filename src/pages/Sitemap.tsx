@@ -70,6 +70,11 @@ const pages = [
     path: "/IS",
     title: "Islamic Services",
     description: "Comprehensive religious toolkit. Features prayer times, fasting schedules, zakat calculation, and Asma-ul-Husna using data from IslamicAPI."
+  },
+  {
+    path: "/pay",
+    title: "Payment Gateway",
+    description: "Sandbox payment trial. Integrates UddoktaPay API for creating charges and verifying transactions in a controlled environment."
   }
 ];
 
