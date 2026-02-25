@@ -70,8 +70,12 @@ const WordpressFeedChecker = () => {
         const contents = await fetchWithProxy(targetUrl);
 
         if (contents) {
+          const trimmed = contents.trim();
+          if (!trimmed.startsWith("<?xml")) {
+            continue;
+          }
           const parser = new DOMParser();
-          const xmlDoc = parser.parseFromString(contents, "text/xml");
+          const xmlDoc = parser.parseFromString(trimmed, "text/xml");
 
           const parseError = xmlDoc.getElementsByTagName("parsererror");
           if (parseError.length > 0) continue;
@@ -123,7 +127,7 @@ const WordpressFeedChecker = () => {
         lastError = err instanceof Error ? err.message : "Fetch failed";
       }
     }
-    throw new Error(lastError || "Could not find a valid WordPress feed.");
+    throw new Error("This is not a WordPress website.");
   };
 
   const handleCheck = async (targetOverride?: string) => {
