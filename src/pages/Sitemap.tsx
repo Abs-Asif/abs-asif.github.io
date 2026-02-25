@@ -70,6 +70,11 @@ const pages = [
     path: "/IS",
     title: "Islamic Services",
     description: "Comprehensive religious toolkit. Features prayer times, fasting schedules, zakat calculation, and Asma-ul-Husna using data from IslamicAPI."
+  },
+  {
+    path: "/WP",
+    title: "Wordpress Feed checker",
+    description: "WordPress syndication monitor. Automatically fetches and displays content from WordPress feeds with a 60-second auto-refresh loop."
   }
 ];
 
