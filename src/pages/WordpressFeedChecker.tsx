@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, RefreshCw, ExternalLink, Clock, Globe, Newspaper } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, ExternalLink, Clock, Globe, Newspaper, Eye, X, ImageIcon } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -23,6 +23,11 @@ const WordpressFeedChecker = () => {
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Detail Modal State
+  const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
+  const [isDetailLoading, setIsDetailLoading] = useState(false);
+  const [detailData, setDetailData] = useState<{ title: string; image: string } | null>(null);
+
   const cleanUrl = (input: string) => {
     let formatted = input.trim();
     if (!formatted) return "";
@@ -32,32 +37,32 @@ const WordpressFeedChecker = () => {
     return formatted.replace(/\/+$/, "");
   };
 
+  const fetchWithProxy = async (target: string) => {
+    // Try CodeTabs first
+    try {
+      const response = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
+      if (response.ok) return await response.text();
+    } catch (e) {}
+
+    // Try AllOrigins fallback
+    try {
+      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}&timestamp=${Date.now()}`);
+      const data = await response.json();
+      if (data && data.contents) return data.contents;
+    } catch (e) {}
+
+    // Try Corsproxy.io fallback
+    try {
+      const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(target)}`);
+      if (response.ok) return await response.text();
+    } catch (e) {}
+
+    return null;
+  };
+
   const fetchFeed = async (baseUrl: string) => {
     const patterns = ["/feed/", "/feed/rss2/", "/feed/atom/", "/?feed=rss2"];
     let lastError = "";
-
-    const fetchWithProxy = async (target: string) => {
-      // Try CodeTabs first
-      try {
-        const response = await fetch(`https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(target)}`);
-        if (response.ok) return await response.text();
-      } catch (e) {}
-
-      // Try AllOrigins fallback
-      try {
-        const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}&timestamp=${Date.now()}`);
-        const data = await response.json();
-        if (data && data.contents) return data.contents;
-      } catch (e) {}
-
-      // Try Corsproxy.io fallback
-      try {
-        const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(target)}`);
-        if (response.ok) return await response.text();
-      } catch (e) {}
-
-      return null;
-    };
 
     for (const pattern of patterns) {
       const targetUrl = `${baseUrl}${pattern}`;
@@ -143,6 +148,32 @@ const WordpressFeedChecker = () => {
     }
   };
 
+  const openDetail = async (item: FeedItem) => {
+    setSelectedItem(item);
+    setIsDetailLoading(true);
+    setDetailData(null);
+    try {
+      const html = await fetchWithProxy(item.link);
+      if (html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+        const ogImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+        const twitterImage = doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
+        const metaTitle = doc.querySelector('title')?.textContent;
+
+        setDetailData({
+          title: ogTitle || metaTitle || item.title,
+          image: ogImage || twitterImage || ""
+        });
+      }
+    } catch (e) {
+      toast.error("Failed to load post details");
+    } finally {
+      setIsDetailLoading(false);
+    }
+  };
+
   useEffect(() => {
     if (isAutoRefreshing && activeUrl) {
       countdownRef.current = setInterval(() => {
@@ -169,7 +200,7 @@ const WordpressFeedChecker = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background p-4 md:p-8 lg:p-12 font-mono">
+    <div className="min-h-screen bg-background p-4 md:p-8 lg:p-12 font-mono relative">
       <div className="max-w-4xl mx-auto space-y-8">
         <header className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 border-b border-primary/20 pb-6">
           <div className="flex items-center gap-4">
@@ -259,7 +290,15 @@ const WordpressFeedChecker = () => {
                       </p>
                     )}
                   </div>
-                  <div className="flex items-center justify-end">
+                  <div className="flex items-center gap-3 justify-end">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => openDetail(item)}
+                      className="p-3 bg-primary/5 hover:bg-primary/20 rounded-full transition-all duration-300 border border-primary/10 hover:border-primary/40"
+                    >
+                      <Eye className="w-4 h-4 text-primary" />
+                    </Button>
                     <a
                       href={item.link}
                       target="_blank"
@@ -290,6 +329,59 @@ const WordpressFeedChecker = () => {
           <span>&copy; {new Date().getFullYear()} WP_FEED_CHECKER.sys</span>
         </footer>
       </div>
+
+      {/* Detail Modal */}
+      {selectedItem && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
+          <div className="terminal-window max-w-2xl w-full border-primary/30 animate-fade-in-up">
+            <div className="terminal-header flex justify-between items-center">
+              <span className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
+                <Eye className="w-3 h-3" /> Content Preview
+              </span>
+              <Button variant="ghost" size="icon" onClick={() => setSelectedItem(null)} className="h-6 w-6 hover:bg-primary/10">
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-6 space-y-6">
+              {isDetailLoading ? (
+                <div className="py-20 flex flex-col items-center justify-center gap-4">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Scraping Metadata...</p>
+                </div>
+              ) : (
+                <>
+                  <div className="aspect-video relative rounded-lg overflow-hidden bg-primary/5 border border-primary/10 flex items-center justify-center">
+                    {detailData?.image ? (
+                      <img src={detailData.image} alt={detailData.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground/30">
+                        <ImageIcon className="w-12 h-12" />
+                        <span className="text-[10px] uppercase tracking-widest">No Featured Image Detected</span>
+                      </div>
+                    )}
+                  </div>
+                  <div className="space-y-4">
+                    <h2 className="text-xl font-bold leading-tight text-primary">
+                      {detailData?.title || selectedItem.title}
+                    </h2>
+                    <p className="text-sm text-muted-foreground leading-relaxed">
+                      {stripHtml(selectedItem.description)}
+                    </p>
+                    <div className="pt-4 border-t border-primary/10 flex justify-between items-center">
+                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{selectedItem.pubDate}</span>
+                      <Button asChild className="uppercase text-[10px] tracking-widest font-bold">
+                        <a href={selectedItem.link} target="_blank" rel="noopener noreferrer">
+                          Read Full Article <ExternalLink className="w-3 h-3 ml-2" />
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                </>
+              )}
+              </div>
+            </div>
+          </div>
+      )}
     </div>
   );
 };
