@@ -437,7 +437,7 @@ const Secret = () => {
       ctx.save();
       defineBoxPath();
       ctx.lineWidth = 2;
-      ctx.strokeStyle = '#FF0000';
+      ctx.strokeStyle = '#22C55E';
       ctx.stroke();
       ctx.restore();
 
@@ -646,7 +646,7 @@ const Secret = () => {
             <p className="text-zinc-500 text-sm text-center">You need Permission to view this page.</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-4">
-            <div className="space-y-2">
+            <div className="space-y-2 border-primary/20">
               <Label htmlFor="password">Security Key</Label>
               <Input
                 id="password"
@@ -654,11 +654,11 @@ const Secret = () => {
                 placeholder="••••••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="bg-zinc-800 border-zinc-700 text-white"
+                className="bg-zinc-800 border-zinc-700 text-white focus-visible:ring-primary"
                 autoFocus
               />
             </div>
-            <Button type="submit" className="w-full">Initialize Access</Button>
+            <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-bold uppercase tracking-widest text-xs h-12">Initialize Access</Button>
           </form>
         </div>
       </div>

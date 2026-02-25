@@ -21,6 +21,7 @@ const AiChat = isStandalone ? null : lazy(() => import("./pages/AiChat"));
 const MazeGame = isStandalone ? null : lazy(() => import("./pages/MazeGame"));
 const SearchEngine = isStandalone ? null : lazy(() => import("./pages/SearchEngine"));
 const IslamicServices = isStandalone ? null : lazy(() => import("./pages/IslamicServices"));
+const WordpressFeedChecker = isStandalone ? null : lazy(() => import("./pages/WordpressFeedChecker"));
 const Secret = lazy(() => import("./pages/Secret"));
 
 const Sitemap = isStandalone ? null : lazy(() => import("./pages/Sitemap"));
@@ -61,6 +62,7 @@ const App = () => {
                   <Route path="/GA" element={MazeGame ? <MazeGame /> : null} />
                   <Route path="/SE" element={SearchEngine ? <SearchEngine /> : null} />
                   <Route path="/IS" element={IslamicServices ? <IslamicServices /> : null} />
+                  <Route path="/WP" element={WordpressFeedChecker ? <WordpressFeedChecker /> : null} />
                   <Route path="/secret" element={<Secret />} />
                   <Route path="/sitemap" element={Sitemap ? <Sitemap /> : null} />
                   <Route path="*" element={<NotFound />} />

@@ -1189,7 +1189,7 @@ const MazeGame = () => {
       ctx.save();
       ctx.translate(playerScreenX + cellSize / 2, playerScreenY + cellSize / 2);
       ctx.rotate(angle);
-      ctx.fillStyle = "#FF0000";
+      ctx.fillStyle = "#22C55E";
       ctx.beginPath();
       ctx.moveTo(cellSize / 2 + 10, 0);
       ctx.lineTo(cellSize / 2, -5);
