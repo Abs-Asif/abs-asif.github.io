@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, Loader2, RefreshCw, ExternalLink, Clock, Globe, Newspaper, Eye, X, ImageIcon } from "lucide-react";
+import { ArrowLeft, Loader2, RefreshCw, ExternalLink, Clock, Globe, Newspaper, Eye, X, ImageIcon, Trash2, Copy, Check } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 
@@ -21,12 +21,24 @@ const WordpressFeedChecker = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [timeLeft, setTimeLeft] = useState(60);
   const [isAutoRefreshing, setIsAutoRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const countdownRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Cache for pre-fetched post details
+  const [cachedDetails, setCachedDetails] = useState<Record<string, { title: string; image: string; content?: string }>>({});
 
   // Detail Modal State
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
   const [isDetailLoading, setIsDetailLoading] = useState(false);
-  const [detailData, setDetailData] = useState<{ title: string; image: string } | null>(null);
+  const [detailData, setDetailData] = useState<{ title: string; image: string; content?: string } | null>(null);
+  const [isCopied, setIsCopied] = useState(false);
+
+  const handleCopy = (text: string) => {
+    navigator.clipboard.writeText(text);
+    setIsCopied(true);
+    toast.success("Link copied to clipboard");
+    setTimeout(() => setIsCopied(false), 2000);
+  };
 
   const cleanUrl = (input: string) => {
     let formatted = input.trim();
@@ -145,6 +157,7 @@ const WordpressFeedChecker = () => {
       setActiveUrl(formattedUrl);
       setIsAutoRefreshing(true);
       setTimeLeft(60);
+      setLastUpdated(new Date().toLocaleTimeString());
     } catch (err: any) {
       toast.error(err.message);
     } finally {
@@ -152,8 +165,60 @@ const WordpressFeedChecker = () => {
     }
   };
 
+  const handleClear = () => {
+    setUrl("");
+    setActiveUrl("");
+    setItems([]);
+    setCachedDetails({});
+    setIsAutoRefreshing(false);
+    setTimeLeft(60);
+    setLastUpdated(null);
+    toast.success("All records cleared");
+  };
+
+  const prefetchDetails = async (feedItems: FeedItem[]) => {
+    const top10 = feedItems.slice(0, 10);
+    for (const item of top10) {
+      if (cachedDetails[item.link]) continue;
+
+      try {
+        const html = await fetchWithProxy(item.link);
+        if (html) {
+          const parser = new DOMParser();
+          const doc = parser.parseFromString(html, "text/html");
+          const ogTitle = doc.querySelector('meta[property="og:title"]')?.getAttribute('content');
+          const ogImage = doc.querySelector('meta[property="og:image"]')?.getAttribute('content');
+          const twitterImage = doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
+          const metaTitle = doc.querySelector('title')?.textContent;
+
+          const article = doc.querySelector('article') || doc.body;
+          const contentSnippet = article.querySelector('p')?.textContent || "";
+
+          setCachedDetails(prev => ({
+            ...prev,
+            [item.link]: {
+              title: ogTitle || metaTitle || item.title,
+              image: ogImage || twitterImage || "",
+              content: contentSnippet
+            }
+          }));
+        }
+      } catch (e) {
+        console.error(`Prefetch failed for ${item.link}`);
+      }
+    }
+  };
+
   const openDetail = async (item: FeedItem) => {
     setSelectedItem(item);
+
+    // Check cache first
+    if (cachedDetails[item.link]) {
+      setDetailData(cachedDetails[item.link]);
+      setIsDetailLoading(false);
+      return;
+    }
+
     setIsDetailLoading(true);
     setDetailData(null);
     try {
@@ -166,10 +231,17 @@ const WordpressFeedChecker = () => {
         const twitterImage = doc.querySelector('meta[name="twitter:image"]')?.getAttribute('content');
         const metaTitle = doc.querySelector('title')?.textContent;
 
-        setDetailData({
+        const article = doc.querySelector('article') || doc.body;
+        const contentSnippet = article.querySelector('p')?.textContent || "";
+
+        const data = {
           title: ogTitle || metaTitle || item.title,
-          image: ogImage || twitterImage || ""
-        });
+          image: ogImage || twitterImage || "",
+          content: contentSnippet
+        };
+
+        setDetailData(data);
+        setCachedDetails(prev => ({ ...prev, [item.link]: data }));
       }
     } catch (e) {
       toast.error("Failed to load post details");
@@ -177,6 +249,12 @@ const WordpressFeedChecker = () => {
       setIsDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (items.length > 0) {
+      prefetchDetails(items);
+    }
+  }, [items]);
 
   useEffect(() => {
     if (isAutoRefreshing && activeUrl) {
@@ -246,14 +324,22 @@ const WordpressFeedChecker = () => {
                   onKeyDown={(e) => e.key === 'Enter' && handleCheck()}
                 />
               </div>
-              <div className="flex items-end">
+              <div className="flex items-end gap-2">
                 <Button
                   onClick={() => handleCheck()}
                   disabled={isLoading}
-                  className="w-full md:w-auto uppercase text-xs font-bold tracking-widest bg-primary hover:bg-primary/90"
+                  className="flex-1 md:w-auto uppercase text-xs font-bold tracking-widest bg-primary hover:bg-primary/90"
                 >
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : <RefreshCw className="w-4 h-4 mr-2" />}
                   Initialize Scan
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleClear}
+                  className="border-primary/20 hover:bg-primary/10 text-primary"
+                  title="Clear results"
+                >
+                  <Trash2 className="w-4 h-4" />
                 </Button>
               </div>
             </div>
@@ -261,16 +347,24 @@ const WordpressFeedChecker = () => {
         </div>
 
         {isAutoRefreshing && (
-          <div className="flex items-center justify-between bg-primary/5 border border-primary/10 rounded px-4 py-2 text-[10px] uppercase tracking-[0.2em]">
-            <div className="flex items-center gap-3">
-              <Clock className="w-3 h-3 text-primary animate-pulse" />
-              <span>Next synchronization in: <span className="font-bold text-primary">{timeLeft}s</span></span>
+          <div className="flex flex-col sm:flex-row items-center justify-between gap-4 bg-primary/5 border border-primary/10 rounded px-4 py-3 text-[10px] uppercase tracking-[0.2em]">
+            <div className="flex flex-wrap items-center gap-6">
+              <div className="flex items-center gap-3">
+                <Clock className="w-3 h-3 text-primary animate-pulse" />
+                <span>Sync in: <span className="font-bold text-primary">{timeLeft}s</span></span>
+              </div>
+              {lastUpdated && (
+                <div className="flex items-center gap-3 opacity-60">
+                  <RefreshCw className="w-3 h-3" />
+                  <span>Last Updated: <span className="font-bold">{lastUpdated}</span></span>
+                </div>
+              )}
             </div>
             <button
               onClick={() => setIsAutoRefreshing(false)}
-              className="text-muted-foreground hover:text-primary transition-colors border-b border-transparent hover:border-primary"
+              className="text-muted-foreground hover:text-destructive transition-colors border-b border-transparent hover:border-destructive uppercase font-bold"
             >
-              Abort Loop
+              [ Terminate Loop ]
             </button>
           </div>
         )}
@@ -278,14 +372,14 @@ const WordpressFeedChecker = () => {
         <div className="space-y-4">
           {items.length > 0 ? (
             items.map((item, idx) => (
-              <div key={idx} className="terminal-window border-primary/10 hover:border-primary/30 transition-all duration-300 group">
+              <div key={idx} className="terminal-window border-primary/10 hover:border-primary/40 hover:bg-primary/[0.02] hover:scale-[1.01] hover:shadow-xl transition-all duration-500 group">
                 <div className="p-4 md:p-6 flex flex-col md:flex-row justify-between gap-4">
                   <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2">
                       <Newspaper className="w-3 h-3 text-primary/60" />
                       <span className="text-[9px] text-muted-foreground uppercase tracking-widest">{item.pubDate}</span>
                     </div>
-                    <h3 className="font-bold text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2">
+                    <h3 className="font-bold text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2 font-bangla">
                       {item.title}
                     </h3>
                     {item.description && (
@@ -336,48 +430,76 @@ const WordpressFeedChecker = () => {
 
       {/* Detail Modal */}
       {selectedItem && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-[100] flex items-center justify-center p-4">
-          <div className="terminal-window max-w-2xl w-full border-primary/30 animate-fade-in-up">
-            <div className="terminal-header flex justify-between items-center">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-md z-[100] flex items-center justify-center p-4" onClick={() => setSelectedItem(null)}>
+          <div
+            className="terminal-window max-w-2xl w-full border-primary/30 animate-fade-in-up bg-card/95 shadow-2xl max-h-[90vh] flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="terminal-header flex justify-between items-center sticky top-0 z-10 bg-secondary/80 backdrop-blur-sm">
               <span className="text-[10px] font-bold uppercase tracking-widest flex items-center gap-2">
-                <Eye className="w-3 h-3" /> Content Preview
+                <Eye className="w-3 h-3 text-primary" /> Content Preview
               </span>
-              <Button variant="ghost" size="icon" onClick={() => setSelectedItem(null)} className="h-6 w-6 hover:bg-primary/10">
+              <Button variant="ghost" size="icon" onClick={() => setSelectedItem(null)} className="h-6 w-6 hover:bg-destructive/20 hover:text-destructive transition-colors">
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="p-6 space-y-6">
+            <div className="p-6 space-y-6 overflow-y-auto flex-1 custom-scrollbar">
               {isDetailLoading ? (
                 <div className="py-20 flex flex-col items-center justify-center gap-4">
-                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
-                  <p className="text-[10px] uppercase tracking-widest text-muted-foreground">Scraping Metadata...</p>
+                  <div className="relative">
+                    <Loader2 className="w-12 h-12 animate-spin text-primary opacity-20" />
+                    <Loader2 className="w-12 h-12 animate-spin text-primary absolute inset-0 [animation-delay:-0.5s]" />
+                  </div>
+                  <p className="text-[10px] uppercase tracking-[0.3em] text-primary animate-pulse">Initializing Data Stream...</p>
                 </div>
               ) : (
                 <>
-                  <div className="aspect-video relative rounded-lg overflow-hidden bg-primary/5 border border-primary/10 flex items-center justify-center">
+                  <div className="aspect-video relative rounded-xl overflow-hidden bg-primary/5 border border-primary/10 flex items-center justify-center group">
                     {detailData?.image ? (
-                      <img src={detailData.image} alt={detailData.title} className="w-full h-full object-cover" />
+                      <img src={detailData.image} alt={detailData.title} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" />
                     ) : (
-                      <div className="flex flex-col items-center gap-2 text-muted-foreground/30">
-                        <ImageIcon className="w-12 h-12" />
-                        <span className="text-[10px] uppercase tracking-widest">No Featured Image Detected</span>
+                      <div className="flex flex-col items-center gap-2 text-muted-foreground/20">
+                        <ImageIcon className="w-16 h-16" />
+                        <span className="text-[10px] uppercase tracking-widest">No Visual Assets Detected</span>
                       </div>
                     )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <div className="space-y-4">
-                    <h2 className="text-xl font-bold leading-tight text-primary">
+                    <h2 className="text-2xl font-bold leading-tight text-primary font-bangla decoration-primary/30 decoration-2 underline-offset-4">
                       {detailData?.title || selectedItem.title}
                     </h2>
-                    <p className="text-sm text-muted-foreground leading-relaxed">
-                      {stripHtml(selectedItem.description)}
-                    </p>
-                    <div className="pt-4 border-t border-primary/10 flex justify-between items-center">
-                      <span className="text-[10px] uppercase tracking-widest text-muted-foreground">{selectedItem.pubDate}</span>
-                      <Button asChild className="uppercase text-[10px] tracking-widest font-bold">
-                        <a href={selectedItem.link} target="_blank" rel="noopener noreferrer">
-                          Read Full Article <ExternalLink className="w-3 h-3 ml-2" />
-                        </a>
-                      </Button>
+                    <div className="text-sm text-foreground/80 leading-relaxed space-y-4 font-sans">
+                      {detailData?.content ? (
+                        <p className="first-letter:text-4xl first-letter:font-bold first-letter:text-primary first-letter:mr-2 first-letter:float-left">
+                          {detailData.content}
+                        </p>
+                      ) : (
+                        <p>{stripHtml(selectedItem.description)}</p>
+                      )}
+                    </div>
+
+                    <div className="pt-6 border-t border-primary/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Publication Date</span>
+                        <span className="text-xs font-bold text-primary/80">{selectedItem.pubDate}</span>
+                      </div>
+                      <div className="flex items-center gap-2 w-full sm:w-auto">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleCopy(selectedItem.link)}
+                          className="flex-1 sm:flex-none border-primary/20 hover:bg-primary/10 gap-2 uppercase text-[10px] tracking-widest"
+                        >
+                          {isCopied ? <Check className="w-3 h-3" /> : <Copy className="w-3 h-3" />}
+                          {isCopied ? 'Copied' : 'Copy Link'}
+                        </Button>
+                        <Button asChild size="sm" className="flex-1 sm:flex-none bg-primary hover:bg-primary/90 text-white gap-2 uppercase text-[10px] tracking-widest font-bold">
+                          <a href={selectedItem.link} target="_blank" rel="noopener noreferrer">
+                            Visit Site <ExternalLink className="w-3 h-3" />
+                          </a>
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </>
