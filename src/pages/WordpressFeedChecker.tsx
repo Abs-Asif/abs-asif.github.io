@@ -29,6 +29,7 @@ const WordpressFeedChecker = () => {
 
   // Detail Modal State
   const [selectedItem, setSelectedItem] = useState<FeedItem | null>(null);
+  const [detectedCMS, setDetectedCMS] = useState("WordPress");
   const [isDetailLoading, setIsDetailLoading] = useState(false);
   const [detailData, setDetailData] = useState<{ title: string; image: string; content?: string } | null>(null);
   const [isCopied, setIsCopied] = useState(false);
@@ -47,6 +48,46 @@ const WordpressFeedChecker = () => {
       formatted = "https://" + formatted;
     }
     return formatted.replace(/\/+$/, "");
+  };
+
+  const detectCMS = async (baseUrl: string): Promise<string> => {
+    const cmsIndicators = [
+      { name: "WordPress", signatures: ["wp-content", "wp-includes", "wp-json", "wordpress"] },
+      { name: "Blogger", signatures: ["blogger.com", "blogspot.com", "blogger"] },
+      { name: "Ghost", signatures: ["ghost.org", "ghost-org-auth"] },
+      { name: "Shopify", signatures: ["cdn.shopify.com", "shopify.com", "shopify-payment-button"] },
+      { name: "Wix", signatures: ["wix.com", "wixstatic.com", "wix-code-sdk"] },
+      { name: "Squarespace", signatures: ["squarespace.com", "squarespace-config"] },
+      { name: "Medium", signatures: ["medium.com", "cdn-images-1.medium.com"] },
+      { name: "Tumblr", signatures: ["tumblr.com", "assets.tumblr.com"] },
+      { name: "Drupal", signatures: ["drupal.settings", "drupal.org"] },
+      { name: "Joomla", signatures: ["joomla!"] },
+      { name: "Magento", signatures: ["mage.cookies", "varien/js.js"] },
+    ];
+
+    try {
+      const html = await fetchWithProxy(baseUrl);
+      if (html) {
+        const lowerHtml = html.toLowerCase();
+
+        // Check meta generator tag using DOMParser for better accuracy
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const generator = doc.querySelector('meta[name="generator"]')?.getAttribute("content")?.toLowerCase() || "";
+
+        for (const cms of cmsIndicators) {
+          if (generator.includes(cms.name.toLowerCase())) {
+            return cms.name;
+          }
+          if (cms.signatures.some(sig => lowerHtml.includes(sig.toLowerCase()))) {
+            return cms.name;
+          }
+        }
+      }
+    } catch (e) {
+      console.error("CMS Detection Error:", e);
+    }
+    return "Unknown Platform";
   };
 
   const fetchWithProxy = async (target: string) => {
@@ -73,24 +114,66 @@ const WordpressFeedChecker = () => {
   };
 
   const fetchFeed = async (baseUrl: string) => {
-    const patterns = ["/feed/", "/feed/rss2/", "/feed/atom/", "/?feed=rss2"];
-    let lastError = "";
+    const cmsFeedPatterns: Record<string, string[]> = {
+      "WordPress": ["/feed/", "/feed/rss2/", "/feed/atom/", "/?feed=rss2"],
+      "Blogger": ["/feeds/posts/default"],
+      "Ghost": ["/rss/"],
+      "Shopify": ["/blogs/news.atom"],
+      "Tumblr": ["/rss"],
+      "Wix": ["/feed.xml"],
+      "Squarespace": ["/scripts/format=rss", "?format=rss"],
+      "Generic": ["/rss/", "/feed/", "/index.xml", "/atom.xml", "/rss.xml"]
+    };
 
-    for (const pattern of patterns) {
-      const targetUrl = `${baseUrl}${pattern}`;
+    let discoveredPatterns: string[] = [];
+
+    // Try to find feed links in HTML first
+    try {
+      const html = await fetchWithProxy(baseUrl);
+      if (html) {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(html, "text/html");
+        const links = doc.querySelectorAll('link[type="application/rss+xml"], link[type="application/atom+xml"]');
+        links.forEach(link => {
+          const href = link.getAttribute("href");
+          if (href) {
+            if (href.startsWith("http")) discoveredPatterns.push(href);
+            else discoveredPatterns.push(new URL(href, baseUrl).toString());
+          }
+        });
+      }
+    } catch (e) {}
+
+    // Add patterns based on detected CMS if any
+    const cms = await detectCMS(baseUrl);
+    setDetectedCMS(cms);
+    if (cmsFeedPatterns[cms]) {
+      discoveredPatterns = [...discoveredPatterns, ...cmsFeedPatterns[cms].map(p => p.startsWith("http") ? p : `${baseUrl}${p}`)];
+    }
+
+    // Add generic patterns
+    discoveredPatterns = [...discoveredPatterns, ...cmsFeedPatterns["Generic"].map(p => `${baseUrl}${p}`)];
+
+    // Deduplicate
+    discoveredPatterns = Array.from(new Set(discoveredPatterns));
+
+    let lastError = "";
+    for (const targetUrl of discoveredPatterns) {
       try {
         const contents = await fetchWithProxy(targetUrl);
 
         if (contents) {
           const trimmed = contents.trim();
-          if (!trimmed.startsWith("<?xml")) {
+          if (!trimmed.startsWith("<?xml") && !trimmed.includes("<rss") && !trimmed.includes("<feed")) {
             continue;
           }
           const parser = new DOMParser();
           const xmlDoc = parser.parseFromString(trimmed, "text/xml");
 
           const parseError = xmlDoc.getElementsByTagName("parsererror");
-          if (parseError.length > 0) continue;
+          if (parseError.length > 0) {
+            continue;
+          }
 
           const feedItems: FeedItem[] = [];
 
@@ -139,7 +222,7 @@ const WordpressFeedChecker = () => {
         lastError = err instanceof Error ? err.message : "Fetch failed";
       }
     }
-    throw new Error("This is not a WordPress website.");
+    throw new Error(`Failed to initialize data stream for ${cms} site.`);
   };
 
   const handleCheck = async (targetOverride?: string) => {
@@ -281,6 +364,23 @@ const WordpressFeedChecker = () => {
     return doc.body.textContent || "";
   };
 
+  const formatLocalTime = (dateStr: string) => {
+    try {
+      const date = new Date(dateStr);
+      if (isNaN(date.getTime())) return dateStr;
+      return date.toLocaleString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric',
+        hour: 'numeric',
+        minute: '2-digit',
+        hour12: true
+      });
+    } catch (e) {
+      return dateStr;
+    }
+  };
+
   return (
     <div className="min-h-screen bg-background p-4 md:p-8 lg:p-12 font-mono relative">
       <div className="max-w-4xl mx-auto space-y-8">
@@ -291,10 +391,10 @@ const WordpressFeedChecker = () => {
             </Button>
             <div>
               <h1 className="text-2xl font-bold uppercase tracking-tighter flex items-center gap-3">
-                <span className="text-primary tracking-[0.2em]">WP</span>
-                <span className="opacity-50">Feed.checker</span>
+                <span className="text-primary tracking-[0.2em]">{detectedCMS === "WordPress" ? "WP" : detectedCMS.substring(0, 2).toUpperCase()}</span>
+                <span className="opacity-50">{detectedCMS === "WordPress" ? "Feed.checker" : "Feed.monitor"}</span>
               </h1>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-[0.3em]">WordPress Syndication Monitor v1.0.4</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-[0.3em]">{detectedCMS} Syndication Monitor v1.0.4</p>
             </div>
           </div>
           <div className="flex items-center gap-2 px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-full">
@@ -377,7 +477,7 @@ const WordpressFeedChecker = () => {
                   <div className="space-y-2 flex-1">
                     <div className="flex items-center gap-2">
                       <Newspaper className="w-3 h-3 text-primary/60" />
-                      <span className="text-[9px] text-muted-foreground uppercase tracking-widest">{item.pubDate}</span>
+                      <span className="text-[9px] text-muted-foreground uppercase tracking-widest">{formatLocalTime(item.pubDate)}</span>
                     </div>
                     <h3 className="font-bold text-sm md:text-base leading-tight group-hover:text-primary transition-colors line-clamp-2 font-bangla">
                       {item.title}
@@ -421,10 +521,10 @@ const WordpressFeedChecker = () => {
 
         <footer className="pt-12 border-t border-primary/10 text-[9px] text-muted-foreground uppercase tracking-[0.2em] flex flex-col md:flex-row justify-between gap-4">
           <div className="flex items-center gap-4">
-            <span>Scan Mode: Recursive</span>
-            <span>Protocol: RSS/ATOM</span>
+            <span>Host Platform: {detectedCMS}</span>
+            <span>Protocol: RSS/ATOM/XML</span>
           </div>
-          <span>&copy; {new Date().getFullYear()} WP_FEED_CHECKER.sys</span>
+          <span>&copy; {new Date().getFullYear()} {detectedCMS.toUpperCase()}_FEED_CHECKER.sys</span>
         </footer>
       </div>
 
@@ -469,9 +569,9 @@ const WordpressFeedChecker = () => {
                     <h2 className="text-2xl font-bold leading-tight text-primary font-bangla decoration-primary/30 decoration-2 underline-offset-4">
                       {detailData?.title || selectedItem.title}
                     </h2>
-                    <div className="text-sm text-foreground/80 leading-relaxed space-y-4 font-sans">
+                    <div className="text-sm text-foreground/80 leading-relaxed space-y-4 font-bangla">
                       {detailData?.content ? (
-                        <p className="first-letter:text-4xl first-letter:font-bold first-letter:text-primary first-letter:mr-2 first-letter:float-left">
+                        <p>
                           {detailData.content}
                         </p>
                       ) : (
@@ -482,7 +582,7 @@ const WordpressFeedChecker = () => {
                     <div className="pt-6 border-t border-primary/10 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                       <div className="flex flex-col gap-1">
                         <span className="text-[9px] uppercase tracking-widest text-muted-foreground">Publication Date</span>
-                        <span className="text-xs font-bold text-primary/80">{selectedItem.pubDate}</span>
+                        <span className="text-xs font-bold text-primary/80">{formatLocalTime(selectedItem.pubDate)}</span>
                       </div>
                       <div className="flex items-center gap-2 w-full sm:w-auto">
                         <Button
