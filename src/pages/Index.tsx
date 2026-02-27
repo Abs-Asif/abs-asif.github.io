@@ -62,23 +62,15 @@ const Index = () => {
       if (!html) throw new Error("Could not reach the website via any proxy. Please check the URL or try again later.");
 
       const lowerHtml = html.toLowerCase();
-      const cmsIndicators = [
-        { name: "WordPress", signatures: ["wp-content", "wp-includes", "wordpress", "wp-json"] },
-        { name: "Blogger", signatures: ["blogger.com", "blogspot.com", "blogger"] },
-        { name: "Ghost", signatures: ["ghost.org", "ghost-org-auth"] },
-      ];
+      const isWordPress = ["wp-content", "wp-includes", "wordpress", "wp-json"].some(sig => lowerHtml.includes(sig));
 
-      let detected = "General";
-      for (const cms of cmsIndicators) {
-        if (cms.signatures.some(sig => lowerHtml.includes(sig))) {
-          detected = cms.name;
-          break;
-        }
+      if (!isWordPress) {
+        throw new Error("শুধুমাত্র ওয়ার্ডপ্রেস নিউজ পোর্টাল গ্রহণযোগ্য।");
       }
 
-      setDetectedCMS(detected);
+      setDetectedCMS("WordPress");
       setIsCompatible(true);
-      toast.success(`${detected} portal detected! Your site is compatible.`);
+      toast.success(`ওয়ার্ডপ্রেস পোর্টাল শনাক্ত করা হয়েছে! আপনার সাইটটি সামঞ্জস্যপূর্ণ।`);
     } catch (err: any) {
       toast.error(err.message || "Compatibility check failed.");
     } finally {
@@ -113,12 +105,12 @@ const Index = () => {
             <div className="w-8 h-8 bg-primary rounded-lg flex items-center justify-center">
               <Zap className="text-white w-5 h-5 fill-current" />
             </div>
-            <span className="text-xl font-bold tracking-tight">NewsCard AI</span>
+            <span className="text-xl font-bold tracking-tight">দ্রুতপোস্ট</span>
           </div>
           <div className="flex items-center gap-4">
-            <a href="#features" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">Features</a>
-            <a href="#pricing" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">Pricing</a>
-            <Button variant="ghost" onClick={() => navigate("/dashboard")}>Login</Button>
+            <a href="#features" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">বৈশিষ্ট্যসমূহ</a>
+            <a href="#pricing" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">মূল্য তালিকা</a>
+            <Button variant="ghost" onClick={() => navigate("/dashboard")}>লগইন</Button>
           </div>
         </div>
       </nav>
@@ -127,10 +119,10 @@ const Index = () => {
       <section className="py-20 px-4 text-center space-y-8 bg-gradient-to-b from-primary/5 to-background">
         <div className="max-w-3xl mx-auto space-y-4">
           <h1 className="text-4xl md:text-6xl font-extrabold tracking-tight">
-            Instant Photocards for Your <span className="text-primary">News Portal</span>
+            আপনার নিউজ পোর্টালের জন্য <span className="text-primary">ইনস্ট্যান্ট ফটোকার্ড</span>
           </h1>
           <p className="text-xl text-muted-foreground">
-            Generate stunning photocards for your news posts in seconds. Fully automated, client-side, and lightning fast.
+            সেকেন্ডের মধ্যে আপনার নিউজ পোস্টের জন্য চমৎকার ফটোকার্ড তৈরি করুন। সম্পূর্ণ স্বয়ংক্রিয় এবং সুপার ফাস্ট।
           </p>
         </div>
 
@@ -138,7 +130,7 @@ const Index = () => {
         {!showSignup && (
           <div className="max-w-md mx-auto p-6 bg-card rounded-2xl border shadow-xl space-y-4 animate-fade-in-up">
             <div className="text-left space-y-2">
-              <Label htmlFor="portal-url">Check Your News Portal URL</Label>
+              <Label htmlFor="portal-url">আপনার নিউজ পোর্টাল ইউআরএল চেক করুন</Label>
               <div className="flex gap-2">
                 <Input
                   id="portal-url"
@@ -148,7 +140,7 @@ const Index = () => {
                   disabled={isLoading}
                 />
                 <Button onClick={checkCompatibility} disabled={isLoading}>
-                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "Check"}
+                  {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "চেক করুন"}
                 </Button>
               </div>
             </div>
@@ -157,12 +149,12 @@ const Index = () => {
               <div className="p-4 bg-primary/10 rounded-xl border border-primary/20 flex items-center gap-3 text-left">
                 <CheckCircle2 className="text-primary w-5 h-5" />
                 <div>
-                  <p className="text-sm font-bold text-primary">{detectedCMS} Compatible!</p>
+                  <p className="text-sm font-bold text-primary">{detectedCMS} সামঞ্জস্যপূর্ণ!</p>
                   <button
                     onClick={() => setShowSignup(true)}
                     className="text-xs underline hover:text-primary/80 transition-colors"
                   >
-                    Click here to Signup and Start
+                    অ্যাকাউন্ট তৈরি করতে এখানে ক্লিক করুন
                   </button>
                 </div>
               </div>
@@ -174,29 +166,29 @@ const Index = () => {
         {showSignup && (
           <div className="max-w-md mx-auto p-8 bg-card rounded-2xl border shadow-2xl space-y-6 text-left animate-fade-in-up">
             <div className="space-y-1">
-              <h2 className="text-2xl font-bold">Create your account</h2>
-              <p className="text-sm text-muted-foreground">Join the elite news portals using NewsCard AI.</p>
+              <h2 className="text-2xl font-bold">অ্যাকাউন্ট তৈরি করুন</h2>
+              <p className="text-sm text-muted-foreground">সেরা নিউজ পোর্টালগুলোর সাথে যুক্ত হোন।</p>
             </div>
             <form onSubmit={handleSignup} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="name">Full Name</Label>
+                <Label htmlFor="name">পুরো নাম</Label>
                 <Input id="name" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phone">Phone Number</Label>
+                <Label htmlFor="phone">ফোন নম্বর</Label>
                 <Input id="phone" type="tel" required value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="email">Email Address</Label>
+                <Label htmlFor="email">ইমেল ঠিকানা</Label>
                 <Input id="email" type="email" placeholder="you@gmail.com" required value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-                <p className="text-[10px] text-muted-foreground">Only @gmail.com accepted.</p>
+                <p className="text-[10px] text-muted-foreground">শুধুমাত্র @gmail.com গ্রহণযোগ্য।</p>
               </div>
               <div className="space-y-2">
-                <Label htmlFor="signup-url">Portal URL</Label>
+                <Label htmlFor="signup-url">পোর্টাল ইউআরএল</Label>
                 <Input id="signup-url" value={url} disabled className="bg-muted" />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="role">Your Role</Label>
+                <Label htmlFor="role">আপনার ভূমিকা</Label>
                 <select
                   id="role"
                   className="w-full h-10 px-3 rounded-md border bg-background text-sm"
@@ -209,7 +201,7 @@ const Index = () => {
                   <option>Editor</option>
                 </select>
               </div>
-              <Button type="submit" className="w-full">Create Account & Start Generating</Button>
+              <Button type="submit" className="w-full">অ্যাকাউন্ট তৈরি করুন এবং শুরু করুন</Button>
             </form>
           </div>
         )}
@@ -219,43 +211,43 @@ const Index = () => {
       <section className="py-20 px-4 bg-muted/20">
         <div className="max-w-4xl mx-auto space-y-12">
           <div className="text-center">
-            <h2 className="text-3xl font-bold">Better than the rest</h2>
-            <p className="text-muted-foreground">Why NewsCard AI is the superior choice for news portals.</p>
+            <h2 className="text-3xl font-bold">কেন অন্যদের চেয়ে সেরা</h2>
+            <p className="text-muted-foreground">নিউজ পোর্টালগুলোর জন্য কেন দ্রুতপোস্ট সেরা পছন্দ।</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-card p-8 rounded-3xl border space-y-6">
-              <h3 className="text-xl font-bold text-center">Others</h3>
+              <h3 className="text-xl font-bold text-center">অন্যান্য</h3>
               <ul className="space-y-4">
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>Updates every 15 minutes</span>
+                  <span>প্রতি ১৫ মিনিটে আপডেট</span>
                 </li>
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>Slow generation process</span>
+                  <span>ধীরগতিতে জেনারেশন</span>
                 </li>
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>Manual adjustments required</span>
+                  <span>ম্যানুয়াল অ্যাডজাস্টমেন্ট প্রয়োজন</span>
                 </li>
               </ul>
             </div>
             <div className="bg-primary/5 p-8 rounded-3xl border-2 border-primary space-y-6 relative overflow-hidden">
               <div className="absolute top-0 right-0 bg-primary text-white text-[10px] px-3 py-1 font-bold uppercase tracking-widest rounded-bl-xl">Our Edge</div>
-              <h3 className="text-xl font-bold text-center">NewsCard AI</h3>
+              <h3 className="text-xl font-bold text-center">দ্রুতপোস্ট</h3>
               <ul className="space-y-4">
                 <li className="flex items-center gap-3">
                   <Check className="text-primary w-5 h-5" />
-                  <span className="font-medium">Updates every 2 minutes</span>
+                  <span className="font-medium">প্রতি ২ মিনিটে আপডেট</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Check className="text-primary w-5 h-5" />
-                  <span className="font-medium">Generation in under 1 minute</span>
+                  <span className="font-medium">১ মিনিটের মধ্যে জেনারেশন</span>
                 </li>
                 <li className="flex items-center gap-3">
                   <Check className="text-primary w-5 h-5" />
-                  <span className="font-medium">Fully client-side & secure</span>
+                  <span className="font-medium">সম্পূর্ণ ক্লায়েন্ট-সাইড এবং নিরাপদ</span>
                 </li>
               </ul>
             </div>
@@ -267,8 +259,8 @@ const Index = () => {
       <section id="features" className="py-20">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16 space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">Why Choose NewsCard AI?</h2>
-            <p className="text-muted-foreground">Everything you need to boost your social media engagement.</p>
+            <h2 className="text-3xl font-bold tracking-tight">কেন দ্রুতপোস্ট বেছে নেবেন?</h2>
+            <p className="text-muted-foreground">আপনার সোশ্যাল মিডিয়া এনগেজমেন্ট বাড়াতে যা যা প্রয়োজন।</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
@@ -276,48 +268,48 @@ const Index = () => {
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Zap className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">Lightning Fast</h3>
-              <p className="text-muted-foreground">Generate photocards in under 60 seconds. No more waiting for designers.</p>
+              <h3 className="text-xl font-bold">বিদ্যুৎ গতি</h3>
+              <p className="text-muted-foreground">৬০ সেকেন্ডের কম সময়ে ফটোকার্ড তৈরি করুন। ডিজাইনারের জন্য আর অপেক্ষা নয়।</p>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border hover:shadow-lg transition-shadow space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Clock className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">2-Minute Updates</h3>
-              <p className="text-muted-foreground">Our automation fetches your latest posts every 120 seconds, ensuring you never miss a beat.</p>
+              <h3 className="text-xl font-bold">২ মিনিটের আপডেট</h3>
+              <p className="text-muted-foreground">আমাদের অটোমেশন প্রতি ১২০ সেকেন্ডে আপনার লেটেস্ট পোস্ট চেক করে।</p>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border hover:shadow-lg transition-shadow space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Layout className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">Fully Automated</h3>
-              <p className="text-muted-foreground">Connect your RSS feed and let our system handle the rest. Hands-free content creation.</p>
+              <h3 className="text-xl font-bold">সম্পূর্ণ স্বয়ংক্রিয়</h3>
+              <p className="text-muted-foreground">আপনার আরএসএস ফিড কানেক্ট করুন এবং বাকিটা আমাদের সিস্টেমের ওপর ছেড়ে দিন।</p>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border hover:shadow-lg transition-shadow space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <ShieldCheck className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">100% Client-Side</h3>
-              <p className="text-muted-foreground">Your images and data never leave your browser. Fast, secure, and private.</p>
+              <h3 className="text-xl font-bold">১০০% ক্লায়েন্ট-সাইড</h3>
+              <p className="text-muted-foreground">আপনার ছবি এবং তথ্য ব্রাউজারেই থাকে। দ্রুত, নিরাপদ এবং ব্যক্তিগত।</p>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border hover:shadow-lg transition-shadow space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <Smartphone className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">Mobile Ready</h3>
-              <p className="text-muted-foreground">Optimized for all devices. Manage your news portal on the go.</p>
+              <h3 className="text-xl font-bold">মোবাইল ফ্রেন্ডলি</h3>
+              <p className="text-muted-foreground">সব ডিভাইসের জন্য অপ্টিমাইজ করা। যেকোনো জায়গা থেকে আপনার পোর্টাল ম্যানেজ করুন।</p>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border hover:shadow-lg transition-shadow space-y-4">
               <div className="w-12 h-12 bg-primary/10 rounded-xl flex items-center justify-center text-primary">
                 <BarChart3 className="w-6 h-6" />
               </div>
-              <h3 className="text-xl font-bold">Engagement Boost</h3>
-              <p className="text-muted-foreground">Photocards are proven to increase CTR on Facebook and Twitter by up to 3x.</p>
+              <h3 className="text-xl font-bold">এনগেজমেন্ট বৃদ্ধি</h3>
+              <p className="text-muted-foreground">ফটোকার্ড ফেসবুক এবং টুইটারে ৩ গুণ পর্যন্ত ক্লিক থ্রু রেট (CTR) বৃদ্ধি করতে পারে।</p>
             </div>
           </div>
         </div>
@@ -327,61 +319,61 @@ const Index = () => {
       <section id="pricing" className="py-20 bg-muted/30">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="text-center mb-16 space-y-2">
-            <h2 className="text-3xl font-bold tracking-tight">Simple Pricing</h2>
-            <p className="text-muted-foreground">Choose the plan that fits your news portal size.</p>
+            <h2 className="text-3xl font-bold tracking-tight">সহজ মূল্য তালিকা</h2>
+            <p className="text-muted-foreground">আপনার নিউজ পোর্টালের জন্য সঠিক প্ল্যানটি বেছে নিন।</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
             <div className="p-8 bg-card rounded-2xl border space-y-6">
               <div className="space-y-2">
-                <h3 className="font-bold text-xl">Basic</h3>
-                <p className="text-muted-foreground text-sm">For small news portals.</p>
+                <h3 className="font-bold text-xl">বেসিক</h3>
+                <p className="text-muted-foreground text-sm">ছোট নিউজ পোর্টালের জন্য।</p>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold">$19</span>
-                <span className="text-muted-foreground">/mo</span>
+                <span className="text-4xl font-extrabold">৳৫০০</span>
+                <span className="text-muted-foreground">/মাস</span>
               </div>
               <ul className="space-y-4 text-sm">
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> 1 News Portal</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Manual Generations</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Standard Updates</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> ১টি নিউজ পোর্টাল</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> ম্যানুয়াল জেনারেশন</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> স্ট্যান্ডার্ড আপডেট</li>
               </ul>
-              <Button variant="outline" className="w-full">Get Started</Button>
+              <Button variant="outline" className="w-full">শুরু করুন</Button>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border-2 border-primary space-y-6 relative">
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white text-[10px] px-3 py-1 font-bold uppercase tracking-widest rounded-full">Most Popular</div>
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-primary text-white text-[10px] px-3 py-1 font-bold uppercase tracking-widest rounded-full">জনপ্রিয়</div>
               <div className="space-y-2">
-                <h3 className="font-bold text-xl">Pro</h3>
-                <p className="text-muted-foreground text-sm">For growing newsrooms.</p>
+                <h3 className="font-bold text-xl">প্রো</h3>
+                <p className="text-muted-foreground text-sm">ক্রমবর্ধমান পোর্টালগুলোর জন্য।</p>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold">$49</span>
-                <span className="text-muted-foreground">/mo</span>
+                <span className="text-4xl font-extrabold">৳১৫০০</span>
+                <span className="text-muted-foreground">/মাস</span>
               </div>
               <ul className="space-y-4 text-sm">
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> 3 News Portals</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Full Automation (2m)</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Priority Generation</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> ৩টি নিউজ পোর্টাল</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> সম্পূর্ণ অটোমেশন (২মি)</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> প্রায়োরিটি জেনারেশন</li>
               </ul>
-              <Button className="w-full">Get Started</Button>
+              <Button className="w-full">শুরু করুন</Button>
             </div>
 
             <div className="p-8 bg-card rounded-2xl border space-y-6">
               <div className="space-y-2">
-                <h3 className="font-bold text-xl">Enterprise</h3>
-                <p className="text-muted-foreground text-sm">For large media houses.</p>
+                <h3 className="font-bold text-xl">এন্টারপ্রাইজ</h3>
+                <p className="text-muted-foreground text-sm">বড় মিডিয়া হাউসের জন্য।</p>
               </div>
               <div className="flex items-baseline gap-1">
-                <span className="text-4xl font-extrabold">$99</span>
-                <span className="text-muted-foreground">/mo</span>
+                <span className="text-4xl font-extrabold">৳৩০০০</span>
+                <span className="text-muted-foreground">/মাস</span>
               </div>
               <ul className="space-y-4 text-sm">
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Unlimited Portals</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Dedicated Account Manager</li>
-                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> Custom Templates</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> আনলিমিটেড পোর্টাল</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> ডেডিকেটেড অ্যাকাউন্ট ম্যানেজার</li>
+                <li className="flex items-center gap-2"><Check className="text-primary w-4 h-4" /> কাস্টম টেম্পলেট</li>
               </ul>
-              <Button variant="outline" className="w-full">Contact Us</Button>
+              <Button variant="outline" className="w-full">যোগাযোগ করুন</Button>
             </div>
           </div>
         </div>
@@ -390,7 +382,7 @@ const Index = () => {
       {/* Footer */}
       <footer className="py-12 border-t">
         <div className="max-w-7xl mx-auto px-4 text-center text-sm text-muted-foreground">
-          <p>© {new Date().getFullYear()} NewsCard AI. All rights reserved.</p>
+          <p>© {new Date().getFullYear()} দ্রুতপোস্ট। সর্বস্বত্ব সংরক্ষিত।</p>
         </div>
       </footer>
     </div>

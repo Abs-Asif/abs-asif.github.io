@@ -105,7 +105,7 @@ const Dashboard = () => {
   const processedUrlsRef = useRef<Set<string>>(new Set());
 
   // Settings
-  const [selectedAudio, setSelectedAudio] = useState(localStorage.getItem('bg_notification_audio') || '/alert.mp3');
+  const [selectedAudio, setSelectedAudio] = useState(localStorage.getItem('bg_notification_audio') || '/Alert.mp3');
 
   useEffect(() => {
     processedUrlsRef.current = processedUrls;
@@ -149,11 +149,14 @@ const Dashboard = () => {
   const checkAndClearCache = (portalUrl: string) => {
     const lastClear = localStorage.getItem(`last_cache_clear_${portalUrl}`);
     const sixHours = 6 * 60 * 60 * 1000;
-    if (!lastClear || Date.now() - parseInt(lastClear) > sixHours) {
-        setProcessedUrls(new Set());
-        clearAllRecords().then(() => setAutoRecords([]));
+    if (!lastClear) {
         localStorage.setItem(`last_cache_clear_${portalUrl}`, Date.now().toString());
-        addLog("Periodic cache cleared (6h cycle).", "info");
+        return;
+    }
+    if (Date.now() - parseInt(lastClear) > sixHours) {
+        setProcessedUrls(new Set());
+        localStorage.setItem(`last_cache_clear_${portalUrl}`, Date.now().toString());
+        addLog("URL cache cleared (6h cycle).", "info");
     }
   };
 
@@ -360,7 +363,7 @@ const Dashboard = () => {
     addLog("Scanning feed for new posts...", "process");
 
     try {
-      const feedUrls = [`${user.portalUrl}/feed/`, `${user.portalUrl}/rss/`, `${user.portalUrl}/feeds/posts/default`];
+      const feedUrls = [`${user.portalUrl}/feed/`];
       let feedContent = "";
 
       for (const url of feedUrls) {
@@ -522,7 +525,7 @@ const Dashboard = () => {
       <aside className="w-full md:w-64 border-r bg-card flex flex-col">
         <div className="p-6 border-b flex items-center gap-2">
           <Zap className="text-primary w-6 h-6 fill-current" />
-          <span className="font-bold text-lg tracking-tight">NewsCard AI</span>
+          <span className="font-bold text-lg tracking-tight">দ্রুতপোস্ট</span>
         </div>
 
         <nav className="flex-1 p-4 space-y-2">
@@ -754,9 +757,9 @@ const Dashboard = () => {
                     </Label>
                     <div className="space-y-3">
                       {[
-                        { name: 'Alert (Default)', file: '/alert.mp3' },
-                        { name: 'Instant', file: '/instant.mp3' },
-                        { name: 'Loud', file: '/loud.mp3' }
+                        { name: 'Alert (Default)', file: '/Alert.mp3' },
+                        { name: 'Instant', file: '/Instant.mp3' },
+                        { name: 'Loud', file: '/Loud.mp3' }
                       ].map((audio) => (
                         <div key={audio.file} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all">
                           <span className="text-sm">{audio.name}</span>
