@@ -34,6 +34,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { censorText } from "@/lib/censor";
 import { fetchWithProxy } from "@/lib/proxy";
+import QRCode from "qrcode";
 
 const CANVAS_WIDTH = 1080;
 const CANVAS_HEIGHT = 1080;
@@ -111,17 +112,47 @@ const Dashboard = () => {
         lineSpacing: 1,
         x: 48,
         y: 660 + (85 / 2) - 30
+      },
+      qr: {
+        enabled: false,
+        size: 100,
+        x: 930,
+        y: 30
       }
     };
   });
 
+  const [previewScenario, setPreviewScenario] = useState(0);
+  const scenarios = [
+    "এক লাইনের শিরোনাম",
+    "দুই লাইনের শিরোনাম এখানে দেখা যাবে",
+    "তিন লাইনের বড় শিরোনাম এখানে সুন্দর ভাবে ফুটে উঠবে ফটোকার্ডে"
+  ];
+
   useEffect(() => {
     localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
-  }, [canvasSettings]);
+
+    if (activeTab === "settings") {
+      const censoredTitle = scenarios[previewScenario];
+      generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
+        .then(url => setPreviewUrl(url))
+        .catch(() => {});
+    }
+  }, [canvasSettings, previewScenario, activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "settings") {
+      const interval = setInterval(() => {
+        setPreviewScenario(prev => (prev + 1) % scenarios.length);
+      }, 3000);
+      return () => clearInterval(interval);
+    }
+  }, [activeTab]);
 
   // Form State
   const [manualTitle, setManualTitle] = useState("");
   const [manualImage, setManualImage] = useState("");
+  const [manualQrUrl, setManualQrUrl] = useState("");
   const [semiAutoUrl, setSemiAutoUrl] = useState("");
   const [isFetching, setIsFetching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -175,6 +206,15 @@ const Dashboard = () => {
       localStorage.setItem(`processed_urls_${user.portalUrl}`, JSON.stringify(Array.from(processedUrls)));
     }
   }, [processedUrls, user]);
+
+  useEffect(() => {
+    if (activeTab === "manual" && (manualTitle || manualImage)) {
+      const censoredTitle = censorText(manualTitle || "শিরোনাম এখানে");
+      generatePhotoCardInternal(censoredTitle, manualImage || "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800", manualQrUrl)
+        .then(url => setPreviewUrl(url))
+        .catch(() => {});
+    }
+  }, [manualTitle, manualImage, manualQrUrl, canvasSettings, activeTab]);
 
   const checkAndClearCache = (portalUrl: string) => {
     const lastClear = localStorage.getItem(`last_cache_clear_${portalUrl}`);
@@ -287,7 +327,7 @@ const Dashboard = () => {
     return lines;
   };
 
-  const generatePhotoCardInternal = async (targetTitle: string, targetImageUrl: string): Promise<string> => {
+  const generatePhotoCardInternal = async (targetTitle: string, targetImageUrl: string, qrUrl?: string): Promise<string> => {
     const canvas = canvasRef.current;
     if (!canvas) throw new Error("Canvas not found");
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
@@ -387,6 +427,22 @@ const Dashboard = () => {
         ctx.fillText(line, canvasSettings.title.x, startY + (index * lineHeight));
       });
 
+      // QR Code rendering
+      if (canvasSettings.qr?.enabled && (qrUrl || "https://drutopost.com")) {
+        const qrDataUrl = await QRCode.toDataURL(qrUrl || "https://drutopost.com", {
+          margin: 1,
+          width: canvasSettings.qr.size,
+          color: {
+            dark: "#000000",
+            light: "#ffffff"
+          }
+        });
+        const qrImg = new Image();
+        qrImg.src = qrDataUrl;
+        await new Promise(r => qrImg.onload = r);
+        ctx.drawImage(qrImg, canvasSettings.qr.x, canvasSettings.qr.y);
+      }
+
       ctx.letterSpacing = "0px";
       return canvas.toDataURL('image/png');
     } finally {
@@ -446,7 +502,7 @@ const Dashboard = () => {
 
           if (title && imageUrl) {
             const censoredTitle = censorText(title);
-            const dataUrl = await generatePhotoCardInternal(censoredTitle, imageUrl);
+            const dataUrl = await generatePhotoCardInternal(censoredTitle, imageUrl, link);
 
             const newRecord: AutoRecord = {
               id: Math.random().toString(36).substr(2, 9),
@@ -495,7 +551,7 @@ const Dashboard = () => {
     setIsGenerating(true);
     try {
       const censoredTitle = censorText(manualTitle);
-      const dataUrl = await generatePhotoCardInternal(censoredTitle, manualImage);
+      const dataUrl = await generatePhotoCardInternal(censoredTitle, manualImage, manualQrUrl);
       setPreviewUrl(dataUrl);
 
       const newRecord: AutoRecord = {
@@ -556,7 +612,7 @@ const Dashboard = () => {
         setManualImage(image);
         toast.success("Data fetched! Generating photocard...");
         const censoredTitle = censorText(title);
-        const dataUrl = await generatePhotoCardInternal(censoredTitle, image);
+        const dataUrl = await generatePhotoCardInternal(censoredTitle, image, semiAutoUrl);
         setPreviewUrl(dataUrl);
 
         const newRecord: AutoRecord = {
@@ -660,7 +716,7 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Manage your news portal photocards.</p>
         </header>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
+        <div className={cn("grid gap-10", activeTab === "manual" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
           <div className="space-y-8">
             {activeTab === "manual" && (
               <div className="space-y-6 animate-fade-in-up">
@@ -696,6 +752,26 @@ const Dashboard = () => {
                       </Button>
                     </div>
                   </div>
+
+                  {canvasSettings.qr?.enabled && (
+                    <div className="space-y-2 animate-fade-in-up">
+                      <Label htmlFor="manualQrUrl">QR Code URL</Label>
+                      <div className="flex gap-2">
+                        <Input
+                          id="manualQrUrl"
+                          placeholder="https://yournews.com/post-link"
+                          value={manualQrUrl}
+                          onChange={(e) => setManualQrUrl(e.target.value)}
+                        />
+                        <Button variant="outline" size="icon" onClick={async () => {
+                          const text = await navigator.clipboard.readText();
+                          setManualQrUrl(text);
+                        }}>
+                          <ClipboardPaste className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  )}
                   <Button className="w-full h-12 text-base font-bold" onClick={handleGenerateManual} disabled={isGenerating}>
                     {isGenerating ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <ImageIcon className="w-4 h-4 mr-2" />}
                     Generate Photocard
@@ -708,7 +784,7 @@ const Dashboard = () => {
                       <List className="w-4 h-4 text-primary" />
                       Recent Manual
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {autoRecords.filter(r => r.type === 'manual').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
@@ -770,7 +846,7 @@ const Dashboard = () => {
                       <List className="w-4 h-4 text-primary" />
                       Recent Semi-Auto
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {autoRecords.filter(r => r.type === 'semi-auto').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
@@ -862,7 +938,7 @@ const Dashboard = () => {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                       {autoRecords.filter(r => r.type === 'automation').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
@@ -966,7 +1042,7 @@ const Dashboard = () => {
                         <div className="flex gap-2">
                           <Input
                             type="color"
-                            className="w-8 h-8 p-0 border-none"
+                            className="w-8 h-8 p-0 border-none cursor-pointer"
                             value={canvasSettings.title.color}
                             onChange={(e) => setCanvasSettings({
                               ...canvasSettings,
@@ -975,6 +1051,7 @@ const Dashboard = () => {
                           />
                           <Input
                             className="h-8 text-[10px]"
+                            placeholder="#FFFFFF"
                             value={canvasSettings.title.color}
                             onChange={(e) => setCanvasSettings({
                               ...canvasSettings,
@@ -1022,41 +1099,63 @@ const Dashboard = () => {
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label className="text-[10px]">Letter Spacing</Label>
-                        <Input
-                          type="number"
-                          step="0.1"
-                          className="h-8"
-                          value={canvasSettings.date.letterSpacing}
+                        <Label className="text-[10px]">Alignment</Label>
+                        <select
+                          className="w-full h-8 px-2 rounded border bg-background text-xs"
+                          value={canvasSettings.title.align}
                           onChange={(e) => setCanvasSettings({
                             ...canvasSettings,
-                            date: {...canvasSettings.date, letterSpacing: parseFloat(e.target.value) || 0}
+                            title: {...canvasSettings.title, align: e.target.value}
                           })}
-                        />
+                        >
+                          <option value="left">Left</option>
+                          <option value="center">Center</option>
+                          <option value="right">Right</option>
+                        </select>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px]">X Position</Label>
-                        <Input
-                          type="number"
-                          className="h-8"
-                          value={canvasSettings.title.x}
-                          onChange={(e) => setCanvasSettings({
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.title.x}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
                             ...canvasSettings,
-                            title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}
-                          })}
-                        />
+                            title: {...canvasSettings.title, x: (canvasSettings.title.x || 0) - 5}
+                          })}>←</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, x: (canvasSettings.title.x || 0) + 5}
+                          })}>→</Button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px]">Y Position</Label>
-                        <Input
-                          type="number"
-                          className="h-8"
-                          value={canvasSettings.title.y}
-                          onChange={(e) => setCanvasSettings({
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.title.y}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
                             ...canvasSettings,
-                            title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}
-                          })}
-                        />
+                            title: {...canvasSettings.title, y: (canvasSettings.title.y || 0) - 5}
+                          })}>↑</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, y: (canvasSettings.title.y || 0) + 5}
+                          })}>↓</Button>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -1079,49 +1178,177 @@ const Dashboard = () => {
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px]">Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            className="w-8 h-8 p-0 border-none cursor-pointer"
+                            value={canvasSettings.date.color}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              date: {...canvasSettings.date, color: e.target.value}
+                            })}
+                          />
+                          <Input
+                            className="h-8 text-[10px]"
+                            placeholder="#FFFFFF"
+                            value={canvasSettings.date.color}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              date: {...canvasSettings.date, color: e.target.value}
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Letter Spacing</Label>
                         <Input
-                          type="color"
-                          className="w-full h-8 p-0 border-none"
-                          value={canvasSettings.date.color}
+                          type="number"
+                          step="0.1"
+                          className="h-8"
+                          value={canvasSettings.date.letterSpacing}
                           onChange={(e) => setCanvasSettings({
                             ...canvasSettings,
-                            date: {...canvasSettings.date, color: e.target.value}
+                            date: {...canvasSettings.date, letterSpacing: parseFloat(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Alignment</Label>
+                        <select
+                          className="w-full h-8 px-2 rounded border bg-background text-xs"
+                          value={canvasSettings.date.align}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, align: e.target.value}
+                          })}
+                        >
+                          <option value="left">Left</option>
+                          <option value="center">Center</option>
+                          <option value="right">Right</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">X Position</Label>
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.date.x}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, x: (canvasSettings.date.x || 0) - 5}
+                          })}>←</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, x: (canvasSettings.date.x || 0) + 5}
+                          })}>→</Button>
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Y Position</Label>
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.date.y}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, y: (canvasSettings.date.y || 0) - 5}
+                          })}>↑</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, y: (canvasSettings.date.y || 0) + 5}
+                          })}>↓</Button>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* QR Settings */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase text-muted-foreground">QR Code Settings</h4>
+                      <div className="flex items-center gap-2">
+                        <Label className="text-[10px] uppercase">Enabled</Label>
+                        <input
+                          type="checkbox"
+                          checked={canvasSettings.qr?.enabled}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            qr: {...canvasSettings.qr, enabled: e.target.checked}
+                          })}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Size</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={canvasSettings.qr?.size}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            qr: {...canvasSettings.qr, size: parseInt(e.target.value) || 0}
                           })}
                         />
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px]">X Position</Label>
-                        <Input
-                          type="number"
-                          className="h-8"
-                          value={canvasSettings.date.x}
-                          onChange={(e) => setCanvasSettings({
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.qr?.x}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              qr: {...canvasSettings.qr, x: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
                             ...canvasSettings,
-                            date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}
-                          })}
-                        />
+                            qr: {...canvasSettings.qr, x: (canvasSettings.qr?.x || 0) - 5}
+                          })}>←</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            qr: {...canvasSettings.qr, x: (canvasSettings.qr?.x || 0) + 5}
+                          })}>→</Button>
+                        </div>
                       </div>
                       <div className="space-y-2">
                         <Label className="text-[10px]">Y Position</Label>
-                        <Input
-                          type="number"
-                          className="h-8"
-                          value={canvasSettings.date.y}
-                          onChange={(e) => setCanvasSettings({
+                        <div className="flex gap-1">
+                          <Input
+                            type="number"
+                            className="h-8 flex-1"
+                            value={canvasSettings.qr?.y}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              qr: {...canvasSettings.qr, y: parseInt(e.target.value) || 0}
+                            })}
+                          />
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
                             ...canvasSettings,
-                            date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}
-                          })}
-                        />
+                            qr: {...canvasSettings.qr, y: (canvasSettings.qr?.y || 0) - 5}
+                          })}>↑</Button>
+                          <Button variant="outline" size="icon" className="h-8 w-8" onClick={() => setCanvasSettings({
+                            ...canvasSettings,
+                            qr: {...canvasSettings.qr, y: (canvasSettings.qr?.y || 0) + 5}
+                          })}>↓</Button>
+                        </div>
                       </div>
                     </div>
                   </div>
-
-                  <Button className="w-full" onClick={() => {
-                    const censoredTitle = censorText("নমুনা শিরোনাম এখানে দেখা যাবে");
-                    generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800").then(url => setPreviewUrl(url));
-                  }}>
-                    Update Settings Preview
-                  </Button>
 
                   {previewUrl && (
                     <div className="pt-4 space-y-2">
@@ -1136,32 +1363,34 @@ const Dashboard = () => {
             )}
           </div>
 
-          <div className="space-y-6">
-            <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
-              {previewUrl ? (
-                <>
-                  <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
-                  <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
-                    <Button variant="secondary" size="sm" onClick={() => {
-                      const link = document.createElement('a');
-                      link.download = "photocard.png";
-                      link.href = previewUrl;
-                      link.click();
-                    }}>
-                      <Download className="w-4 h-4 mr-2" />
-                      Download
-                    </Button>
+          {activeTab === "manual" && (
+            <div className="space-y-6">
+              <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
+                {previewUrl ? (
+                  <>
+                    <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
+                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
+                      <Button variant="secondary" size="sm" onClick={() => {
+                        const link = document.createElement('a');
+                        link.download = "photocard.png";
+                        link.href = previewUrl;
+                        link.click();
+                      }}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </Button>
+                    </div>
+                  </>
+                ) : (
+                  <div className="text-center space-y-2">
+                    <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground opacity-20" />
+                    <p className="text-sm text-muted-foreground">Preview will appear here</p>
                   </div>
-                </>
-              ) : (
-                <div className="text-center space-y-2">
-                  <ImageIcon className="w-12 h-12 mx-auto text-muted-foreground opacity-20" />
-                  <p className="text-sm text-muted-foreground">Preview will appear here</p>
-                </div>
-              )}
+                )}
+              </div>
             </div>
-            <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
-          </div>
+          )}
+          <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
         </div>
       </main>
     </div>
