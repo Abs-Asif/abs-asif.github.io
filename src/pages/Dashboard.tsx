@@ -33,6 +33,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { censorText } from "@/lib/censor";
+import { fetchWithProxy } from "@/lib/proxy";
 
 const CANVAS_WIDTH = 1080;
 const CANVAS_HEIGHT = 1080;
@@ -204,25 +205,12 @@ const Dashboard = () => {
     return `${days[date.getDay()]} | ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
   };
 
-  const fetchWithProxy = async (target: string) => {
-    try {
-      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}&timestamp=${Date.now()}`);
-      const data = await response.json();
-      if (data && data.contents) return data.contents;
-    } catch (e) {}
-    try {
-      const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(target)}`);
-      if (response.ok) return await response.text();
-    } catch (e) {}
-    return null;
-  };
-
   const fetchImageWithProxy = async (url: string): Promise<string> => {
     if (url.startsWith('data:')) return url;
     if (url.startsWith('blob:')) return url;
 
     const proxies = [
-      (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
+      (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
       (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
       (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
     ];

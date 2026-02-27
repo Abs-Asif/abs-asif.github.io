@@ -19,6 +19,7 @@ import {
   X
 } from "lucide-react";
 import { toast } from "sonner";
+import { fetchWithProxy } from "@/lib/proxy";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -45,19 +46,6 @@ const Index = () => {
     return formatted.replace(/\/+$/, "");
   };
 
-  const fetchWithProxy = async (target: string) => {
-    try {
-      const response = await fetch(`https://api.allorigins.win/get?url=${encodeURIComponent(target)}&timestamp=${Date.now()}`);
-      const data = await response.json();
-      if (data && data.contents) return data.contents;
-    } catch (e) {}
-    try {
-      const response = await fetch(`https://corsproxy.io/?${encodeURIComponent(target)}`);
-      if (response.ok) return await response.text();
-    } catch (e) {}
-    return null;
-  };
-
   const checkCompatibility = async () => {
     const formattedUrl = cleanUrl(url);
     if (!formattedUrl) {
@@ -71,16 +59,16 @@ const Index = () => {
 
     try {
       const html = await fetchWithProxy(formattedUrl);
-      if (!html) throw new Error("Could not reach the website.");
+      if (!html) throw new Error("Could not reach the website via any proxy. Please check the URL or try again later.");
 
       const lowerHtml = html.toLowerCase();
       const cmsIndicators = [
-        { name: "WordPress", signatures: ["wp-content", "wp-includes", "wordpress"] },
-        { name: "Blogger", signatures: ["blogger.com", "blogspot.com"] },
-        { name: "Ghost", signatures: ["ghost.org"] },
+        { name: "WordPress", signatures: ["wp-content", "wp-includes", "wordpress", "wp-json"] },
+        { name: "Blogger", signatures: ["blogger.com", "blogspot.com", "blogger"] },
+        { name: "Ghost", signatures: ["ghost.org", "ghost-org-auth"] },
       ];
 
-      let detected = "Unknown";
+      let detected = "General";
       for (const cms of cmsIndicators) {
         if (cms.signatures.some(sig => lowerHtml.includes(sig))) {
           detected = cms.name;
