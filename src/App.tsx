@@ -8,6 +8,7 @@ import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 const isStandalone = import.meta.env.VITE_STANDALONE_SECRET === 'true';
 
 const Index = isStandalone ? null : lazy(() => import("./pages/Index"));
+const Dashboard = isStandalone ? null : lazy(() => import("./pages/Dashboard"));
 const Dictionary = isStandalone ? null : lazy(() => import("./pages/Dictionary"));
 const FontSimplified = isStandalone ? null : lazy(() => import("./pages/FontSimplified"));
 const FontDocumentation = isStandalone ? null : lazy(() => import("./pages/FontDocumentation"));
@@ -49,6 +50,7 @@ const App = () => {
               ) : (
                 <>
                   <Route path="/" element={Index ? <Index /> : null} />
+                  <Route path="/dashboard" element={Dashboard ? <Dashboard /> : null} />
                   <Route path="/D" element={Dictionary ? <Dictionary /> : null} />
                   <Route path="/F" element={FontSimplified ? <FontSimplified /> : null} />
                   <Route path="/F/D" element={FontDocumentation ? <FontDocumentation /> : null} />
