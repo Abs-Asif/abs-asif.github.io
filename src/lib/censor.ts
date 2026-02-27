@@ -22,7 +22,6 @@ export const censorText = (text: string) => {
     'Raped': 'Ra*ped',
   };
 
-  // Sort by length descending to match longer words first
   const sortedUnsafe = Object.keys(mappings).sort((a, b) => b.length - a.length);
 
   sortedUnsafe.forEach((unsafe) => {
