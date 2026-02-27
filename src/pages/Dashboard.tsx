@@ -61,6 +61,7 @@ interface AutoRecord {
   imageUrl: string;
   previewUrl: string;
   timestamp: string;
+  type: 'manual' | 'semi-auto' | 'automation';
 }
 
 const initDB = (): Promise<IDBDatabase> => {
@@ -86,8 +87,37 @@ const Dashboard = () => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
-  const [fontSize, setFontSize] = useState(70);
-  const [titleLetterSpacing, setTitleLetterSpacing] = useState(-2.4);
+
+  // Expanded Canvas Settings
+  const [canvasSettings, setCanvasSettings] = useState(() => {
+    const saved = localStorage.getItem('canvas_settings');
+    return saved ? JSON.parse(saved) : {
+      title: {
+        color: '#ffffff',
+        font: 'Kalpurush',
+        size: 70,
+        align: 'center',
+        letterSpacing: -2.4,
+        lineSpacing: 1.1,
+        x: 540,
+        y: 860
+      },
+      date: {
+        color: '#ffffff',
+        font: 'Cambria',
+        size: 20,
+        align: 'left',
+        letterSpacing: 0,
+        lineSpacing: 1,
+        x: 48,
+        y: 660 + (85 / 2) - 30
+      }
+    };
+  });
+
+  useEffect(() => {
+    localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
+  }, [canvasSettings]);
 
   // Form State
   const [manualTitle, setManualTitle] = useState("");
@@ -180,6 +210,14 @@ const Dashboard = () => {
     tx.objectStore(STORE_NAME).clear();
   };
 
+  const deleteRecord = async (id: string) => {
+    const db = await initDB();
+    const tx = db.transaction(STORE_NAME, 'readwrite');
+    tx.objectStore(STORE_NAME).delete(id);
+    setAutoRecords(prev => prev.filter(r => r.id !== id));
+    toast.success("Photocard deleted.");
+  };
+
   const addLog = (message: string, type: LogEntry['type'] = 'info') => {
     const newLog: LogEntry = { message, timestamp: Date.now(), type };
     setAutoLogs(prev => [newLog, ...prev].slice(0, 50));
@@ -269,8 +307,8 @@ const Dashboard = () => {
       ctx.drawImage(template, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
       await Promise.all([
-        document.fonts.load(`bold ${fontSize}px "Kalpurush"`),
-        document.fonts.load(`20px "Cambria"`)
+        document.fonts.load(`bold ${canvasSettings.title.size}px "${canvasSettings.title.font}"`),
+        document.fonts.load(`${canvasSettings.date.size}px "${canvasSettings.date.font}"`)
       ]);
 
       userImgBlobUrl = await fetchImageWithProxy(targetImageUrl);
@@ -315,23 +353,24 @@ const Dashboard = () => {
       ctx.stroke();
       ctx.restore();
 
-      ctx.font = `20px "Cambria"`;
-      ctx.fillStyle = 'white';
-      ctx.textAlign = 'left';
+      ctx.font = `${canvasSettings.date.size}px "${canvasSettings.date.font}"`;
+      ctx.fillStyle = canvasSettings.date.color;
+      ctx.textAlign = canvasSettings.date.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      ctx.fillText(formatDate(new Date()), DATE_X - 40, DATE_Y - 30);
+      ctx.letterSpacing = `${canvasSettings.date.letterSpacing}px`;
+      ctx.fillText(formatDate(new Date()), canvasSettings.date.x, canvasSettings.date.y);
 
-      let currentFontSize = fontSize;
-      ctx.fillStyle = 'white';
-      ctx.textAlign = 'center';
+      let currentFontSize = canvasSettings.title.size;
+      ctx.fillStyle = canvasSettings.title.color;
+      ctx.textAlign = canvasSettings.title.align as CanvasTextAlign;
       ctx.textBaseline = 'middle';
-      ctx.letterSpacing = `${titleLetterSpacing}px`;
+      ctx.letterSpacing = `${canvasSettings.title.letterSpacing}px`;
 
       const maxW = 980;
       let lines: string[] = [];
       let attempts = 0;
       while (attempts < 10) {
-        ctx.font = `bold ${currentFontSize}px "Kalpurush"`;
+        ctx.font = `bold ${currentFontSize}px "${canvasSettings.title.font}"`;
         lines = wrapText(ctx, targetTitle, maxW);
         let maxLineW = 0;
         lines.forEach(l => { maxLineW = Math.max(maxLineW, ctx.measureText(l).width); });
@@ -341,11 +380,11 @@ const Dashboard = () => {
         attempts++;
       }
 
-      const lineHeight = currentFontSize * 1.1;
+      const lineHeight = currentFontSize * canvasSettings.title.lineSpacing;
       const totalHeight = (lines.length - 1) * lineHeight;
-      const startY = TITLE_Y - (totalHeight / 2);
+      const startY = canvasSettings.title.y - (totalHeight / 2);
       lines.forEach((line, index) => {
-        ctx.fillText(line, TITLE_X, startY + (index * lineHeight));
+        ctx.fillText(line, canvasSettings.title.x, startY + (index * lineHeight));
       });
 
       ctx.letterSpacing = "0px";
@@ -415,7 +454,8 @@ const Dashboard = () => {
               title: censoredTitle,
               imageUrl: imageUrl,
               previewUrl: dataUrl,
-              timestamp: new Date().toISOString()
+              timestamp: new Date().toISOString(),
+              type: 'automation'
             };
 
             await saveRecord(newRecord);
@@ -457,6 +497,19 @@ const Dashboard = () => {
       const censoredTitle = censorText(manualTitle);
       const dataUrl = await generatePhotoCardInternal(censoredTitle, manualImage);
       setPreviewUrl(dataUrl);
+
+      const newRecord: AutoRecord = {
+        id: Math.random().toString(36).substr(2, 9),
+        url: "",
+        title: censoredTitle,
+        imageUrl: manualImage,
+        previewUrl: dataUrl,
+        timestamp: new Date().toISOString(),
+        type: 'manual'
+      };
+      await saveRecord(newRecord);
+      setAutoRecords(prev => [newRecord, ...prev]);
+
       playNotification();
       toast.success("Photocard generated!");
     } catch (error) {
@@ -505,8 +558,20 @@ const Dashboard = () => {
         const censoredTitle = censorText(title);
         const dataUrl = await generatePhotoCardInternal(censoredTitle, image);
         setPreviewUrl(dataUrl);
+
+        const newRecord: AutoRecord = {
+          id: Math.random().toString(36).substr(2, 9),
+          url: semiAutoUrl,
+          title: censoredTitle,
+          imageUrl: image,
+          previewUrl: dataUrl,
+          timestamp: new Date().toISOString(),
+          type: 'semi-auto'
+        };
+        await saveRecord(newRecord);
+        setAutoRecords(prev => [newRecord, ...prev]);
+
         playNotification();
-        setActiveTab("manual");
       } else {
         toast.error("Could not find title or image on this page.");
       }
@@ -636,6 +701,40 @@ const Dashboard = () => {
                     Generate Photocard
                   </Button>
                 </div>
+
+                {autoRecords.some(r => r.type === 'manual') && (
+                  <div className="space-y-4">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <List className="w-4 h-4 text-primary" />
+                      Recent Manual
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {autoRecords.filter(r => r.type === 'manual').map(record => (
+                        <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
+                          <div className="aspect-video relative overflow-hidden bg-muted">
+                            <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
+                                const link = document.createElement('a');
+                                link.download = "photocard.png";
+                                link.href = record.previewUrl;
+                                link.click();
+                              }}>
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="p-2">
+                            <p className="text-[10px] font-bangla line-clamp-1">{record.title}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -664,6 +763,49 @@ const Dashboard = () => {
                     Fetch and Generate
                   </Button>
                 </div>
+
+                {autoRecords.some(r => r.type === 'semi-auto') && (
+                  <div className="space-y-4">
+                    <h3 className="font-bold flex items-center gap-2">
+                      <List className="w-4 h-4 text-primary" />
+                      Recent Semi-Auto
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {autoRecords.filter(r => r.type === 'semi-auto').map(record => (
+                        <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
+                          <div className="aspect-video relative overflow-hidden bg-muted">
+                            <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
+                                const link = document.createElement('a');
+                                link.download = "photocard.png";
+                                link.href = record.previewUrl;
+                                link.click();
+                              }}>
+                                <Download className="w-4 h-4" />
+                              </Button>
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Copy URL" onClick={() => {
+                                navigator.clipboard.writeText(record.url);
+                                toast.success("URL copied!");
+                              }}>
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </div>
+                          </div>
+                          <div className="p-2">
+                            <p className="text-[10px] font-bangla line-clamp-1">{record.title}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 
@@ -721,18 +863,30 @@ const Dashboard = () => {
                       </Button>
                     </div>
                     <div className="grid grid-cols-2 gap-4">
-                      {autoRecords.map(record => (
+                      {autoRecords.filter(r => r.type === 'automation').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
-                          <div className="aspect-square relative overflow-hidden bg-muted">
+                          <div className="aspect-video relative overflow-hidden bg-muted">
                             <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                              <Button variant="secondary" size="icon" onClick={() => {
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
                                 const link = document.createElement('a');
                                 link.download = "photocard.png";
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
                                 <Download className="w-4 h-4" />
+                              </Button>
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
+                                <ExternalLink className="w-4 h-4" />
+                              </Button>
+                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Copy URL" onClick={() => {
+                                navigator.clipboard.writeText(record.url);
+                                toast.success("URL copied!");
+                              }}>
+                                <Copy className="w-4 h-4" />
+                              </Button>
+                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-4 h-4" />
                               </Button>
                             </div>
                           </div>
@@ -749,65 +903,234 @@ const Dashboard = () => {
 
             {activeTab === "settings" && (
               <div className="space-y-6 animate-fade-in-up">
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-6">
-                  <div className="space-y-4">
-                    <Label className="text-sm font-bold flex items-center gap-2">
-                      <Volume2 className="w-4 h-4 text-primary" />
-                      Notification Sound
-                    </Label>
-                    <div className="space-y-3">
-                      {[
-                        { name: 'Alert (Default)', file: '/Alert.mp3' },
-                        { name: 'Instant', file: '/Instant.mp3' },
-                        { name: 'Loud', file: '/Loud.mp3' }
-                      ].map((audio) => (
-                        <div key={audio.file} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all">
-                          <span className="text-sm">{audio.name}</span>
-                          <div className="flex items-center gap-2">
-                            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => playNotification(audio.file)}>
-                              <Play className="h-3 w-3" />
-                            </Button>
-                            <Button
-                              variant={selectedAudio === audio.file ? "default" : "outline"}
-                              size="sm"
-                              className="h-8 px-4 text-xs"
-                              onClick={() => saveAudioSetting(audio.file)}
-                            >
-                              {selectedAudio === audio.file ? "Selected" : "Select"}
-                            </Button>
-                          </div>
+                {/* Notification Settings */}
+                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-primary" />
+                    Notification Sound
+                  </Label>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Alert (Default)', file: '/Alert.mp3' },
+                      { name: 'Instant', file: '/Instant.mp3' },
+                      { name: 'Loud', file: '/Loud.mp3' }
+                    ].map((audio) => (
+                      <div key={audio.file} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all">
+                        <span className="text-sm">{audio.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => playNotification(audio.file)}>
+                            <Play className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant={selectedAudio === audio.file ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 px-4 text-xs"
+                            onClick={() => saveAudioSetting(audio.file)}
+                          >
+                            {selectedAudio === audio.file ? "Selected" : "Select"}
+                          </Button>
                         </div>
-                      ))}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Canvas Customization */}
+                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-8">
+                  <Label className="text-sm font-bold flex items-center gap-2 border-b pb-2">
+                    <Settings className="w-4 h-4 text-primary" />
+                    Canvas Personalization
+                  </Label>
+
+                  {/* Title Config */}
+                  <div className="space-y-4">
+                    <h4 className="text-xs font-bold uppercase text-muted-foreground">Title Text Settings</h4>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Font Family</Label>
+                        <select
+                          className="w-full h-8 px-2 rounded border bg-background text-xs"
+                          value={canvasSettings.title.font}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, font: e.target.value}
+                          })}
+                        >
+                          <option>Kalpurush</option>
+                          <option>Solaiman Lipi</option>
+                          <option>Inter</option>
+                        </select>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Text Color</Label>
+                        <div className="flex gap-2">
+                          <Input
+                            type="color"
+                            className="w-8 h-8 p-0 border-none"
+                            value={canvasSettings.title.color}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              title: {...canvasSettings.title, color: e.target.value}
+                            })}
+                          />
+                          <Input
+                            className="h-8 text-[10px]"
+                            value={canvasSettings.title.color}
+                            onChange={(e) => setCanvasSettings({
+                              ...canvasSettings,
+                              title: {...canvasSettings.title, color: e.target.value}
+                            })}
+                          />
+                        </div>
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Size</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={canvasSettings.title.size}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, size: parseInt(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Letter Spacing</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8"
+                          value={canvasSettings.title.letterSpacing}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, letterSpacing: parseFloat(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Line Spacing</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8"
+                          value={canvasSettings.title.lineSpacing}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, lineSpacing: parseFloat(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Letter Spacing</Label>
+                        <Input
+                          type="number"
+                          step="0.1"
+                          className="h-8"
+                          value={canvasSettings.date.letterSpacing}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, letterSpacing: parseFloat(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">X Position</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={canvasSettings.title.x}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Y Position</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={canvasSettings.title.y}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
                     </div>
                   </div>
 
-                  <div className="pt-6 border-t space-y-4">
-                    <Label className="text-sm font-bold flex items-center gap-2">
-                      <Settings className="w-4 h-4 text-primary" />
-                      Canvas Settings
-                    </Label>
+                  {/* Date Config */}
+                  <div className="space-y-4 pt-4 border-t">
+                    <h4 className="text-xs font-bold uppercase text-muted-foreground">Date & Time Settings</h4>
                     <div className="grid grid-cols-2 gap-4">
                       <div className="space-y-2">
-                        <Label htmlFor="fontSize" className="text-xs">Font Size</Label>
+                        <Label className="text-[10px]">Size</Label>
                         <Input
-                          id="fontSize"
                           type="number"
-                          value={fontSize}
-                          onChange={(e) => setFontSize(parseInt(e.target.value) || 70)}
+                          className="h-8"
+                          value={canvasSettings.date.size}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, size: parseInt(e.target.value) || 0}
+                          })}
                         />
                       </div>
                       <div className="space-y-2">
-                        <Label htmlFor="spacing" className="text-xs">Letter Spacing</Label>
+                        <Label className="text-[10px]">Color</Label>
                         <Input
-                          id="spacing"
+                          type="color"
+                          className="w-full h-8 p-0 border-none"
+                          value={canvasSettings.date.color}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, color: e.target.value}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">X Position</Label>
+                        <Input
                           type="number"
-                          step="0.1"
-                          value={titleLetterSpacing}
-                          onChange={(e) => setTitleLetterSpacing(parseFloat(e.target.value) || 0)}
+                          className="h-8"
+                          value={canvasSettings.date.x}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}
+                          })}
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label className="text-[10px]">Y Position</Label>
+                        <Input
+                          type="number"
+                          className="h-8"
+                          value={canvasSettings.date.y}
+                          onChange={(e) => setCanvasSettings({
+                            ...canvasSettings,
+                            date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}
+                          })}
                         />
                       </div>
                     </div>
                   </div>
+
+                  <Button className="w-full" onClick={() => {
+                    const censoredTitle = censorText("নমুনা শিরোনাম এখানে দেখা যাবে");
+                    generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800").then(url => setPreviewUrl(url));
+                  }}>
+                    Update Settings Preview
+                  </Button>
+
+                  {previewUrl && (
+                    <div className="pt-4 space-y-2">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Live Preview</Label>
+                      <div className="rounded-xl overflow-hidden border shadow-inner bg-black/5 aspect-video flex items-center justify-center">
+                        <img src={previewUrl} alt="Settings Preview" className="w-full h-full object-contain" />
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}

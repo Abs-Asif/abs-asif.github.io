@@ -97,7 +97,7 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background font-sans">
+    <div className="min-h-screen bg-background font-bangla">
       {/* Navigation */}
       <nav className="border-b bg-background/95 backdrop-blur sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
@@ -211,25 +211,25 @@ const Index = () => {
       <section className="py-20 px-4 bg-muted/20">
         <div className="max-w-4xl mx-auto space-y-12">
           <div className="text-center">
-            <h2 className="text-3xl font-bold">কেন অন্যদের চেয়ে সেরা</h2>
-            <p className="text-muted-foreground">নিউজ পোর্টালগুলোর জন্য কেন দ্রুতপোস্ট সেরা পছন্দ।</p>
+            <h2 className="text-3xl font-bold">ম্যানুয়াল সিস্টেম বনাম দ্রুতপোস্ট</h2>
+            <p className="text-muted-foreground">কেন আপনার নিউজ পোর্টালের জন্য দ্রুতপোস্ট অপরিহার্য।</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
             <div className="bg-card p-8 rounded-3xl border space-y-6">
-              <h3 className="text-xl font-bold text-center">অন্যান্য</h3>
+              <h3 className="text-xl font-bold text-center">ম্যানুয়াল সিস্টেম</h3>
               <ul className="space-y-4">
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>প্রতি ১৫ মিনিটে আপডেট</span>
+                  <span>পোস্ট হওয়ার অনেক পর ফটোকার্ড তৈরি হয়</span>
                 </li>
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>ধীরগতিতে জেনারেশন</span>
+                  <span>গ্রাফিক্স ডিজাইনারের জন্য অপেক্ষা করতে হয়</span>
                 </li>
                 <li className="flex items-center gap-3 text-muted-foreground">
                   <X className="text-destructive w-5 h-5" />
-                  <span>ম্যানুয়াল অ্যাডজাস্টমেন্ট প্রয়োজন</span>
+                  <span>সোশ্যাল মিডিয়া শেয়ারে বিলম্ব ঘটে</span>
                 </li>
               </ul>
             </div>
