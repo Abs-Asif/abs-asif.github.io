@@ -149,20 +149,32 @@ const Dashboard = () => {
     "তিন লাইনের বড় শিরোনাম এখানে সুন্দর ভাবে ফুটে উঠবে ফটোকার্ডে"
   ];
 
+  // Form State
+  const [manualTitle, setManualTitle] = useState("");
+  const [manualImage, setManualImage] = useState("");
+  const [manualQrUrl, setManualQrUrl] = useState("");
+
   useEffect(() => {
     localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
 
-    if (activeTab === "settings") {
-      const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
-      generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
-        .then(url => setPreviewUrl(url))
-        .catch(() => {});
-    } else if (activeTab === "manual" && !manualTitle && !manualImage) {
-      const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
-      generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
-        .then(url => setPreviewUrl(url))
-        .catch(() => {});
-    }
+    const runPreview = async () => {
+      if (!canvasRef.current) return;
+      try {
+        if (activeTab === "settings") {
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+          const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
+          setPreviewUrl(url);
+        } else if (activeTab === "manual" && !manualTitle && !manualImage) {
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+          const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
+          setPreviewUrl(url);
+        }
+      } catch (e) {
+        console.error("Preview generation failed:", e);
+      }
+    };
+
+    runPreview();
   }, [canvasSettings, previewScenario, activeTab, manualTitle, manualImage]);
 
   useEffect(() => {
@@ -172,11 +184,6 @@ const Dashboard = () => {
     }, 3000);
     return () => clearInterval(interval);
   }, [activeTab]);
-
-  // Form State
-  const [manualTitle, setManualTitle] = useState("");
-  const [manualImage, setManualImage] = useState("");
-  const [manualQrUrl, setManualQrUrl] = useState("");
   const [semiAutoUrl, setSemiAutoUrl] = useState("");
   const [isFetching, setIsFetching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -198,23 +205,44 @@ const Dashboard = () => {
 
   useEffect(() => {
     const session = localStorage.getItem("user_session");
-    if (!session) {
+    if (!session || session === "null") {
       toast.error("Please login first.");
       navigate("/");
       return;
     }
-    const userData = JSON.parse(session);
+
+    let userData;
+    try {
+      userData = JSON.parse(session);
+    } catch (e) {
+      localStorage.removeItem("user_session");
+      navigate("/");
+      return;
+    }
+
+    if (!userData || !userData.portalUrl) {
+      navigate("/");
+      return;
+    }
+
     setUser(userData);
 
     // Load from IndexedDB
     getAllRecords().then(records => {
       setAutoRecords(records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
+    }).catch(e => console.error("DB Load failed:", e));
 
     // Load processed URLs
-    const savedUrls = localStorage.getItem(`processed_urls_${userData.portalUrl}`);
-    if (savedUrls) {
-      setProcessedUrls(new Set(JSON.parse(savedUrls)));
+    try {
+      const savedUrls = localStorage.getItem(`processed_urls_${userData.portalUrl}`);
+      if (savedUrls) {
+        const parsed = JSON.parse(savedUrls);
+        if (Array.isArray(parsed)) {
+          setProcessedUrls(new Set(parsed));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load processed URLs:", e);
     }
 
     // Interval for Cache Clearing (6 hours)
@@ -313,6 +341,7 @@ const Dashboard = () => {
   const fetchImageWithProxy = async (url: string): Promise<string> => {
     if (url.startsWith('data:')) return url;
     if (url.startsWith('blob:')) return url;
+    if (url.includes(window.location.host) || !url.startsWith('http')) return url;
 
     const proxies = [
       (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
@@ -366,7 +395,10 @@ const Dashboard = () => {
       template.src = "/PhotocardTemplate.png";
       await new Promise((resolve, reject) => {
         template.onload = resolve;
-        template.onerror = reject;
+        template.onerror = (e) => {
+          console.error("Template load failed", e);
+          reject(new Error("Template load failed"));
+        };
       });
       ctx.drawImage(template, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -380,7 +412,10 @@ const Dashboard = () => {
       userImg.src = userImgBlobUrl;
       await new Promise((resolve, reject) => {
         userImg.onload = resolve;
-        userImg.onerror = reject;
+        userImg.onerror = (e) => {
+          console.error("User image load failed", targetImageUrl, e);
+          reject(new Error("User image load failed"));
+        };
       });
 
       const scale = Math.max(BOX.w / userImg.width, BOX.h / userImg.height);
@@ -735,11 +770,11 @@ const Dashboard = () => {
         <div className="p-4 border-t space-y-4">
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-              {user.name.charAt(0)}
+              {user?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{user.portalUrl}</p>
+              <p className="text-xs font-bold truncate">{user?.name || "User"}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{user?.portalUrl || ""}</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={handleLogout}>

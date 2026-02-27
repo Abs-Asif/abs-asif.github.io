@@ -106,9 +106,13 @@ const Index = () => {
       ...formData,
       portalUrl: cleanUrl(url)
     };
-    localStorage.setItem("user_session", JSON.stringify(userData));
-    toast.success("Account created successfully!");
-    navigate("/dashboard");
+    try {
+      localStorage.setItem("user_session", JSON.stringify(userData));
+      toast.success("Account created successfully!");
+      navigate("/dashboard");
+    } catch (err) {
+      toast.error("Failed to save session. Please check browser settings.");
+    }
   };
 
   return (
