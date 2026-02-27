@@ -152,13 +152,18 @@ const Dashboard = () => {
   useEffect(() => {
     localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
 
-    if (activeTab === "settings" || !previewUrl) {
+    if (activeTab === "settings") {
+      const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+      generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
+        .then(url => setPreviewUrl(url))
+        .catch(() => {});
+    } else if (activeTab === "manual" && !manualTitle && !manualImage) {
       const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
       generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
         .then(url => setPreviewUrl(url))
         .catch(() => {});
     }
-  }, [canvasSettings, previewScenario, activeTab]);
+  }, [canvasSettings, previewScenario, activeTab, manualTitle, manualImage]);
 
   useEffect(() => {
     if (activeTab !== "settings") return;
@@ -751,7 +756,7 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Manage your news portal photocards.</p>
         </header>
 
-        <div className={cn("grid gap-10", activeTab === "manual" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
+        <div className={cn("grid gap-10", (activeTab === "manual" || activeTab === "settings") ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
           <div className="space-y-8">
             {activeTab === "manual" && (
               <div className="space-y-6 animate-fade-in-up">
@@ -1405,21 +1410,13 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {previewUrl && (
-                    <div className="pt-4 space-y-2">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Live Preview</Label>
-                      <div className="rounded-xl overflow-hidden border shadow-inner bg-black/5 aspect-video flex items-center justify-center">
-                        <img src={previewUrl} alt="Settings Preview" className="w-full h-full object-contain" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {activeTab === "manual" && (
-            <div className="space-y-6">
+          {(activeTab === "manual" || activeTab === "settings") && (
+            <div className="space-y-6 lg:sticky lg:top-10 h-fit">
               <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
                 {previewUrl ? (
                   <>
@@ -1443,6 +1440,11 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
+              {activeTab === "settings" && (
+                <p className="text-center text-xs text-muted-foreground italic">
+                  Viewing rotating scenario preview to see formatting changes.
+                </p>
+              )}
             </div>
           )}
           <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
