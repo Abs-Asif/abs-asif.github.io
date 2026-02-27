@@ -26,7 +26,7 @@ const Index = () => {
   const [url, setUrl] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isCompatible, setIsCompatible] = useState(false);
-  const [detectedCMS, setDetectedCMS] = useState("");
+  const [statusMessage, setStatusMessage] = useState("");
   const [showSignup, setShowSignup] = useState(false);
 
   // Signup Form State
@@ -57,24 +57,40 @@ const Index = () => {
     setIsCompatible(false);
     setShowSignup(false);
 
+    const messages = [
+      "ওয়েবসাইট যাচাই করা হচ্ছে...",
+      "সার্ভার সংযোগ স্থাপন করা হচ্ছে...",
+      "নিরাপত্তা স্তর পরীক্ষা করা হচ্ছে...",
+      "সিস্টেমের সামঞ্জস্যতা নিশ্চিত করা হচ্ছে...",
+      "নিউজ পোর্টাল শনাক্ত করা হচ্ছে..."
+    ];
+    let msgIndex = 0;
+    setStatusMessage(messages[0]);
+
+    const msgInterval = setInterval(() => {
+      msgIndex = (msgIndex + 1) % messages.length;
+      setStatusMessage(messages[msgIndex]);
+    }, 1500);
+
     try {
       const html = await fetchWithProxy(formattedUrl);
-      if (!html) throw new Error("Could not reach the website via any proxy. Please check the URL or try again later.");
+      if (!html) throw new Error("সিস্টেম সংযোগ করতে ব্যর্থ হয়েছে। পুনরায় চেষ্টা করুন।");
 
       const lowerHtml = html.toLowerCase();
       const isWordPress = ["wp-content", "wp-includes", "wordpress", "wp-json"].some(sig => lowerHtml.includes(sig));
 
       if (!isWordPress) {
-        throw new Error("শুধুমাত্র ওয়ার্ডপ্রেস নিউজ পোর্টাল গ্রহণযোগ্য।");
+        throw new Error("দুঃখিত, এই নিউজ পোর্টালটি বর্তমানে আমাদের সিস্টেমের সাথে সামঞ্জস্যপূর্ণ নয়।");
       }
 
-      setDetectedCMS("WordPress");
       setIsCompatible(true);
-      toast.success(`ওয়ার্ডপ্রেস পোর্টাল শনাক্ত করা হয়েছে! আপনার সাইটটি সামঞ্জস্যপূর্ণ।`);
+      toast.success(`অভিনন্দন! আপনার নিউজ পোর্টালটি সামঞ্জস্যপূর্ণ।`);
     } catch (err: any) {
       toast.error(err.message || "Compatibility check failed.");
     } finally {
+      clearInterval(msgInterval);
       setIsLoading(false);
+      setStatusMessage("");
     }
   };
 
@@ -88,12 +104,15 @@ const Index = () => {
     // Save to localStorage to simulate "account"
     const userData = {
       ...formData,
-      portalUrl: cleanUrl(url),
-      cms: detectedCMS
+      portalUrl: cleanUrl(url)
     };
-    localStorage.setItem("user_session", JSON.stringify(userData));
-    toast.success("Account created successfully!");
-    navigate("/dashboard");
+    try {
+      localStorage.setItem("user_session", JSON.stringify(userData));
+      toast.success("Account created successfully!");
+      navigate("/dashboard");
+    } catch (err) {
+      toast.error("Failed to save session. Please check browser settings.");
+    }
   };
 
   return (
@@ -143,13 +162,16 @@ const Index = () => {
                   {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : "চেক করুন"}
                 </Button>
               </div>
+              {isLoading && (
+                <p className="text-xs text-primary animate-pulse font-medium text-center">{statusMessage}</p>
+              )}
             </div>
 
             {isCompatible && (
               <div className="p-4 bg-primary/10 rounded-xl border border-primary/20 flex items-center gap-3 text-left">
                 <CheckCircle2 className="text-primary w-5 h-5" />
                 <div>
-                  <p className="text-sm font-bold text-primary">{detectedCMS} সামঞ্জস্যপূর্ণ!</p>
+                  <p className="text-sm font-bold text-primary">আপনার সাইটটি সামঞ্জস্যপূর্ণ!</p>
                   <button
                     onClick={() => setShowSignup(true)}
                     className="text-xs underline hover:text-primary/80 transition-colors"

@@ -28,7 +28,8 @@ import {
   Loader2,
   Newspaper,
   List,
-  Upload
+  Upload,
+  ShieldCheck
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -92,7 +93,7 @@ const Dashboard = () => {
   // Expanded Canvas Settings
   const [canvasSettings, setCanvasSettings] = useState(() => {
     const saved = localStorage.getItem('canvas_settings');
-    return saved ? JSON.parse(saved) : {
+    const defaults = {
       title: {
         color: '#ffffff',
         font: 'Kalpurush',
@@ -118,8 +119,27 @@ const Dashboard = () => {
         size: 100,
         x: 930,
         y: 30
+      },
+      sanitizer: {
+        enabled: true
       }
     };
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        return {
+          ...defaults,
+          ...parsed,
+          sanitizer: parsed.sanitizer || defaults.sanitizer,
+          title: { ...defaults.title, ...parsed.title },
+          date: { ...defaults.date, ...parsed.date },
+          qr: { ...defaults.qr, ...parsed.qr }
+        };
+      } catch (e) {
+        return defaults;
+      }
+    }
+    return defaults;
   });
 
   const [previewScenario, setPreviewScenario] = useState(0);
@@ -129,30 +149,41 @@ const Dashboard = () => {
     "তিন লাইনের বড় শিরোনাম এখানে সুন্দর ভাবে ফুটে উঠবে ফটোকার্ডে"
   ];
 
-  useEffect(() => {
-    localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
-
-    if (activeTab === "settings") {
-      const censoredTitle = scenarios[previewScenario];
-      generatePhotoCardInternal(censoredTitle, "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800")
-        .then(url => setPreviewUrl(url))
-        .catch(() => {});
-    }
-  }, [canvasSettings, previewScenario, activeTab]);
-
-  useEffect(() => {
-    if (activeTab === "settings") {
-      const interval = setInterval(() => {
-        setPreviewScenario(prev => (prev + 1) % scenarios.length);
-      }, 3000);
-      return () => clearInterval(interval);
-    }
-  }, [activeTab]);
-
   // Form State
   const [manualTitle, setManualTitle] = useState("");
   const [manualImage, setManualImage] = useState("");
   const [manualQrUrl, setManualQrUrl] = useState("");
+
+  useEffect(() => {
+    localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
+
+    const runPreview = async () => {
+      if (!canvasRef.current) return;
+      try {
+        if (activeTab === "settings") {
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+          const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
+          setPreviewUrl(url);
+        } else if (activeTab === "manual" && !manualTitle && !manualImage) {
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+          const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
+          setPreviewUrl(url);
+        }
+      } catch (e) {
+        console.error("Preview generation failed:", e);
+      }
+    };
+
+    runPreview();
+  }, [canvasSettings, previewScenario, activeTab, manualTitle, manualImage]);
+
+  useEffect(() => {
+    if (activeTab !== "settings") return;
+    const interval = setInterval(() => {
+      setPreviewScenario(prev => (prev + 1) % scenarios.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
   const [semiAutoUrl, setSemiAutoUrl] = useState("");
   const [isFetching, setIsFetching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -174,23 +205,44 @@ const Dashboard = () => {
 
   useEffect(() => {
     const session = localStorage.getItem("user_session");
-    if (!session) {
+    if (!session || session === "null") {
       toast.error("Please login first.");
       navigate("/");
       return;
     }
-    const userData = JSON.parse(session);
+
+    let userData;
+    try {
+      userData = JSON.parse(session);
+    } catch (e) {
+      localStorage.removeItem("user_session");
+      navigate("/");
+      return;
+    }
+
+    if (!userData || !userData.portalUrl) {
+      navigate("/");
+      return;
+    }
+
     setUser(userData);
 
     // Load from IndexedDB
     getAllRecords().then(records => {
       setAutoRecords(records.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()));
-    });
+    }).catch(e => console.error("DB Load failed:", e));
 
     // Load processed URLs
-    const savedUrls = localStorage.getItem(`processed_urls_${userData.portalUrl}`);
-    if (savedUrls) {
-      setProcessedUrls(new Set(JSON.parse(savedUrls)));
+    try {
+      const savedUrls = localStorage.getItem(`processed_urls_${userData.portalUrl}`);
+      if (savedUrls) {
+        const parsed = JSON.parse(savedUrls);
+        if (Array.isArray(parsed)) {
+          setProcessedUrls(new Set(parsed));
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to load processed URLs:", e);
     }
 
     // Interval for Cache Clearing (6 hours)
@@ -209,7 +261,7 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (activeTab === "manual" && (manualTitle || manualImage)) {
-      const censoredTitle = censorText(manualTitle || "শিরোনাম এখানে");
+      const censoredTitle = censorText(manualTitle || "শিরোনাম এখানে", canvasSettings.sanitizer?.enabled);
       generatePhotoCardInternal(censoredTitle, manualImage || "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800", manualQrUrl)
         .then(url => setPreviewUrl(url))
         .catch(() => {});
@@ -289,6 +341,7 @@ const Dashboard = () => {
   const fetchImageWithProxy = async (url: string): Promise<string> => {
     if (url.startsWith('data:')) return url;
     if (url.startsWith('blob:')) return url;
+    if (url.includes(window.location.host) || !url.startsWith('http')) return url;
 
     const proxies = [
       (u: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(u)}`,
@@ -342,7 +395,10 @@ const Dashboard = () => {
       template.src = "/PhotocardTemplate.png";
       await new Promise((resolve, reject) => {
         template.onload = resolve;
-        template.onerror = reject;
+        template.onerror = (e) => {
+          console.error("Template load failed", e);
+          reject(new Error("Template load failed"));
+        };
       });
       ctx.drawImage(template, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
@@ -356,7 +412,10 @@ const Dashboard = () => {
       userImg.src = userImgBlobUrl;
       await new Promise((resolve, reject) => {
         userImg.onload = resolve;
-        userImg.onerror = reject;
+        userImg.onerror = (e) => {
+          console.error("User image load failed", targetImageUrl, e);
+          reject(new Error("User image load failed"));
+        };
       });
 
       const scale = Math.max(BOX.w / userImg.width, BOX.h / userImg.height);
@@ -501,7 +560,7 @@ const Dashboard = () => {
           }
 
           if (title && imageUrl) {
-            const censoredTitle = censorText(title);
+            const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled);
             const dataUrl = await generatePhotoCardInternal(censoredTitle, imageUrl, link);
 
             const newRecord: AutoRecord = {
@@ -550,7 +609,7 @@ const Dashboard = () => {
     }
     setIsGenerating(true);
     try {
-      const censoredTitle = censorText(manualTitle);
+      const censoredTitle = censorText(manualTitle, canvasSettings.sanitizer?.enabled);
       const dataUrl = await generatePhotoCardInternal(censoredTitle, manualImage, manualQrUrl);
       setPreviewUrl(dataUrl);
 
@@ -592,6 +651,22 @@ const Dashboard = () => {
       toast.error("Please enter a Post URL");
       return;
     }
+
+    let domain = "";
+    let targetDomain = "";
+    try {
+      domain = new URL(user.portalUrl.startsWith('http') ? user.portalUrl : `https://${user.portalUrl}`).hostname.replace('www.', '');
+      targetDomain = new URL(semiAutoUrl.startsWith('http') ? semiAutoUrl : `https://${semiAutoUrl}`).hostname.replace('www.', '');
+    } catch (e) {
+      toast.error("Invalid URL format");
+      return;
+    }
+
+    if (domain && targetDomain && domain !== targetDomain) {
+      toast.error(`You can only generate photocards for ${domain}`);
+      return;
+    }
+
     setIsFetching(true);
     try {
       const html = await fetchWithProxy(semiAutoUrl);
@@ -611,7 +686,7 @@ const Dashboard = () => {
         setManualTitle(title);
         setManualImage(image);
         toast.success("Data fetched! Generating photocard...");
-        const censoredTitle = censorText(title);
+        const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled);
         const dataUrl = await generatePhotoCardInternal(censoredTitle, image, semiAutoUrl);
         setPreviewUrl(dataUrl);
 
@@ -695,11 +770,11 @@ const Dashboard = () => {
         <div className="p-4 border-t space-y-4">
           <div className="flex items-center gap-3 px-2">
             <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-xs">
-              {user.name.charAt(0)}
+              {user?.name?.charAt(0) || "U"}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-bold truncate">{user.name}</p>
-              <p className="text-[10px] text-muted-foreground truncate">{user.portalUrl}</p>
+              <p className="text-xs font-bold truncate">{user?.name || "User"}</p>
+              <p className="text-[10px] text-muted-foreground truncate">{user?.portalUrl || ""}</p>
             </div>
           </div>
           <Button variant="outline" size="sm" className="w-full justify-start gap-2" onClick={handleLogout}>
@@ -716,7 +791,7 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Manage your news portal photocards.</p>
         </header>
 
-        <div className={cn("grid gap-10", activeTab === "manual" ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
+        <div className={cn("grid gap-10", (activeTab === "manual" || activeTab === "settings") ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
           <div className="space-y-8">
             {activeTab === "manual" && (
               <div className="space-y-6 animate-fade-in-up">
@@ -979,6 +1054,26 @@ const Dashboard = () => {
 
             {activeTab === "settings" && (
               <div className="space-y-6 animate-fade-in-up">
+                {/* Sanitizer Settings */}
+                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-bold flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary" />
+                      Text Sanitizer
+                    </Label>
+                    <input
+                      type="checkbox"
+                      className="accent-primary"
+                      checked={canvasSettings.sanitizer?.enabled}
+                      onChange={(e) => setCanvasSettings({
+                        ...canvasSettings,
+                        sanitizer: { enabled: e.target.checked }
+                      })}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground">Automatically sanitize sensitive words in generated photocards.</p>
+                </div>
+
                 {/* Notification Settings */}
                 <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
                   <Label className="text-sm font-bold flex items-center gap-2">
@@ -1350,21 +1445,13 @@ const Dashboard = () => {
                     </div>
                   </div>
 
-                  {previewUrl && (
-                    <div className="pt-4 space-y-2">
-                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Live Preview</Label>
-                      <div className="rounded-xl overflow-hidden border shadow-inner bg-black/5 aspect-video flex items-center justify-center">
-                        <img src={previewUrl} alt="Settings Preview" className="w-full h-full object-contain" />
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             )}
           </div>
 
-          {activeTab === "manual" && (
-            <div className="space-y-6">
+          {(activeTab === "manual" || activeTab === "settings") && (
+            <div className="space-y-6 lg:sticky lg:top-10 h-fit">
               <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
                 {previewUrl ? (
                   <>
@@ -1388,6 +1475,11 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
+              {activeTab === "settings" && (
+                <p className="text-center text-xs text-muted-foreground italic">
+                  Viewing rotating scenario preview to see formatting changes.
+                </p>
+              )}
             </div>
           )}
           <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
