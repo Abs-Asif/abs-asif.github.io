@@ -53,6 +53,7 @@ import { cn } from "@/lib/utils";
 import { censorText, baseMappings } from "@/lib/censor";
 import { fetchWithProxy } from "@/lib/proxy";
 import QRCode from "qrcode";
+import { supabase } from "@/integrations/supabase/client";
 
 const CANVAS_WIDTH = 1080;
 const CANVAS_HEIGHT = 1080;
@@ -303,7 +304,7 @@ const Dashboard = () => {
       return;
     }
 
-    let userData;
+    let userData: any;
     try {
       userData = JSON.parse(session);
     } catch (e) {
@@ -317,7 +318,49 @@ const Dashboard = () => {
       return;
     }
 
-    setUser(userData);
+    // Check for ban and update session from Supabase
+    const checkBanStatus = async () => {
+      if (userData.id) {
+        const { data: profile, error } = await supabase
+          .from('profiles')
+          .select('display_name')
+          .eq('user_id', userData.id)
+          .single();
+
+        if (!error && profile && profile.display_name) {
+          try {
+            const remoteData = JSON.parse(profile.display_name);
+            if (remoteData.isBanned) {
+              toast.error("Your account has been banned.");
+              localStorage.removeItem("user_session");
+              navigate("/");
+              return;
+            }
+            // Update local session with remote data
+            const updatedSession = { ...userData, ...remoteData };
+            localStorage.setItem("user_session", JSON.stringify(updatedSession));
+            setUser(updatedSession);
+
+            // Merge assigned templates
+            if (remoteData.assignedTemplates && Array.isArray(remoteData.assignedTemplates)) {
+              setTemplates(prev => {
+                const existingIds = new Set(prev.map(t => t.id));
+                const newTemplates = remoteData.assignedTemplates.filter((t: any) => !existingIds.has(t.id));
+                return [...prev, ...newTemplates];
+              });
+            }
+          } catch (e) {
+            setUser(userData);
+          }
+        } else {
+          setUser(userData);
+        }
+      } else {
+        setUser(userData);
+      }
+    };
+
+    checkBanStatus();
 
     // Load from IndexedDB
     getAllRecords().then(records => {
@@ -679,6 +722,32 @@ const Dashboard = () => {
     }
   };
 
+  const incrementUsage = async () => {
+    if (!user?.id) return;
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('display_name')
+        .eq('user_id', user.id)
+        .single();
+
+      if (profile?.display_name) {
+        const data = JSON.parse(profile.display_name);
+        data.usageCount = (data.usageCount || 0) + 1;
+        await supabase
+          .from('profiles')
+          .update({ display_name: JSON.stringify(data) })
+          .eq('user_id', user.id);
+
+        const updatedUser = { ...user, usageCount: data.usageCount };
+        setUser(updatedUser);
+        localStorage.setItem("user_session", JSON.stringify(updatedUser));
+      }
+    } catch (e) {
+      console.error("Failed to increment usage:", e);
+    }
+  };
+
   const checkAutomation = async () => {
     if (isAutoCheckingRef.current || !user) return;
     isAutoCheckingRef.current = true;
@@ -732,7 +801,7 @@ const Dashboard = () => {
             const dataUrl = await generatePhotoCardInternal(censoredTitle, imageUrl, link);
 
             const newRecord: AutoRecord = {
-              id: Math.random().toString(36).substr(2, 9),
+              id: Math.random().toString(36).substring(2, 11),
               url: link,
               title: censoredTitle,
               imageUrl: imageUrl,
@@ -749,6 +818,7 @@ const Dashboard = () => {
               return next;
             });
 
+            await incrementUsage();
             playNotification();
             toast.success(`Auto-generated: ${censoredTitle}`);
           }
@@ -782,7 +852,7 @@ const Dashboard = () => {
       setPreviewUrl(dataUrl);
 
       const newRecord: AutoRecord = {
-        id: Math.random().toString(36).substr(2, 9),
+        id: Math.random().toString(36).substring(2, 11),
         url: "",
         title: censoredTitle,
         imageUrl: manualImage,
@@ -793,6 +863,7 @@ const Dashboard = () => {
       await saveRecord(newRecord);
       setAutoRecords(prev => [newRecord, ...prev]);
 
+      await incrementUsage();
       playNotification();
       toast.success("Photocard generated!");
     } catch (error) {
@@ -859,7 +930,7 @@ const Dashboard = () => {
         setPreviewUrl(dataUrl);
 
         const newRecord: AutoRecord = {
-          id: Math.random().toString(36).substr(2, 9),
+          id: Math.random().toString(36).substring(2, 11),
           url: semiAutoUrl,
           title: censoredTitle,
           imageUrl: image,
@@ -870,6 +941,7 @@ const Dashboard = () => {
         await saveRecord(newRecord);
         setAutoRecords(prev => [newRecord, ...prev]);
 
+        await incrementUsage();
         playNotification();
       } else {
         toast.error("Could not find title or image on this page.");
@@ -1545,7 +1617,7 @@ const Dashboard = () => {
                       }
 
                       if (templateModalMode === 'add') {
-                        const newId = Math.random().toString(36).substr(2, 9);
+                        const newId = Math.random().toString(36).substring(2, 11);
                         const newTemplate = {
                           ...templates[0],
                           id: newId,
@@ -1606,7 +1678,7 @@ const Dashboard = () => {
                             const reader = new FileReader();
                             reader.onloadend = () => {
                               const newAd = {
-                                id: Math.random().toString(36).substr(2, 9),
+                                id: Math.random().toString(36).substring(2, 11),
                                 name: newAdName.trim(),
                                 dataUrl: reader.result as string
                               };

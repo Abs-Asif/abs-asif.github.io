@@ -16,10 +16,12 @@ import {
   Smartphone,
   BarChart3,
   Check,
-  X
+  X,
+  Lock
 } from "lucide-react";
 import { toast } from "sonner";
 import { fetchWithProxy } from "@/lib/proxy";
+import { supabase } from "@/integrations/supabase/client";
 
 const Index = () => {
   const navigate = useNavigate();
@@ -34,8 +36,11 @@ const Index = () => {
     name: "",
     phone: "",
     email: "",
+    password: "",
     role: "Portal Owner"
   });
+
+  const [isLoginMode, setIsLoginMode] = useState(false);
 
   const cleanUrl = (input: string) => {
     let formatted = input.trim();
@@ -94,24 +99,100 @@ const Index = () => {
     }
   };
 
-  const handleSignup = (e: React.FormEvent) => {
+  const handleAuthAction = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.email.endsWith("@gmail.com")) {
-      toast.error("Only @gmail.com emails are accepted.");
-      return;
-    }
+    setIsLoading(true);
 
-    // Save to localStorage to simulate "account"
-    const userData = {
-      ...formData,
-      portalUrl: cleanUrl(url)
-    };
     try {
-      localStorage.setItem("user_session", JSON.stringify(userData));
-      toast.success("Account created successfully!");
-      navigate("/dashboard");
-    } catch (err) {
-      toast.error("Failed to save session. Please check browser settings.");
+      if (isLoginMode) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw error;
+
+        // Fetch profile to set session
+        const { data: profile, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('user_id', data.user.id)
+          .single();
+
+        if (profileError) throw profileError;
+
+        let userData;
+        try {
+          userData = JSON.parse(profile.display_name || '{}');
+        } catch (e) {
+          userData = { name: profile.display_name };
+        }
+
+        const sessionData = {
+          ...userData,
+          email: profile.email,
+          id: data.user.id
+        };
+
+        localStorage.setItem("user_session", JSON.stringify(sessionData));
+        toast.success("Logged in successfully!");
+        navigate("/dashboard");
+      } else {
+        if (!formData.email.endsWith("@gmail.com")) {
+          toast.error("Only @gmail.com emails are accepted.");
+          setIsLoading(false);
+          return;
+        }
+
+        if (formData.password.length < 6) {
+          toast.error("Password must be at least 6 characters.");
+          setIsLoading(false);
+          return;
+        }
+
+        const { data, error } = await supabase.auth.signUp({
+          email: formData.email,
+          password: formData.password,
+        });
+
+        if (error) throw error;
+        if (!data.user) throw new Error("Signup failed");
+
+        const portalUrl = cleanUrl(url);
+        const profileData = {
+          name: formData.name,
+          phone: formData.phone,
+          portalUrl: portalUrl,
+          role: formData.role,
+          usageCount: 0,
+          isBanned: false,
+          assignedTemplates: []
+        };
+
+        // Update profile (which was auto-created by trigger)
+        const { error: updateError } = await supabase
+          .from('profiles')
+          .update({
+            display_name: JSON.stringify(profileData)
+          })
+          .eq('user_id', data.user.id);
+
+        if (updateError) throw updateError;
+
+        const sessionData = {
+          ...profileData,
+          email: formData.email,
+          id: data.user.id
+        };
+
+        localStorage.setItem("user_session", JSON.stringify(sessionData));
+        toast.success("Account created successfully!");
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      toast.error(err.message || "Authentication failed.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -129,7 +210,7 @@ const Index = () => {
           <div className="flex items-center gap-4">
             <a href="#features" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">বৈশিষ্ট্যসমূহ</a>
             <a href="#pricing" className="text-sm font-medium hover:text-primary transition-colors hidden md:block">মূল্য তালিকা</a>
-            <Button variant="ghost" onClick={() => navigate("/dashboard")}>লগইন</Button>
+            <Button variant="ghost" onClick={() => { setShowSignup(true); setIsLoginMode(true); }}>লগইন</Button>
           </div>
         </div>
       </nav>
@@ -185,46 +266,70 @@ const Index = () => {
           </div>
         )}
 
-        {/* Signup Form */}
+        {/* Signup/Login Form */}
         {showSignup && (
           <div className="max-w-md mx-auto p-8 bg-card rounded-2xl border shadow-2xl space-y-6 text-left animate-fade-in-up">
             <div className="space-y-1">
-              <h2 className="text-2xl font-bold">অ্যাকাউন্ট তৈরি করুন</h2>
-              <p className="text-sm text-muted-foreground">সেরা নিউজ পোর্টালগুলোর সাথে যুক্ত হোন।</p>
+              <h2 className="text-2xl font-bold">{isLoginMode ? "লগইন করুন" : "অ্যাকাউন্ট তৈরি করুন"}</h2>
+              <p className="text-sm text-muted-foreground">
+                {isLoginMode ? "আপনার অ্যাকাউন্টে ফিরে যান।" : "সেরা নিউজ পোর্টালগুলোর সাথে যুক্ত হোন।"}
+              </p>
             </div>
-            <form onSubmit={handleSignup} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="name">পুরো নাম</Label>
-                <Input id="name" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="phone">ফোন নম্বর</Label>
-                <Input id="phone" type="tel" required value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
-              </div>
+            <form onSubmit={handleAuthAction} className="space-y-4">
+              {!isLoginMode && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">পুরো নাম</Label>
+                    <Input id="name" required value={formData.name} onChange={(e) => setFormData({...formData, name: e.target.value})} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">ফোন নম্বর</Label>
+                    <Input id="phone" type="tel" required value={formData.phone} onChange={(e) => setFormData({...formData, phone: e.target.value})} />
+                  </div>
+                </>
+              )}
               <div className="space-y-2">
                 <Label htmlFor="email">ইমেল ঠিকানা</Label>
                 <Input id="email" type="email" placeholder="you@gmail.com" required value={formData.email} onChange={(e) => setFormData({...formData, email: e.target.value})} />
-                <p className="text-[10px] text-muted-foreground">শুধুমাত্র @gmail.com গ্রহণযোগ্য।</p>
+                {!isLoginMode && <p className="text-[10px] text-muted-foreground">শুধুমাত্র @gmail.com গ্রহণযোগ্য।</p>}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="signup-url">পোর্টাল ইউআরএল</Label>
-                <Input id="signup-url" value={url} disabled className="bg-muted" />
+                <Label htmlFor="password">পাসওয়ার্ড</Label>
+                <Input id="password" type="password" required value={formData.password} onChange={(e) => setFormData({...formData, password: e.target.value})} />
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="role">আপনার ভূমিকা</Label>
-                <select
-                  id="role"
-                  className="w-full h-10 px-3 rounded-md border bg-background text-sm"
-                  value={formData.role}
-                  onChange={(e) => setFormData({...formData, role: e.target.value})}
-                >
-                  <option>Journalist</option>
-                  <option>Social Media Manager</option>
-                  <option>Portal Owner</option>
-                  <option>Editor</option>
-                </select>
-              </div>
-              <Button type="submit" className="w-full">অ্যাকাউন্ট তৈরি করুন এবং শুরু করুন</Button>
+              {!isLoginMode && (
+                <>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-url">পোর্টাল ইউআরএল</Label>
+                    <Input id="signup-url" value={url} disabled className="bg-muted" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="role">আপনার ভূমিকা</Label>
+                    <select
+                      id="role"
+                      className="w-full h-10 px-3 rounded-md border bg-background text-sm"
+                      value={formData.role}
+                      onChange={(e) => setFormData({...formData, role: e.target.value})}
+                    >
+                      <option>Journalist</option>
+                      <option>Social Media Manager</option>
+                      <option>Portal Owner</option>
+                      <option>Editor</option>
+                    </select>
+                  </div>
+                </>
+              )}
+              <Button type="submit" className="w-full" disabled={isLoading}>
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
+                {isLoginMode ? "লগইন করুন" : "অ্যাকাউন্ট তৈরি করুন এবং শুরু করুন"}
+              </Button>
+              <button
+                type="button"
+                onClick={() => setIsLoginMode(!isLoginMode)}
+                className="text-xs text-primary hover:underline w-full text-center"
+              >
+                {isLoginMode ? "নতুন অ্যাকাউন্ট তৈরি করতে চান? এখানে ক্লিক করুন" : "আগে থেকেই অ্যাকাউন্ট আছে? লগইন করুন"}
+              </button>
             </form>
           </div>
         )}
