@@ -14,6 +14,22 @@
 }
 
 @font-face {
+  font-family: 'Roboto';
+  src: url('/fonts/Roboto.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
+  font-family: 'Viga';
+  src: url('/fonts/Viga.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@font-face {
   font-family: 'Ekushey Lal Salu Normal';
   src: url('/fonts/EkusheyLalsalu-Regular.ttf') format('truetype');
   font-weight: 400;
@@ -241,7 +257,7 @@
 
   body {
     @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Kalpurush', 'Inter', system-ui, sans-serif;
+    font-family: 'Roboto', 'Kalpurush', 'Inter', system-ui, sans-serif;
     background-image:
       radial-gradient(circle at 2px 2px, hsl(var(--border) / 0.3) 1px, transparent 0);
     background-size: 32px 32px;
