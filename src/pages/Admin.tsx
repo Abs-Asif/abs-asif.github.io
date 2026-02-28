@@ -67,32 +67,8 @@ const Admin = () => {
   };
 
   useEffect(() => {
-    const checkAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("Please login first.");
-        navigate("/");
-        return;
-      }
-
-      const { data: roleData, error: roleError } = await supabase
-        .from('user_roles')
-        .select('role')
-        .eq('user_id', user.id)
-        .eq('role', 'admin')
-        .single();
-
-      if (roleError || !roleData) {
-        toast.error("Access denied. Admin only.");
-        navigate("/dashboard");
-        return;
-      }
-
-      fetchProfiles();
-    };
-
-    checkAdmin();
-  }, [navigate]);
+    fetchProfiles();
+  }, []);
 
   const handleBanToggle = async (profile: any) => {
     const updatedMeta = { ...profile.meta, isBanned: !profile.meta.isBanned };
