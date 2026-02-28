@@ -207,6 +207,20 @@ const Dashboard = () => {
   const [templateModalMode, setTemplateModalMode] = useState<'add' | 'rename'>('add');
   const [tempTemplateName, setTempTemplateName] = useState("");
 
+  // Ad State
+  const [ads, setAds] = useState<any[]>(() => {
+    const saved = localStorage.getItem('global_ads');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [activeAdId, setActiveAdId] = useState<string>(() => {
+    return localStorage.getItem('global_active_ad_id') || "";
+  });
+  const [adsEnabled, setAdsEnabled] = useState<boolean>(() => {
+    return localStorage.getItem('global_ads_enabled') === 'true';
+  });
+  const [isAdModalOpen, setIsAdModalOpen] = useState(false);
+  const [newAdName, setNewAdName] = useState("");
+
   const canvasSettings = templates.find(t => t.id === activeTemplateId) || templates[0];
 
   const setCanvasSettings = (newSettings: any) => {
@@ -264,6 +278,7 @@ const Dashboard = () => {
   const [semiAutoUrl, setSemiAutoUrl] = useState("");
   const [isFetching, setIsFetching] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const adFileInputRef = useRef<HTMLInputElement>(null);
 
   // Automation State
   const [autoModeActive, setAutoModeActive] = useState(false);
@@ -329,6 +344,18 @@ const Dashboard = () => {
 
     return () => clearInterval(clearCacheInterval);
   }, [navigate]);
+
+  useEffect(() => {
+    localStorage.setItem('global_ads', JSON.stringify(ads));
+  }, [ads]);
+
+  useEffect(() => {
+    localStorage.setItem('global_active_ad_id', activeAdId);
+  }, [activeAdId]);
+
+  useEffect(() => {
+    localStorage.setItem('global_ads_enabled', String(adsEnabled));
+  }, [adsEnabled]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -484,10 +511,29 @@ const Dashboard = () => {
   const generatePhotoCardInternal = async (targetTitle: string, targetImageUrl: string, qrUrl?: string): Promise<string> => {
     const canvas = canvasRef.current;
     if (!canvas) throw new Error("Canvas not found");
+
+    let adImg: HTMLImageElement | null = null;
+    let adHeight = 0;
+    if (adsEnabled && activeAdId) {
+      const activeAd = ads.find(a => a.id === activeAdId);
+      if (activeAd) {
+        adImg = new Image();
+        adImg.src = activeAd.dataUrl;
+        await new Promise((resolve) => {
+          adImg!.onload = resolve;
+          adImg!.onerror = () => { adImg = null; resolve(null); };
+        });
+        if (adImg) {
+          adHeight = (CANVAS_WIDTH / adImg.width) * adImg.height;
+        }
+      }
+    }
+
+    canvas.height = CANVAS_HEIGHT + adHeight;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
     if (!ctx) throw new Error("Context not found");
 
-    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+    ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT + adHeight);
 
     let userImgBlobUrl = '';
     try {
@@ -617,6 +663,11 @@ const Dashboard = () => {
       }
 
       ctx.letterSpacing = "0px";
+
+      if (adImg) {
+        ctx.drawImage(adImg, 0, CANVAS_HEIGHT, CANVAS_WIDTH, adHeight);
+      }
+
       return canvas.toDataURL('image/png');
     } finally {
       if (userImgBlobUrl && userImgBlobUrl.startsWith('blob:')) {
@@ -955,6 +1006,27 @@ const Dashboard = () => {
                   </div>
 
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Ad</Label>
+                      <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="sm" className="h-6 text-[9px] uppercase font-bold text-primary" onClick={() => setIsAdModalOpen(true)}>Manage</Button>
+                         <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} className="accent-primary w-3 h-3" />
+                      </div>
+                    </div>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm disabled:opacity-50"
+                      value={activeAdId}
+                      onChange={(e) => setActiveAdId(e.target.value)}
+                      disabled={!adsEnabled}
+                    >
+                      <option value="">No Ad Selected</option>
+                      {ads.map(ad => (
+                        <option key={ad.id} value={ad.id}>{ad.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="manualTitle">Title Text</Label>
                     <Textarea
                       id="manualTitle"
@@ -1064,6 +1136,27 @@ const Dashboard = () => {
                   </div>
 
                   <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Ad</Label>
+                      <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="sm" className="h-6 text-[9px] uppercase font-bold text-primary" onClick={() => setIsAdModalOpen(true)}>Manage</Button>
+                         <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} className="accent-primary w-3 h-3" />
+                      </div>
+                    </div>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm disabled:opacity-50"
+                      value={activeAdId}
+                      onChange={(e) => setActiveAdId(e.target.value)}
+                      disabled={!adsEnabled}
+                    >
+                      <option value="">No Ad Selected</option>
+                      {ads.map(ad => (
+                        <option key={ad.id} value={ad.id}>{ad.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
                     <Label htmlFor="semiAutoUrl">Post URL</Label>
                     <div className="flex gap-2">
                       <Input
@@ -1143,6 +1236,27 @@ const Dashboard = () => {
                     >
                       {templates.map(t => (
                         <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Ad</Label>
+                      <div className="flex items-center gap-2">
+                         <Button variant="ghost" size="sm" className="h-6 text-[9px] uppercase font-bold text-primary" onClick={() => setIsAdModalOpen(true)}>Manage</Button>
+                         <input type="checkbox" checked={adsEnabled} onChange={(e) => setAdsEnabled(e.target.checked)} className="accent-primary w-3 h-3" />
+                      </div>
+                    </div>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm disabled:opacity-50"
+                      value={activeAdId}
+                      onChange={(e) => setActiveAdId(e.target.value)}
+                      disabled={!adsEnabled}
+                    >
+                      <option value="">No Ad Selected</option>
+                      {ads.map(ad => (
+                        <option key={ad.id} value={ad.id}>{ad.name}</option>
                       ))}
                     </select>
                   </div>
@@ -2004,6 +2118,86 @@ const Dashboard = () => {
                    }}>
                       {templateModalMode === 'add' ? 'Create Template' : 'Save Changes'}
                    </Button>
+                </div>
+             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Ad Management Modal */}
+      {isAdModalOpen && (
+        <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card w-full max-w-md rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+             <div className="p-6 border-b flex items-center justify-between bg-muted/30">
+                <h2 className="text-xl font-bold">Manage Ads</h2>
+                <Button variant="ghost" size="icon" onClick={() => setIsAdModalOpen(false)} className="rounded-full">
+                   <X className="w-5 h-5" />
+                </Button>
+             </div>
+             <div className="p-6 space-y-4">
+                <div className="space-y-2">
+                   <Label>Ad Name</Label>
+                   <Input
+                     placeholder="e.g. Summer Sale"
+                     value={newAdName}
+                     onChange={(e) => setNewAdName(e.target.value)}
+                   />
+                </div>
+                <div className="space-y-2">
+                   <Label>Ad Image</Label>
+                   <div className="flex gap-2">
+                      <Button variant="outline" className="w-full justify-start gap-2" onClick={() => adFileInputRef.current?.click()}>
+                        <Upload className="w-4 h-4" />
+                        Upload Ad Image
+                      </Button>
+                      <input
+                        type="file"
+                        ref={adFileInputRef}
+                        className="hidden"
+                        accept="image/*"
+                        onChange={(e) => {
+                          const file = e.target.files?.[0];
+                          if (file && newAdName.trim()) {
+                            const reader = new FileReader();
+                            reader.onloadend = () => {
+                              const newAd = {
+                                id: Math.random().toString(36).substr(2, 9),
+                                name: newAdName.trim(),
+                                dataUrl: reader.result as string
+                              };
+                              setAds([...ads, newAd]);
+                              setNewAdName("");
+                              if (e.target) e.target.value = '';
+                              toast.success("Ad uploaded!");
+                            };
+                            reader.readAsDataURL(file);
+                          } else if (!newAdName.trim()) {
+                            if (e.target) e.target.value = '';
+                            toast.error("Please enter ad name first");
+                          }
+                        }}
+                      />
+                   </div>
+                </div>
+
+                <div className="pt-4 border-t space-y-2 max-h-60 overflow-y-auto scrollbar-hide">
+                   <Label className="text-[10px] uppercase font-bold text-muted-foreground">Existing Ads</Label>
+                   {ads.length === 0 && <p className="text-xs text-muted-foreground italic">No ads uploaded yet.</p>}
+                   {ads.map(ad => (
+                     <div key={ad.id} className="flex items-center justify-between p-3 rounded-xl bg-muted/20 border">
+                        <div className="flex items-center gap-3">
+                           <img src={ad.dataUrl} className="w-10 h-10 object-cover rounded-lg border" alt="" />
+                           <span className="text-sm font-medium">{ad.name}</span>
+                        </div>
+                        <Button variant="ghost" size="icon" className="text-destructive h-8 w-8" onClick={() => {
+                          setAds(ads.filter(a => a.id !== ad.id));
+                          if (activeAdId === ad.id) setActiveAdId("");
+                          toast.success("Ad deleted");
+                        }}>
+                           <Trash2 className="w-4 h-4" />
+                        </Button>
+                     </div>
+                   ))}
                 </div>
              </div>
           </div>
