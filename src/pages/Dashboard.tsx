@@ -223,6 +223,10 @@ const Dashboard = () => {
 
   const canvasSettings = templates.find(t => t.id === activeTemplateId) || templates[0];
 
+  const setCanvasSettings = (newSettings: any) => {
+    setTemplates(prev => prev.map(t => t.id === activeTemplateId ? { ...t, ...newSettings } : t));
+  };
+
   const [previewScenario, setPreviewScenario] = useState(0);
   const scenarios = [
     "এক লাইনের শিরোনাম",
