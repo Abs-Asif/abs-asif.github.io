@@ -1,7 +1,7 @@
-export const censorText = (text: string, enabled: boolean = true) => {
+export const censorText = (text: string, enabled: boolean = true, customMappings: Record<string, string> = {}) => {
   if (!text || !enabled) return text;
   let censored = text;
-  const mappings: Record<string, string> = {
+  const baseMappings: Record<string, string> = {
     'Fuck': 'F*uck',
     'Fucks': 'f*ucks',
     'Fucling': 'F*ucking',
@@ -45,6 +45,7 @@ export const censorText = (text: string, enabled: boolean = true) => {
     'ইসরাইল': 'ইস*রাইল',
   };
 
+  const mappings = { ...baseMappings, ...customMappings };
   const sortedUnsafe = Object.keys(mappings).sort((a, b) => b.length - a.length);
 
   sortedUnsafe.forEach((unsafe) => {

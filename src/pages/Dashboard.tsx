@@ -29,7 +29,11 @@ import {
   Newspaper,
   List,
   Upload,
-  ShieldCheck
+  ShieldCheck,
+  Search,
+  X,
+  Edit2,
+  Layers
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -85,15 +89,29 @@ const Dashboard = () => {
   const [activeTab, setActiveTab] = useState("manual");
   const [user, setUser] = useState<any>(null);
 
+  // Sanitizer State
+  const [customMappings, setCustomMappings] = useState<Record<string, string>>(() => {
+    const saved = localStorage.getItem('custom_sanitizer_mappings');
+    return saved ? JSON.parse(saved) : {};
+  });
+  const [isSanitizerModalOpen, setIsSanitizerModalOpen] = useState(false);
+  const [sanitizerSearch, setSanitizerSearch] = useState("");
+  const [newBaseWord, setNewBaseWord] = useState("");
+  const [newSanitizedWord, setNewSanitizedWord] = useState("");
+  const [editingKey, setEditingKey] = useState<string | null>(null);
+
   // Canvas State
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isGenerating, setIsGenerating] = useState(false);
 
-  // Expanded Canvas Settings
-  const [canvasSettings, setCanvasSettings] = useState(() => {
-    const saved = localStorage.getItem('canvas_settings');
-    const defaults = {
+  // Templates State
+  const [templates, setTemplates] = useState<any[]>(() => {
+    const saved = localStorage.getItem('canvas_templates');
+    const defaultTemplate = {
+      id: 'default',
+      name: 'Default Template',
+      backgroundImage: '/PhotocardTemplate.png',
       title: {
         color: '#ffffff',
         font: 'Kalpurush',
@@ -124,23 +142,41 @@ const Dashboard = () => {
         enabled: true
       }
     };
+
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        return {
-          ...defaults,
-          ...parsed,
-          sanitizer: parsed.sanitizer || defaults.sanitizer,
-          title: { ...defaults.title, ...parsed.title },
-          date: { ...defaults.date, ...parsed.date },
-          qr: { ...defaults.qr, ...parsed.qr }
-        };
-      } catch (e) {
-        return defaults;
-      }
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      } catch (e) {}
     }
-    return defaults;
+
+    // Support legacy canvas_settings migration
+    const legacy = localStorage.getItem('canvas_settings');
+    if (legacy) {
+      try {
+        const parsedLegacy = JSON.parse(legacy);
+        return [{
+          ...defaultTemplate,
+          ...parsedLegacy,
+          title: { ...defaultTemplate.title, ...parsedLegacy.title },
+          date: { ...defaultTemplate.date, ...parsedLegacy.date },
+          qr: { ...defaultTemplate.qr, ...parsedLegacy.qr }
+        }];
+      } catch (e) {}
+    }
+
+    return [defaultTemplate];
   });
+
+  const [activeTemplateId, setActiveTemplateId] = useState(() => {
+    return templates[0]?.id || 'default';
+  });
+
+  const canvasSettings = templates.find(t => t.id === activeTemplateId) || templates[0];
+
+  const setCanvasSettings = (newSettings: any) => {
+    setTemplates(prev => prev.map(t => t.id === activeTemplateId ? { ...t, ...newSettings } : t));
+  };
 
   const [previewScenario, setPreviewScenario] = useState(0);
   const scenarios = [
@@ -155,17 +191,23 @@ const Dashboard = () => {
   const [manualQrUrl, setManualQrUrl] = useState("");
 
   useEffect(() => {
-    localStorage.setItem('canvas_settings', JSON.stringify(canvasSettings));
+    localStorage.setItem('canvas_templates', JSON.stringify(templates));
+  }, [templates]);
 
+  useEffect(() => {
+    localStorage.setItem('custom_sanitizer_mappings', JSON.stringify(customMappings));
+  }, [customMappings]);
+
+  useEffect(() => {
     const runPreview = async () => {
       if (!canvasRef.current) return;
       try {
-        if (activeTab === "settings") {
-          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+        if (activeTab === "settings" || activeTab === "templates") {
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled, customMappings);
           const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
           setPreviewUrl(url);
         } else if (activeTab === "manual" && !manualTitle && !manualImage) {
-          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled);
+          const censoredTitle = censorText(scenarios[previewScenario], canvasSettings.sanitizer?.enabled, customMappings);
           const url = await generatePhotoCardInternal(censoredTitle, "Example.png");
           setPreviewUrl(url);
         }
@@ -178,7 +220,7 @@ const Dashboard = () => {
   }, [canvasSettings, previewScenario, activeTab, manualTitle, manualImage]);
 
   useEffect(() => {
-    if (activeTab !== "settings") return;
+    if (activeTab !== "settings" && activeTab !== "templates") return;
     const interval = setInterval(() => {
       setPreviewScenario(prev => (prev + 1) % scenarios.length);
     }, 3000);
@@ -261,12 +303,12 @@ const Dashboard = () => {
 
   useEffect(() => {
     if (activeTab === "manual" && (manualTitle || manualImage)) {
-      const censoredTitle = censorText(manualTitle || "শিরোনাম এখানে", canvasSettings.sanitizer?.enabled);
+      const censoredTitle = censorText(manualTitle || "শিরোনাম এখানে", canvasSettings.sanitizer?.enabled, customMappings);
       generatePhotoCardInternal(censoredTitle, manualImage || "https://images.unsplash.com/photo-1585829365234-78d2b85da94c?w=800", manualQrUrl)
         .then(url => setPreviewUrl(url))
         .catch(() => {});
     }
-  }, [manualTitle, manualImage, manualQrUrl, canvasSettings, activeTab]);
+  }, [manualTitle, manualImage, manualQrUrl, canvasSettings, activeTab, customMappings]);
 
   const checkAndClearCache = (portalUrl: string) => {
     const lastClear = localStorage.getItem(`last_cache_clear_${portalUrl}`);
@@ -392,7 +434,7 @@ const Dashboard = () => {
     try {
       const template = new Image();
       template.crossOrigin = "anonymous";
-      template.src = "/PhotocardTemplate.png";
+      template.src = canvasSettings.backgroundImage || "/PhotocardTemplate.png";
       await new Promise((resolve, reject) => {
         template.onload = resolve;
         template.onerror = (e) => {
@@ -560,7 +602,7 @@ const Dashboard = () => {
           }
 
           if (title && imageUrl) {
-            const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled);
+            const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled, customMappings);
             const dataUrl = await generatePhotoCardInternal(censoredTitle, imageUrl, link);
 
             const newRecord: AutoRecord = {
@@ -609,7 +651,7 @@ const Dashboard = () => {
     }
     setIsGenerating(true);
     try {
-      const censoredTitle = censorText(manualTitle, canvasSettings.sanitizer?.enabled);
+      const censoredTitle = censorText(manualTitle, canvasSettings.sanitizer?.enabled, customMappings);
       const dataUrl = await generatePhotoCardInternal(censoredTitle, manualImage, manualQrUrl);
       setPreviewUrl(dataUrl);
 
@@ -686,7 +728,7 @@ const Dashboard = () => {
         setManualTitle(title);
         setManualImage(image);
         toast.success("Data fetched! Generating photocard...");
-        const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled);
+        const censoredTitle = censorText(title, canvasSettings.sanitizer?.enabled, customMappings);
         const dataUrl = await generatePhotoCardInternal(censoredTitle, image, semiAutoUrl);
         setPreviewUrl(dataUrl);
 
@@ -756,6 +798,16 @@ const Dashboard = () => {
             Automation
           </button>
           <button
+            onClick={() => setActiveTab("templates")}
+            className={cn(
+              "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
+              activeTab === "templates" ? "bg-primary text-primary-foreground" : "hover:bg-primary/10 text-muted-foreground"
+            )}
+          >
+            <Layers className="w-4 h-4" />
+            Templates
+          </button>
+          <button
             onClick={() => setActiveTab("settings")}
             className={cn(
               "w-full flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-colors",
@@ -791,11 +843,24 @@ const Dashboard = () => {
           <p className="text-muted-foreground">Manage your news portal photocards.</p>
         </header>
 
-        <div className={cn("grid gap-10", (activeTab === "manual" || activeTab === "settings") ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
+        <div className={cn("grid gap-10", (activeTab === "manual" || activeTab === "settings" || activeTab === "templates") ? "grid-cols-1 lg:grid-cols-2" : "grid-cols-1")}>
           <div className="space-y-8">
             {activeTab === "manual" && (
               <div className="space-y-6 animate-fade-in-up">
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Template</Label>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm"
+                      value={activeTemplateId}
+                      onChange={(e) => setActiveTemplateId(e.target.value)}
+                    >
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="manualTitle">Title Text</Label>
                     <Textarea
@@ -864,17 +929,17 @@ const Dashboard = () => {
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
                             <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-3 p-4">
+                              <Button variant="default" size="icon" className="w-full h-full aspect-square bg-primary text-primary-foreground shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
                                 link.download = "photocard.png";
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
-                                <Download className="w-4 h-4" />
+                                <Download className="w-6 h-6" />
                               </Button>
-                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
-                                <Trash2 className="w-4 h-4" />
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-6 h-6" />
                               </Button>
                             </div>
                           </div>
@@ -891,7 +956,20 @@ const Dashboard = () => {
 
             {activeTab === "semi-auto" && (
               <div className="space-y-6 animate-fade-in-up">
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Template</Label>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm"
+                      value={activeTemplateId}
+                      onChange={(e) => setActiveTemplateId(e.target.value)}
+                    >
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="space-y-2">
                     <Label htmlFor="semiAutoUrl">Post URL</Label>
                     <div className="flex gap-2">
@@ -926,26 +1004,26 @@ const Dashboard = () => {
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
                             <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-3 p-4">
+                              <Button variant="default" size="icon" className="w-full h-full aspect-square bg-primary text-primary-foreground shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
                                 link.download = "photocard.png";
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
-                                <Download className="w-4 h-4" />
+                                <Download className="w-6 h-6" />
                               </Button>
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
-                                <ExternalLink className="w-4 h-4" />
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
+                                <ExternalLink className="w-6 h-6" />
                               </Button>
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Copy URL" onClick={() => {
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Copy URL" onClick={() => {
                                 navigator.clipboard.writeText(record.url);
                                 toast.success("URL copied!");
                               }}>
-                                <Copy className="w-4 h-4" />
+                                <Copy className="w-6 h-6" />
                               </Button>
-                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
-                                <Trash2 className="w-4 h-4" />
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-6 h-6" />
                               </Button>
                             </div>
                           </div>
@@ -962,7 +1040,20 @@ const Dashboard = () => {
 
             {activeTab === "automation" && (
               <div className="space-y-6 animate-fade-in-up">
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label className="text-[10px] uppercase font-bold text-muted-foreground">Select Template</Label>
+                    <select
+                      className="w-full h-10 px-3 rounded-xl border bg-card text-sm"
+                      value={activeTemplateId}
+                      onChange={(e) => setActiveTemplateId(e.target.value)}
+                    >
+                      {templates.map(t => (
+                        <option key={t.id} value={t.id}>{t.name}</option>
+                      ))}
+                    </select>
+                  </div>
+
                   <div className="flex items-center justify-between border-b pb-4">
                     <div className="flex items-center gap-3">
                       <div className={cn("w-3 h-3 rounded-full", autoModeActive ? "bg-green-500 animate-pulse" : "bg-muted")} />
@@ -1018,26 +1109,26 @@ const Dashboard = () => {
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-video relative overflow-hidden bg-muted">
                             <img src={record.previewUrl} alt={record.title} className="w-full h-full object-contain" />
-                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Download" onClick={() => {
+                            <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-3 p-4">
+                              <Button variant="default" size="icon" className="w-full h-full aspect-square bg-primary text-primary-foreground shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
                                 link.download = "photocard.png";
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
-                                <Download className="w-4 h-4" />
+                                <Download className="w-6 h-6" />
                               </Button>
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
-                                <ExternalLink className="w-4 h-4" />
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Open URL" onClick={() => window.open(record.url, '_blank')}>
+                                <ExternalLink className="w-6 h-6" />
                               </Button>
-                              <Button variant="secondary" size="icon" className="w-8 h-8" title="Copy URL" onClick={() => {
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Copy URL" onClick={() => {
                                 navigator.clipboard.writeText(record.url);
                                 toast.success("URL copied!");
                               }}>
-                                <Copy className="w-4 h-4" />
+                                <Copy className="w-6 h-6" />
                               </Button>
-                              <Button variant="destructive" size="icon" className="w-8 h-8" title="Delete" onClick={() => deleteRecord(record.id)}>
-                                <Trash2 className="w-4 h-4" />
+                              <Button variant="secondary" size="icon" className="w-full h-full aspect-square shadow-lg" title="Delete" onClick={() => deleteRecord(record.id)}>
+                                <Trash2 className="w-6 h-6" />
                               </Button>
                             </div>
                           </div>
@@ -1052,66 +1143,93 @@ const Dashboard = () => {
               </div>
             )}
 
-            {activeTab === "settings" && (
+            {activeTab === "templates" && (
               <div className="space-y-6 animate-fade-in-up">
-                {/* Sanitizer Settings */}
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
-                  <div className="flex items-center justify-between">
-                    <Label className="text-sm font-bold flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-primary" />
-                      Text Sanitizer
-                    </Label>
-                    <input
-                      type="checkbox"
-                      className="accent-primary"
-                      checked={canvasSettings.sanitizer?.enabled}
-                      onChange={(e) => setCanvasSettings({
-                        ...canvasSettings,
-                        sanitizer: { enabled: e.target.checked }
-                      })}
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">Automatically sanitize sensitive words in generated photocards.</p>
-                </div>
-
-                {/* Notification Settings */}
-                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
-                  <Label className="text-sm font-bold flex items-center gap-2">
-                    <Volume2 className="w-4 h-4 text-primary" />
-                    Notification Sound
-                  </Label>
-                  <div className="space-y-3">
-                    {[
-                      { name: 'Alert (Default)', file: '/Alert.mp3' },
-                      { name: 'Instant', file: '/Instant.mp3' },
-                      { name: 'Loud', file: '/Loud.mp3' }
-                    ].map((audio) => (
-                      <div key={audio.file} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all">
-                        <span className="text-sm">{audio.name}</span>
-                        <div className="flex items-center gap-2">
-                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => playNotification(audio.file)}>
-                            <Play className="h-3 w-3" />
-                          </Button>
-                          <Button
-                            variant={selectedAudio === audio.file ? "default" : "outline"}
-                            size="sm"
-                            className="h-8 px-4 text-xs"
-                            onClick={() => saveAudioSetting(audio.file)}
-                          >
-                            {selectedAudio === audio.file ? "Selected" : "Select"}
-                          </Button>
-                        </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {templates.map((template) => (
+                    <button
+                      key={template.id}
+                      onClick={() => setActiveTemplateId(template.id)}
+                      className={cn(
+                        "relative aspect-video rounded-xl border-2 overflow-hidden transition-all group",
+                        activeTemplateId === template.id ? "border-primary ring-2 ring-primary/20" : "border-muted hover:border-primary/50"
+                      )}
+                    >
+                      <img src={template.backgroundImage} alt={template.name} className="w-full h-full object-cover" />
+                      <div className="absolute inset-0 bg-black/40 flex items-center justify-center">
+                        <span className="text-white font-bold text-sm">{template.name}</span>
                       </div>
-                    ))}
-                  </div>
+                      {templates.length > 1 && (
+                        <Button
+                          variant="destructive"
+                          size="icon"
+                          className="absolute top-2 right-2 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (confirm("Delete template?")) {
+                              const next = templates.filter(t => t.id !== template.id);
+                              setTemplates(next);
+                              if (activeTemplateId === template.id) setActiveTemplateId(next[0].id);
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      )}
+                    </button>
+                  ))}
+                  <button
+                    onClick={() => {
+                      const name = prompt("Enter template name:");
+                      if (!name) return;
+                      const newId = Math.random().toString(36).substr(2, 9);
+                      const newTemplate = {
+                        ...templates[0],
+                        id: newId,
+                        name: name,
+                      };
+                      setTemplates([...templates, newTemplate]);
+                      setActiveTemplateId(newId);
+                    }}
+                    className="aspect-video rounded-xl border-2 border-dashed border-muted hover:border-primary hover:bg-primary/5 flex flex-col items-center justify-center gap-2 transition-all text-muted-foreground hover:text-primary"
+                  >
+                    <Plus className="w-8 h-8" />
+                    <span className="font-bold text-sm">Add New Template</span>
+                  </button>
                 </div>
 
-                {/* Canvas Customization */}
+                {/* Template Customization */}
                 <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-8">
-                  <Label className="text-sm font-bold flex items-center gap-2 border-b pb-2">
-                    <Settings className="w-4 h-4 text-primary" />
-                    Canvas Personalization
-                  </Label>
+                  <div className="flex items-center justify-between border-b pb-4">
+                    <Label className="text-sm font-bold flex items-center gap-2">
+                      <Settings className="w-4 h-4 text-primary" />
+                      Template Customization: {canvasSettings.name}
+                    </Label>
+                    <div className="flex items-center gap-2">
+                      <Button variant="outline" size="sm" onClick={() => {
+                        const newName = prompt("Rename template:", canvasSettings.name);
+                        if (newName) setCanvasSettings({ ...canvasSettings, name: newName });
+                      }}>
+                        Rename
+                      </Button>
+                      <Button variant="outline" size="sm" onClick={() => {
+                         const input = document.createElement('input');
+                         input.type = 'file';
+                         input.accept = 'image/*';
+                         input.onchange = (e: any) => {
+                           const file = e.target.files?.[0];
+                           if (file) {
+                             const reader = new FileReader();
+                             reader.onload = () => setCanvasSettings({ ...canvasSettings, backgroundImage: reader.result });
+                             reader.readAsDataURL(file);
+                           }
+                         };
+                         input.click();
+                      }}>
+                        Change Background
+                      </Button>
+                    </div>
+                  </div>
 
                   {/* Title Config */}
                   <div className="space-y-4">
@@ -1444,13 +1562,74 @@ const Dashboard = () => {
                       </div>
                     </div>
                   </div>
-
                 </div>
+              </div>
+            )}
+
+            {activeTab === "settings" && (
+              <div className="space-y-6 animate-fade-in-up">
+                {/* Sanitizer Settings */}
+                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                  <div className="flex items-center justify-between">
+                    <Label className="text-sm font-bold flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-primary" />
+                      Text Sanitizer
+                    </Label>
+                    <div className="flex items-center gap-3">
+                      <Button variant="outline" size="sm" onClick={() => setIsSanitizerModalOpen(true)}>
+                        Manage Words
+                      </Button>
+                      <input
+                        type="checkbox"
+                        className="accent-primary"
+                        checked={canvasSettings.sanitizer?.enabled}
+                        onChange={(e) => setCanvasSettings({
+                          ...canvasSettings,
+                          sanitizer: { enabled: e.target.checked }
+                        })}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-xs text-muted-foreground">Automatically sanitize sensitive words in generated photocards.</p>
+                </div>
+
+                {/* Notification Settings */}
+                <div className="bg-card p-6 rounded-2xl border shadow-sm space-y-4">
+                  <Label className="text-sm font-bold flex items-center gap-2">
+                    <Volume2 className="w-4 h-4 text-primary" />
+                    Notification Sound
+                  </Label>
+                  <div className="space-y-3">
+                    {[
+                      { name: 'Alert (Default)', file: '/Alert.mp3' },
+                      { name: 'Instant', file: '/Instant.mp3' },
+                      { name: 'Loud', file: '/Loud.mp3' }
+                    ].map((audio) => (
+                      <div key={audio.file} className="flex items-center justify-between p-3 rounded-xl bg-muted/30 border border-transparent hover:border-primary/20 transition-all">
+                        <span className="text-sm">{audio.name}</span>
+                        <div className="flex items-center gap-2">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => playNotification(audio.file)}>
+                            <Play className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant={selectedAudio === audio.file ? "default" : "outline"}
+                            size="sm"
+                            className="h-8 px-4 text-xs"
+                            onClick={() => saveAudioSetting(audio.file)}
+                          >
+                            {selectedAudio === audio.file ? "Selected" : "Select"}
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
               </div>
             )}
           </div>
 
-          {(activeTab === "manual" || activeTab === "settings") && (
+          {(activeTab === "manual" || activeTab === "settings" || activeTab === "templates") && (
             <div className="space-y-6 lg:sticky lg:top-10 h-fit">
               <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
                 {previewUrl ? (
@@ -1475,7 +1654,7 @@ const Dashboard = () => {
                   </div>
                 )}
               </div>
-              {activeTab === "settings" && (
+              {(activeTab === "settings" || activeTab === "templates") && (
                 <p className="text-center text-xs text-muted-foreground italic">
                   Viewing rotating scenario preview to see formatting changes.
                 </p>
@@ -1485,6 +1664,117 @@ const Dashboard = () => {
           <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />
         </div>
       </main>
+
+      {/* Sanitizer Modal */}
+      {isSanitizerModalOpen && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card w-full max-w-2xl max-h-[90vh] rounded-3xl border shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-200">
+            <div className="p-6 border-b flex items-center justify-between bg-muted/30">
+              <div className="flex items-center gap-3">
+                <ShieldCheck className="w-5 h-5 text-primary" />
+                <h2 className="text-xl font-bold">Text Sanitizer Manager</h2>
+              </div>
+              <Button variant="ghost" size="icon" onClick={() => setIsSanitizerModalOpen(false)} className="rounded-full">
+                <X className="w-5 h-5" />
+              </Button>
+            </div>
+
+            <div className="p-6 space-y-6 flex-1 overflow-y-auto scrollbar-hide">
+              {/* Add New Word Form */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-2xl bg-primary/5 border border-primary/10">
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold">Base Word</Label>
+                  <Input
+                    placeholder="e.g. হত্যা"
+                    value={newBaseWord}
+                    onChange={(e) => setNewBaseWord(e.target.value)}
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-[10px] uppercase font-bold">Sanitized Version</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      placeholder="e.g. হ*ত্যা"
+                      value={newSanitizedWord}
+                      onChange={(e) => setNewSanitizedWord(e.target.value)}
+                    />
+                    <Button onClick={() => {
+                      if (!newBaseWord || !newSanitizedWord) {
+                        toast.error("Both fields are required");
+                        return;
+                      }
+                      setCustomMappings(prev => ({ ...prev, [newBaseWord]: newSanitizedWord }));
+                      setNewBaseWord("");
+                      setNewSanitizedWord("");
+                      toast.success("Word added to sanitizer");
+                    }}>
+                      <Plus className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+
+              {/* Search Bar */}
+              <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Input
+                  placeholder="Search words..."
+                  className="pl-10"
+                  value={sanitizerSearch}
+                  onChange={(e) => setSanitizerSearch(e.target.value)}
+                />
+              </div>
+
+              {/* Word List */}
+              <div className="space-y-2">
+                {Object.entries(customMappings)
+                  .filter(([base, sanitized]) =>
+                    base.toLowerCase().includes(sanitizerSearch.toLowerCase()) ||
+                    sanitized.toLowerCase().includes(sanitizerSearch.toLowerCase())
+                  )
+                  .map(([base, sanitized]) => (
+                    <div key={base} className="flex items-center justify-between p-4 rounded-xl bg-card border hover:border-primary/30 transition-all group">
+                      <div className="flex items-center gap-4 flex-1">
+                        <div className="flex-1">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Base</p>
+                          <p className="font-medium">{base}</p>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-muted-foreground opacity-30" />
+                        <div className="flex-1">
+                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Sanitized</p>
+                          <p className="font-medium text-primary">{sanitized}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                          setNewBaseWord(base);
+                          setNewSanitizedWord(sanitized);
+                          setCustomMappings(prev => {
+                            const next = { ...prev };
+                            delete next[base];
+                            return next;
+                          });
+                        }}>
+                          <Edit2 className="h-3 w-3" />
+                        </Button>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => {
+                          setCustomMappings(prev => {
+                            const next = { ...prev };
+                            delete next[base];
+                            return next;
+                          });
+                          toast.success("Word removed");
+                        }}>
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
