@@ -871,7 +871,7 @@ const Dashboard = () => {
             )}
           >
             <Send className="w-4 h-4" />
-            Semi-Auto
+            Semi Auto
           </button>
           <button
             onClick={() => { setActiveTab("automation"); setIsMobileMenuOpen(false); }}
@@ -901,7 +901,7 @@ const Dashboard = () => {
             )}
           >
             <Settings className="w-4 h-4" />
-            Settings
+            Strings
           </button>
         </nav>
 
@@ -930,7 +930,9 @@ const Dashboard = () => {
       {/* Main Content */}
       <main className="flex-1 p-6 md:p-10 overflow-y-auto">
         <header className="mb-8">
-          <h1 className="text-3xl font-bold tracking-tight capitalize">{activeTab.replace("-", " ")}</h1>
+          <h1 className="text-3xl font-bold tracking-tight capitalize font-viga">
+            {activeTab === "settings" ? "Strings" : activeTab === "semi-auto" ? "Semi Auto" : activeTab.replace("-", " ")}
+          </h1>
           <p className="text-muted-foreground">Manage your news portal photocards.</p>
         </header>
 
@@ -1015,7 +1017,7 @@ const Dashboard = () => {
                       <List className="w-4 h-4 text-primary" />
                       Recent Manual
                     </h3>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {autoRecords.filter(r => r.type === 'manual').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-square relative overflow-hidden bg-muted">
@@ -1023,7 +1025,7 @@ const Dashboard = () => {
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-2 p-2 place-items-center">
                               <Button variant="default" size="icon" className="w-10 h-10 bg-green-600 hover:bg-green-700 text-white shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
-                                link.download = "photocard.png";
+                                link.download = `${record.title}.png`;
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
@@ -1090,7 +1092,7 @@ const Dashboard = () => {
                       <List className="w-4 h-4 text-primary" />
                       Recent Semi-Auto
                     </h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                  <div className="grid grid-cols-2 gap-4">
                       {autoRecords.filter(r => r.type === 'semi-auto').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                         <div className="aspect-square relative overflow-hidden bg-muted">
@@ -1098,7 +1100,7 @@ const Dashboard = () => {
                           <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-2 p-2 place-items-center">
                             <Button variant="default" size="icon" className="w-10 h-10 bg-green-600 hover:bg-green-700 text-white shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
-                                link.download = "photocard.png";
+                                link.download = `${record.title}.png`;
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
@@ -1195,7 +1197,7 @@ const Dashboard = () => {
                         <Trash2 className="w-4 h-4" />
                       </Button>
                     </div>
-                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+                    <div className="grid grid-cols-2 gap-4">
                       {autoRecords.filter(r => r.type === 'automation').map(record => (
                         <div key={record.id} className="bg-card border rounded-xl overflow-hidden group">
                           <div className="aspect-square relative overflow-hidden bg-muted">
@@ -1203,7 +1205,7 @@ const Dashboard = () => {
                             <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity grid grid-cols-2 gap-2 p-2 place-items-center">
                               <Button variant="default" size="icon" className="w-10 h-10 bg-green-600 hover:bg-green-700 text-white shadow-lg" title="Download" onClick={() => {
                                 const link = document.createElement('a');
-                                link.download = "photocard.png";
+                                link.download = `${record.title}.png`;
                                 link.href = record.previewUrl;
                                 link.click();
                               }}>
@@ -1299,9 +1301,6 @@ const Dashboard = () => {
 
                     <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
                       <div className="flex items-center gap-3">
-                        <div className="p-3 bg-primary/10 rounded-2xl">
-                          <Settings className="w-6 h-6 text-primary" />
-                        </div>
                         <div>
                           <h2 className="text-2xl font-bold tracking-tight">{canvasSettings.name}</h2>
                           <p className="text-sm text-muted-foreground">Customize your photocard template elements.</p>
@@ -1329,7 +1328,7 @@ const Dashboard = () => {
                            };
                            input.click();
                         }}>
-                          Change Background
+                          Upload Background
                         </Button>
                       </div>
                     </div>
@@ -1924,7 +1923,7 @@ const Dashboard = () => {
                       <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-4">
                         <Button variant="secondary" size="sm" onClick={() => {
                           const link = document.createElement('a');
-                          link.download = "photocard.png";
+                          link.download = `${manualTitle || "photocard"}.png`;
                           link.href = previewUrl;
                           link.click();
                         }}>

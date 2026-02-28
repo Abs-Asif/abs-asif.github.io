@@ -154,6 +154,7 @@ const Index = () => {
                 <Input
                   id="portal-url"
                   placeholder="https://yournews.com"
+                  className="font-roboto"
                   value={url}
                   onChange={(e) => setUrl(e.target.value.replace(/[^a-zA-Z0-9.:/-]/g, ''))}
                   disabled={isLoading}

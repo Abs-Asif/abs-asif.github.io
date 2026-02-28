@@ -17,8 +17,10 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Roboto', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        roboto: ['Roboto', 'sans-serif'],
+        viga: ['Viga', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
