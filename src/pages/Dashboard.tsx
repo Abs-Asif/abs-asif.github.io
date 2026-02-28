@@ -40,11 +40,17 @@ import {
   ChevronRight as ChevronRightIcon,
   Palette,
   Maximize2,
-  Menu
+  Menu,
+  MousePointer2
 } from "lucide-react";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { censorText } from "@/lib/censor";
+import { censorText, baseMappings } from "@/lib/censor";
 import { fetchWithProxy } from "@/lib/proxy";
 import QRCode from "qrcode";
 
@@ -211,7 +217,7 @@ const Dashboard = () => {
   const scenarios = [
     "এক লাইনের শিরোনাম",
     "এটি একটি দুই লাইনের শিরোনাম, যা এভাবে দেখাবে",
-    "এটি একটি তিন লাইনের শিরোনাম, যা এরকম দেখাবে। একটু বড় করে"
+    "এটি একটু তিন লাইনের শিরোনাম। যা এরকম দেখাবে। এটি দুই লাইনের চেয়ে বড়।"
   ];
 
   // Form State
@@ -323,6 +329,30 @@ const Dashboard = () => {
 
     return () => clearInterval(clearCacheInterval);
   }, [navigate]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // Global Esc to close any open modal or template editor
+      if (e.key === 'Escape') {
+        if (isSanitizerModalOpen) setIsSanitizerModalOpen(false);
+        else if (isTemplateModalOpen) setIsTemplateModalOpen(false);
+        else if (isEditingTemplate) setIsEditingTemplate(false);
+        else if (isMobileMenuOpen) setIsMobileMenuOpen(false);
+      }
+
+      // Global Enter to trigger main action in the current tab
+      if (e.key === 'Enter' && !e.shiftKey) {
+        // Only trigger if no modal is open (modals have their own enter handlers)
+        if (!isSanitizerModalOpen && !isTemplateModalOpen && !isEditingTemplate) {
+           if (activeTab === 'manual') handleGenerateManual();
+           else if (activeTab === 'semi-auto') handleSemiAutoFetch();
+        }
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isSanitizerModalOpen, isTemplateModalOpen, isEditingTemplate, isMobileMenuOpen, activeTab, manualTitle, manualImage, semiAutoUrl]);
 
   useEffect(() => {
     if (user) {
@@ -817,12 +847,12 @@ const Dashboard = () => {
         "fixed inset-y-0 left-0 z-50 w-64 border-r bg-card flex flex-col transition-transform duration-300 md:relative md:translate-x-0",
         isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
       )}>
-        <div className="p-6 border-b hidden md:flex items-center gap-2">
+        <div className="p-6 border-b flex items-center gap-2">
           <Zap className="text-primary w-6 h-6 fill-current" />
           <span className="font-bold text-lg tracking-tight">দ্রুতপোস্ট</span>
         </div>
 
-        <nav className="flex-1 p-4 space-y-2">
+        <nav className="flex-1 p-4 pt-8 md:pt-4 space-y-2">
           <button
             onClick={() => { setActiveTab("manual"); setIsMobileMenuOpen(false); }}
             className={cn(
@@ -1260,30 +1290,32 @@ const Dashboard = () => {
 
                 {/* Template Customization */}
                 {isEditingTemplate && (
-                  <div className="bg-card p-4 sm:p-6 rounded-3xl border shadow-xl space-y-8 relative overflow-hidden">
-                    <div className="absolute top-0 right-0 p-4">
-                       <Button variant="ghost" size="icon" onClick={() => setIsEditingTemplate(false)} className="rounded-full">
-                         <X className="w-5 h-5" />
+                  <div className="space-y-12 relative">
+                    <div className="absolute top-0 right-0 z-10">
+                       <Button variant="ghost" size="icon" onClick={() => setIsEditingTemplate(false)} className="rounded-full hover:bg-muted/50">
+                         <X className="w-6 h-6" />
                        </Button>
                     </div>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b pb-4">
-                      <div className="flex items-center gap-2">
-                        <Settings className="w-5 h-5 text-primary" />
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
+                      <div className="flex items-center gap-3">
+                        <div className="p-3 bg-primary/10 rounded-2xl">
+                          <Settings className="w-6 h-6 text-primary" />
+                        </div>
                         <div>
-                          <h2 className="text-xl font-bold">{canvasSettings.name}</h2>
-                          <p className="text-xs text-muted-foreground">Customize your photocard template elements.</p>
+                          <h2 className="text-2xl font-bold tracking-tight">{canvasSettings.name}</h2>
+                          <p className="text-sm text-muted-foreground">Customize your photocard template elements.</p>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <Button variant="outline" size="sm" className="rounded-full px-4" onClick={() => {
+                      <div className="flex items-center gap-3">
+                        <Button variant="ghost" size="sm" className="rounded-xl px-4 font-bold h-11" onClick={() => {
                           setTempTemplateName(canvasSettings.name);
                           setTemplateModalMode('rename');
                           setIsTemplateModalOpen(true);
                         }}>
                           Rename
                         </Button>
-                        <Button variant="outline" size="sm" className="rounded-full px-4" onClick={() => {
+                        <Button variant="outline" size="sm" className="rounded-xl px-6 font-bold h-11 border-2" onClick={() => {
                            const input = document.createElement('input');
                            input.type = 'file';
                            input.accept = 'image/*';
@@ -1302,41 +1334,45 @@ const Dashboard = () => {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-8">
-                      {/* Top: Live Preview */}
-                      <div className="space-y-6">
-                         <div className="max-w-md mx-auto w-full space-y-6">
-                            <div className="bg-muted/10 rounded-3xl p-4 border-2 border-dashed aspect-square relative overflow-hidden group">
+                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
+                      {/* Sticky Preview (Desktop) */}
+                      <div className="lg:col-span-5 lg:sticky lg:top-8 space-y-6 order-1 lg:order-2">
+                         <div className="w-full space-y-6">
+                            <div className="bg-muted/5 rounded-[2rem] p-6 border-2 border-dashed aspect-square relative overflow-hidden group shadow-sm transition-all hover:shadow-md">
                                {previewUrl ? (
                                   <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
                                ) : (
-                                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
-                                     <Loader2 className="w-8 h-8 animate-spin" />
-                                     <p className="text-xs">Generating preview...</p>
+                                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-3">
+                                     <Loader2 className="w-10 h-10 animate-spin text-primary" />
+                                     <p className="text-sm font-medium">Generating preview...</p>
                                   </div>
                                )}
-                               <div className="absolute top-4 left-4 bg-primary text-white text-[10px] px-3 py-1 font-bold rounded-full shadow-lg">LIVE PREVIEW</div>
+                               <div className="absolute top-6 left-6 bg-primary text-white text-[10px] px-4 py-1.5 font-black rounded-full shadow-xl tracking-widest">LIVE PREVIEW</div>
                             </div>
-                            <div className="p-4 bg-muted/30 rounded-2xl text-center space-y-2">
-                               <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">Preview Scenario</p>
-                               <p className="text-xs font-bangla">{scenarios[previewScenario]}</p>
+                            <div className="p-6 bg-muted/20 rounded-2xl text-center space-y-3 border backdrop-blur-sm">
+                               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Current Preview Scenario</p>
+                               <p className="text-base font-bangla font-medium leading-relaxed">{scenarios[previewScenario]}</p>
+                               <p className="text-[10px] text-muted-foreground italic">Viewing rotating scenarios to see formatting changes.</p>
                             </div>
                          </div>
                       </div>
 
                       {/* Bottom: Form Controls */}
-                      <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
-                      <div className="space-y-8">
+                      <div className="lg:col-span-7 space-y-16 order-2 lg:order-1 pb-32">
                         {/* Title Config */}
-                        <section className="space-y-4">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                             <Edit2 className="w-3 h-3" /> Title Text Settings
-                          </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 rounded-2xl bg-muted/20 border">
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-bold">FONT FAMILY</Label>
+                        <section className="space-y-8">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Edit2 className="w-4 h-4 text-primary" />
+                            </div>
+                            <h3 className="text-lg font-black uppercase tracking-[0.15em]">Title Settings</h3>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+                            <div className="space-y-3">
+                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Family</Label>
                               <select
-                                className="w-full h-10 px-3 rounded-xl border bg-background text-sm"
+                                className="w-full h-12 px-4 rounded-2xl border-2 bg-muted/5 font-medium text-sm focus:border-primary transition-all outline-none"
                                 value={canvasSettings.title.font}
                                 onChange={(e) => setCanvasSettings({
                                   ...canvasSettings,
@@ -1348,11 +1384,11 @@ const Dashboard = () => {
                                 <option>Inter</option>
                               </select>
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-bold">TEXT COLOR</Label>
-                              <div className="flex gap-2 items-center">
+                            <div className="space-y-3">
+                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Text Color</Label>
+                              <div className="flex gap-3">
                                 <Input
-                                  className="h-10 text-xs font-mono rounded-xl"
+                                  className="h-12 px-4 text-xs font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all uppercase tracking-widest"
                                   placeholder="#FFFFFF"
                                   value={canvasSettings.title.color}
                                   onChange={(e) => setCanvasSettings({
@@ -1360,40 +1396,64 @@ const Dashboard = () => {
                                     title: {...canvasSettings.title, color: e.target.value}
                                   })}
                                 />
-                                <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-xl border">
-                                   {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#000000', '#64748b'].map(c => (
-                                      <button
-                                        key={c}
-                                        className={cn("w-6 h-6 rounded-md border border-white/20 transition-transform hover:scale-110", canvasSettings.title.color === c && "ring-2 ring-primary")}
-                                        style={{backgroundColor: c}}
-                                        onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, color: c}})}
-                                      />
-                                   ))}
-                                   <div className="relative w-6 h-6">
-                                      <Input
-                                        type="color"
-                                        className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-md opacity-0"
-                                        value={canvasSettings.title.color}
-                                        onChange={(e) => setCanvasSettings({
-                                          ...canvasSettings,
-                                          title: {...canvasSettings.title, color: e.target.value}
-                                        })}
-                                      />
-                                      <div className="w-full h-full rounded-md border bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none">
-                                         <Palette className="w-3 h-3 text-white" />
+                                {/* TODO: Replace with custom popover color wheel in next step */}
+                                <Popover>
+                                  <PopoverTrigger asChild>
+                                    <Button variant="outline" className="h-12 w-12 rounded-2xl p-0 border-2 shadow-sm" style={{ backgroundColor: canvasSettings.title.color }}>
+                                      <div className="w-full h-full rounded-2xl border-4 border-background/20" />
+                                    </Button>
+                                  </PopoverTrigger>
+                                  <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
+                                    <div className="space-y-2">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Premium Palette</p>
+                                      <div className="grid grid-cols-5 gap-2">
+                                        {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
+                                          <button
+                                            key={c}
+                                            className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110 shadow-sm", canvasSettings.title.color === c && "ring-2 ring-primary scale-110 shadow-md")}
+                                            style={{backgroundColor: c}}
+                                            onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, color: c}})}
+                                          />
+                                        ))}
                                       </div>
-                                   </div>
-                                </div>
+                                    </div>
+                                    <div className="space-y-2 pt-2 border-t">
+                                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Custom Color</p>
+                                      <div className="flex gap-2">
+                                        <div className="relative flex-1">
+                                          <Input
+                                            type="text"
+                                            className="h-10 pl-8 pr-3 text-[10px] font-black uppercase tracking-widest rounded-xl border-2"
+                                            value={canvasSettings.title.color}
+                                            onChange={(e) => setCanvasSettings({ ...canvasSettings, title: { ...canvasSettings.title, color: e.target.value } })}
+                                          />
+                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-black text-[10px]">#</span>
+                                        </div>
+                                        <div className="relative w-10 h-10">
+                                          <Input
+                                            type="color"
+                                            className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-xl opacity-0"
+                                            value={canvasSettings.title.color}
+                                            onChange={(e) => setCanvasSettings({ ...canvasSettings, title: { ...canvasSettings.title, color: e.target.value } })}
+                                          />
+                                          <div className="w-full h-full rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
+                                            <Palette className="w-4 h-4 text-white" />
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </PopoverContent>
+                                </Popover>
                               </div>
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-bold">SIZE ({canvasSettings.title.size}px)</Label>
-                              <div className="flex items-center gap-3">
+                            <div className="space-y-4">
+                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Size ({canvasSettings.title.size}px)</Label>
+                              <div className="flex items-center gap-4">
                                 <Input
                                   type="range"
                                   min="20"
                                   max="150"
-                                  className="flex-1 accent-primary"
+                                  className="flex-1 accent-primary h-1.5 rounded-lg appearance-none cursor-pointer"
                                   value={canvasSettings.title.size}
                                   onChange={(e) => setCanvasSettings({
                                     ...canvasSettings,
@@ -1402,7 +1462,7 @@ const Dashboard = () => {
                                 />
                                 <Input
                                   type="number"
-                                  className="w-20 h-10 text-center rounded-xl"
+                                  className="w-20 h-12 text-center font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all"
                                   value={canvasSettings.title.size}
                                   onChange={(e) => setCanvasSettings({
                                     ...canvasSettings,
@@ -1411,15 +1471,15 @@ const Dashboard = () => {
                                 />
                               </div>
                             </div>
-                            <div className="space-y-2">
-                              <Label className="text-[10px] font-bold">ALIGNMENT</Label>
-                              <div className="flex border rounded-xl overflow-hidden h-10">
+                            <div className="space-y-4">
+                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Alignment</Label>
+                              <div className="flex gap-2 p-1 border-2 rounded-[1rem] bg-muted/5 h-12">
                                 {['left', 'center', 'right'].map((align) => (
                                   <button
                                     key={align}
                                     className={cn(
-                                      "flex-1 text-xs capitalize transition-colors hover:bg-muted",
-                                      canvasSettings.title.align === align ? "bg-primary text-white" : "bg-background"
+                                      "flex-1 text-[10px] font-black uppercase tracking-widest rounded-[0.5rem] transition-all",
+                                      canvasSettings.title.align === align ? "bg-primary text-white shadow-lg" : "text-muted-foreground hover:bg-muted/50"
                                     )}
                                     onClick={() => setCanvasSettings({
                                       ...canvasSettings,
@@ -1433,31 +1493,37 @@ const Dashboard = () => {
                             </div>
 
                             {/* Positioning Joystick */}
-                            <div className="sm:col-span-2 space-y-3">
-                               <Label className="text-[10px] font-bold">POSITIONING (X: {canvasSettings.title.x}, Y: {canvasSettings.title.y})</Label>
-                               <div className="flex gap-6 items-center">
-                                  <div className="grid grid-cols-3 gap-1 w-fit bg-muted/30 p-2 rounded-2xl border">
+                            <div className="md:col-span-2 space-y-6 pt-4">
+                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Title Position (X: {canvasSettings.title.x}, Y: {canvasSettings.title.y})</Label>
+                               <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
+                                  <div className="grid grid-cols-3 gap-2 w-fit">
                                      <div />
-                                     <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y - 10}})}>
-                                        <ChevronUp className="w-4 h-4" />
+                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y - 10}})}>
+                                        <ChevronUp className="w-5 h-5" />
                                      </Button>
                                      <div />
-                                     <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x - 10}})}>
-                                        <ChevronLeft className="w-4 h-4" />
+                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x - 10}})}>
+                                        <ChevronLeft className="w-5 h-5" />
                                      </Button>
-                                     <div className="w-8 h-8 flex items-center justify-center text-[10px] font-bold text-primary">T</div>
-                                     <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x + 10}})}>
-                                        <ChevronRightIcon className="w-4 h-4" />
+                                     <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">T</div>
+                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x + 10}})}>
+                                        <ChevronRightIcon className="w-5 h-5" />
                                      </Button>
                                      <div />
-                                     <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y + 10}})}>
-                                        <ChevronDown className="w-4 h-4" />
+                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y + 10}})}>
+                                        <ChevronDown className="w-5 h-5" />
                                      </Button>
                                      <div />
                                   </div>
-                                  <div className="flex-1 grid grid-cols-2 gap-2">
-                                     <Input type="number" className="h-10 rounded-xl" value={canvasSettings.title.x} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}})} />
-                                     <Input type="number" className="h-10 rounded-xl" value={canvasSettings.title.y} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}})} />
+                                  <div className="flex-1 w-full grid grid-cols-2 gap-4">
+                                     <div className="space-y-2">
+                                       <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
+                                       <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.title.x} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}})} />
+                                     </div>
+                                     <div className="space-y-2">
+                                       <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
+                                       <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.title.y} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}})} />
+                                     </div>
                                   </div>
                                </div>
                             </div>
@@ -1465,16 +1531,20 @@ const Dashboard = () => {
                         </section>
 
                         {/* Date Config */}
-                        <section className="space-y-4">
-                          <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                             <Clock className="w-3 h-3" /> Date & Time Settings
-                          </h4>
-                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 rounded-2xl bg-muted/20 border">
-                             <div className="space-y-2">
-                               <Label className="text-[10px] font-bold">SIZE</Label>
+                        <section className="space-y-8">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                              <Clock className="w-4 h-4 text-primary" />
+                            </div>
+                            <h3 className="text-lg font-black uppercase tracking-[0.15em]">Date Settings</h3>
+                          </div>
+
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+                             <div className="space-y-3">
+                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Size</Label>
                                <Input
                                  type="number"
-                                 className="h-10 rounded-xl"
+                                 className="h-12 px-4 font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all"
                                  value={canvasSettings.date.size}
                                  onChange={(e) => setCanvasSettings({
                                    ...canvasSettings,
@@ -1482,70 +1552,99 @@ const Dashboard = () => {
                                  })}
                                />
                              </div>
-                             <div className="space-y-2">
-                               <Label className="text-[10px] font-bold">COLOR</Label>
-                               <div className="flex gap-2 items-center">
+                             <div className="space-y-3">
+                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Date Color</Label>
+                               <div className="flex gap-3">
                                   <Input
-                                    className="h-10 text-xs font-mono rounded-xl flex-1"
+                                    className="h-12 px-4 text-xs font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all uppercase tracking-widest"
                                     value={canvasSettings.date.color}
                                     onChange={(e) => setCanvasSettings({
                                       ...canvasSettings,
                                       date: {...canvasSettings.date, color: e.target.value}
                                     })}
                                   />
-                                  <div className="grid grid-cols-4 gap-1 p-1 bg-muted rounded-xl border">
-                                     {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#000000', '#64748b'].map(c => (
-                                        <button
-                                          key={c}
-                                          className={cn("w-6 h-6 rounded-md border border-white/20 transition-transform hover:scale-110", canvasSettings.date.color === c && "ring-2 ring-primary")}
-                                          style={{backgroundColor: c}}
-                                          onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, color: c}})}
-                                        />
-                                     ))}
-                                     <div className="relative w-6 h-6">
-                                        <Input
-                                          type="color"
-                                          className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-md opacity-0"
-                                          value={canvasSettings.date.color}
-                                          onChange={(e) => setCanvasSettings({
-                                            ...canvasSettings,
-                                            date: {...canvasSettings.date, color: e.target.value}
-                                          })}
-                                        />
-                                        <div className="w-full h-full rounded-md border bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none">
-                                           <Palette className="w-3 h-3 text-white" />
+                                  <Popover>
+                                    <PopoverTrigger asChild>
+                                      <Button variant="outline" className="h-12 w-12 rounded-2xl p-0 border-2 shadow-sm" style={{ backgroundColor: canvasSettings.date.color }}>
+                                        <div className="w-full h-full rounded-2xl border-4 border-background/20" />
+                                      </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
+                                      <div className="space-y-2">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Premium Palette</p>
+                                        <div className="grid grid-cols-5 gap-2">
+                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
+                                            <button
+                                              key={c}
+                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110 shadow-sm", canvasSettings.date.color === c && "ring-2 ring-primary scale-110 shadow-md")}
+                                              style={{backgroundColor: c}}
+                                              onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, color: c}})}
+                                            />
+                                          ))}
                                         </div>
-                                     </div>
-                                  </div>
+                                      </div>
+                                      <div className="space-y-2 pt-2 border-t">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Custom Color</p>
+                                        <div className="flex gap-2">
+                                          <div className="relative flex-1">
+                                            <Input
+                                              type="text"
+                                              className="h-10 pl-8 pr-3 text-[10px] font-black uppercase tracking-widest rounded-xl border-2"
+                                              value={canvasSettings.date.color}
+                                              onChange={(e) => setCanvasSettings({ ...canvasSettings, date: { ...canvasSettings.date, color: e.target.value } })}
+                                            />
+                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-black text-[10px]">#</span>
+                                          </div>
+                                          <div className="relative w-10 h-10">
+                                            <Input
+                                              type="color"
+                                              className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-xl opacity-0"
+                                              value={canvasSettings.date.color}
+                                              onChange={(e) => setCanvasSettings({ ...canvasSettings, date: { ...canvasSettings.date, color: e.target.value } })}
+                                            />
+                                            <div className="w-full h-full rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
+                                              <Palette className="w-4 h-4 text-white" />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    </PopoverContent>
+                                  </Popover>
                                </div>
                              </div>
 
                              {/* Positioning Joystick */}
-                             <div className="sm:col-span-2 space-y-3">
-                                <Label className="text-[10px] font-bold">POSITIONING (X: {canvasSettings.date.x}, Y: {canvasSettings.date.y})</Label>
-                                <div className="flex gap-6 items-center">
-                                   <div className="grid grid-cols-3 gap-1 w-fit bg-muted/30 p-2 rounded-2xl border">
+                             <div className="md:col-span-2 space-y-6 pt-4">
+                                <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Date Position (X: {canvasSettings.date.x}, Y: {canvasSettings.date.y})</Label>
+                                <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
+                                   <div className="grid grid-cols-3 gap-2 w-fit">
                                       <div />
-                                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y - 10}})}>
-                                         <ChevronUp className="w-4 h-4" />
+                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y - 10}})}>
+                                         <ChevronUp className="w-5 h-5" />
                                       </Button>
                                       <div />
-                                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x - 10}})}>
-                                         <ChevronLeft className="w-4 h-4" />
+                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x - 10}})}>
+                                         <ChevronLeft className="w-5 h-5" />
                                       </Button>
-                                      <div className="w-8 h-8 flex items-center justify-center text-[10px] font-bold text-primary">D</div>
-                                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x + 10}})}>
-                                         <ChevronRightIcon className="w-4 h-4" />
+                                      <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">D</div>
+                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x + 10}})}>
+                                         <ChevronRightIcon className="w-5 h-5" />
                                       </Button>
                                       <div />
-                                      <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y + 10}})}>
-                                         <ChevronDown className="w-4 h-4" />
+                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y + 10}})}>
+                                         <ChevronDown className="w-5 h-5" />
                                       </Button>
                                       <div />
                                    </div>
-                                   <div className="flex-1 grid grid-cols-2 gap-2">
-                                      <Input type="number" className="h-10 rounded-xl" value={canvasSettings.date.x} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}})} />
-                                      <Input type="number" className="h-10 rounded-xl" value={canvasSettings.date.y} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}})} />
+                                   <div className="flex-1 w-full grid grid-cols-2 gap-4">
+                                      <div className="space-y-2">
+                                        <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
+                                        <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.date.x} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}})} />
+                                      </div>
+                                      <div className="space-y-2">
+                                        <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
+                                        <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.date.y} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}})} />
+                                      </div>
                                    </div>
                                 </div>
                              </div>
@@ -1553,102 +1652,192 @@ const Dashboard = () => {
                         </section>
 
                         {/* Image & QR Config */}
-                        <section className="space-y-4">
-                           <h4 className="text-xs font-bold uppercase tracking-wider text-muted-foreground flex items-center gap-2">
-                              <ImageIcon className="w-3 h-3" /> Image & QR Settings
-                           </h4>
-                           <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 p-4 rounded-2xl bg-muted/20 border">
-                              <div className="space-y-2">
-                                 <Label className="text-[10px] font-bold">IMAGE SCALE ({canvasSettings.image?.scale || 1})</Label>
+                        <section className="space-y-8">
+                           <div className="flex items-center gap-3">
+                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
+                               <ImageIcon className="w-4 h-4 text-primary" />
+                             </div>
+                             <h3 className="text-lg font-black uppercase tracking-[0.15em]">Graphics Settings</h3>
+                           </div>
+
+                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
+                              <div className="space-y-4">
+                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Scale ({canvasSettings.image?.scale || 1})</Label>
                                  <Input
                                    type="range" min="0.5" max="2" step="0.1"
-                                   className="h-10 accent-primary"
+                                   className="h-1.5 accent-primary rounded-lg appearance-none cursor-pointer"
                                    value={canvasSettings.image?.scale || 1}
                                    onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, scale: parseFloat(e.target.value)}})}
                                  />
                               </div>
-                              <div className="space-y-2">
-                                 <Label className="text-[10px] font-bold">IMAGE BORDER</Label>
-                                 <div className="flex gap-2">
+                              <div className="space-y-4">
+                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Border</Label>
+                                 <div className="flex items-center gap-4 h-12">
                                     <button
-                                      className={cn("h-10 px-4 rounded-xl text-xs font-bold border transition-colors", canvasSettings.image?.border?.enabled ? "bg-primary text-white border-primary" : "bg-background text-muted-foreground")}
+                                      className={cn("flex-1 h-full px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all shadow-sm", canvasSettings.image?.border?.enabled ? "bg-primary text-white border-primary shadow-lg" : "bg-muted/5 text-muted-foreground")}
                                       onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, enabled: !canvasSettings.image?.border?.enabled}}})}
                                     >
-                                       {canvasSettings.image?.border?.enabled ? "Enabled" : "Disabled"}
+                                       {canvasSettings.image?.border?.enabled ? "Active" : "Disabled"}
                                     </button>
-                                    <div className="relative">
-                                       <Input
-                                         type="color"
-                                         className="w-10 h-10 p-0 border-none cursor-pointer rounded-full opacity-0 absolute inset-0 z-10"
-                                         value={canvasSettings.image?.border?.color || '#22C55E'}
-                                         onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, color: e.target.value}}})}
-                                       />
-                                       <div
-                                         className="w-10 h-10 rounded-full border shadow-sm"
-                                         style={{backgroundColor: canvasSettings.image?.border?.color || '#22C55E'}}
-                                       />
-                                    </div>
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <div className="relative h-full aspect-square cursor-pointer group/color">
+                                          <div
+                                            className="w-full h-full rounded-2xl border-2 shadow-sm transition-transform group-hover/color:scale-105 group-hover/color:shadow-md"
+                                            style={{backgroundColor: canvasSettings.image?.border?.color || '#22C55E'}}
+                                          />
+                                        </div>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Border Color</p>
+                                        <div className="grid grid-cols-5 gap-2">
+                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
+                                            <button
+                                              key={c}
+                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110", (canvasSettings.image?.border?.color || '#22C55E') === c && "ring-2 ring-primary scale-110")}
+                                              style={{backgroundColor: c}}
+                                              onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, color: c}}})}
+                                            />
+                                          ))}
+                                        </div>
+                                        <div className="relative pt-2 border-t">
+                                          <Input
+                                            type="color"
+                                            className="absolute inset-0 w-full h-10 p-0 border-none cursor-pointer rounded-xl opacity-0"
+                                            value={canvasSettings.image?.border?.color || '#22C55E'}
+                                            onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, color: e.target.value}}})}
+                                          />
+                                          <div className="w-full h-10 rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
+                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Custom Wheel</span>
+                                          </div>
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
                                  </div>
                               </div>
 
-                              <div className="space-y-2">
-                                 <div className="flex items-center justify-between mb-2">
-                                    <Label className="text-[10px] font-bold">QR CODE SIZE</Label>
-                                    <input type="checkbox" checked={canvasSettings.qr?.enabled} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, enabled: e.target.checked}})} className="accent-primary" />
+                              <div className="space-y-4">
+                                 <div className="flex items-center justify-between ml-1">
+                                    <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">QR Code Size</Label>
+                                    <input type="checkbox" checked={canvasSettings.qr?.enabled} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, enabled: e.target.checked}})} className="accent-primary w-4 h-4 rounded-md" />
                                  </div>
-                                 <Input type="number" className="h-10 rounded-xl" value={canvasSettings.qr?.size} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, size: parseInt(e.target.value) || 0}})} />
+                                 <Input type="number" className="h-12 px-4 font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all" value={canvasSettings.qr?.size} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, size: parseInt(e.target.value) || 0}})} />
                               </div>
 
-                              <div className="space-y-2">
-                                 <Label className="text-[10px] font-bold">QR BORDER</Label>
-                                 <div className="flex gap-2">
+                              <div className="space-y-4">
+                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Border</Label>
+                                 <div className="flex items-center gap-4 h-12">
                                     <button
-                                      className={cn("h-10 px-4 rounded-xl text-xs font-bold border transition-colors", canvasSettings.qr?.border?.enabled ? "bg-primary text-white border-primary" : "bg-background text-muted-foreground")}
+                                      className={cn("flex-1 h-full px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all shadow-sm", canvasSettings.qr?.border?.enabled ? "bg-primary text-white border-primary shadow-lg" : "bg-muted/5 text-muted-foreground")}
                                       onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, enabled: !canvasSettings.qr?.border?.enabled}}})}
                                     >
-                                       {canvasSettings.qr?.border?.enabled ? "Enabled" : "Disabled"}
+                                       {canvasSettings.qr?.border?.enabled ? "Active" : "Disabled"}
                                     </button>
-                                    <div className="relative">
-                                       <Input
-                                         type="color"
-                                         className="w-10 h-10 p-0 border-none cursor-pointer rounded-full opacity-0 absolute inset-0 z-10"
-                                         value={canvasSettings.qr?.border?.color || '#ffffff'}
-                                         onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, color: e.target.value}}})}
-                                       />
-                                       <div
-                                         className="w-10 h-10 rounded-full border shadow-sm"
-                                         style={{backgroundColor: canvasSettings.qr?.border?.color || '#ffffff'}}
-                                       />
+                                    <Popover>
+                                      <PopoverTrigger asChild>
+                                        <div className="relative h-full aspect-square cursor-pointer group/color">
+                                          <div
+                                            className="w-full h-full rounded-2xl border-2 shadow-sm transition-transform group-hover/color:scale-105 group-hover/color:shadow-md"
+                                            style={{backgroundColor: canvasSettings.qr?.border?.color || '#ffffff'}}
+                                          />
+                                        </div>
+                                      </PopoverTrigger>
+                                      <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
+                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Border Color</p>
+                                        <div className="grid grid-cols-5 gap-2">
+                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
+                                            <button
+                                              key={c}
+                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110", (canvasSettings.qr?.border?.color || '#ffffff') === c && "ring-2 ring-primary scale-110")}
+                                              style={{backgroundColor: c}}
+                                              onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, color: c}}})}
+                                            />
+                                          ))}
+                                        </div>
+                                        <div className="relative pt-2 border-t">
+                                          <Input
+                                            type="color"
+                                            className="absolute inset-0 w-full h-10 p-0 border-none cursor-pointer rounded-xl opacity-0"
+                                            value={canvasSettings.qr?.border?.color || '#ffffff'}
+                                            onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, color: e.target.value}}})}
+                                          />
+                                          <div className="w-full h-10 rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
+                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Custom Wheel</span>
+                                          </div>
+                                        </div>
+                                      </PopoverContent>
+                                    </Popover>
+                                 </div>
+                              </div>
+
+                              {/* Positioning Joystick for QR */}
+                              <div className="md:col-span-2 space-y-6 pt-4">
+                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Position (X: {canvasSettings.qr?.x}, Y: {canvasSettings.qr?.y})</Label>
+                                 <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
+                                    <div className="grid grid-cols-3 gap-2 w-fit">
+                                       <div />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: canvasSettings.qr.y - 10}})}>
+                                          <ChevronUp className="w-5 h-5" />
+                                       </Button>
+                                       <div />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: canvasSettings.qr.x - 10}})}>
+                                          <ChevronLeft className="w-5 h-5" />
+                                       </Button>
+                                       <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">Q</div>
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: canvasSettings.qr.x + 10}})}>
+                                          <ChevronRightIcon className="w-5 h-5" />
+                                       </Button>
+                                       <div />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: canvasSettings.qr.y + 10}})}>
+                                          <ChevronDown className="w-5 h-5" />
+                                       </Button>
+                                       <div />
+                                    </div>
+                                    <div className="flex-1 w-full grid grid-cols-2 gap-4">
+                                       <div className="space-y-2">
+                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
+                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.qr?.x} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: parseInt(e.target.value) || 0}})} />
+                                       </div>
+                                       <div className="space-y-2">
+                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
+                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.qr?.y} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: parseInt(e.target.value) || 0}})} />
+                                       </div>
                                     </div>
                                  </div>
                               </div>
 
                               {/* Positioning Joystick for Image */}
-                              <div className="sm:col-span-2 space-y-3">
-                                 <Label className="text-[10px] font-bold">IMAGE POSITION (X: {canvasSettings.image?.x}, Y: {canvasSettings.image?.y})</Label>
-                                 <div className="flex gap-6 items-center">
-                                    <div className="grid grid-cols-3 gap-1 w-fit bg-muted/30 p-2 rounded-2xl border">
+                              <div className="md:col-span-2 space-y-6 pt-4">
+                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Position (X: {canvasSettings.image?.x}, Y: {canvasSettings.image?.y})</Label>
+                                 <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
+                                    <div className="grid grid-cols-3 gap-2 w-fit">
                                        <div />
-                                       <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y - 10}})}>
-                                          <ChevronUp className="w-4 h-4" />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y - 10}})}>
+                                          <ChevronUp className="w-5 h-5" />
                                        </Button>
                                        <div />
-                                       <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x - 10}})}>
-                                          <ChevronLeft className="w-4 h-4" />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x - 10}})}>
+                                          <ChevronLeft className="w-5 h-5" />
                                        </Button>
-                                       <div className="w-8 h-8 flex items-center justify-center text-[10px] font-bold text-primary">I</div>
-                                       <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x + 10}})}>
-                                          <ChevronRightIcon className="w-4 h-4" />
+                                       <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">I</div>
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x + 10}})}>
+                                          <ChevronRightIcon className="w-5 h-5" />
                                        </Button>
                                        <div />
-                                       <Button variant="outline" size="icon" className="h-8 w-8 rounded-lg" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y + 10}})}>
-                                          <ChevronDown className="w-4 h-4" />
+                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y + 10}})}>
+                                          <ChevronDown className="w-5 h-5" />
                                        </Button>
                                        <div />
                                     </div>
-                                    <div className="flex-1 grid grid-cols-2 gap-2">
-                                       <Input type="number" className="h-10 rounded-xl" value={canvasSettings.image?.x} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: parseInt(e.target.value) || 0}})} />
-                                       <Input type="number" className="h-10 rounded-xl" value={canvasSettings.image?.y} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: parseInt(e.target.value) || 0}})} />
+                                    <div className="flex-1 w-full grid grid-cols-2 gap-4">
+                                       <div className="space-y-2">
+                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
+                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.image?.x} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: parseInt(e.target.value) || 0}})} />
+                                       </div>
+                                       <div className="space-y-2">
+                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
+                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.image?.y} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: parseInt(e.target.value) || 0}})} />
+                                       </div>
                                     </div>
                                  </div>
                               </div>
@@ -1658,7 +1847,6 @@ const Dashboard = () => {
 
                       </div>
                     </div>
-                  </div>
                 )}
               </div>
             )}
@@ -1726,9 +1914,9 @@ const Dashboard = () => {
             )}
           </div>
 
-          {(activeTab === "manual" || activeTab === "templates") && (
+          {activeTab === "manual" && (
             <div className="space-y-6 lg:sticky lg:top-10 h-fit">
-              {((activeTab === "manual" && (manualTitle || manualImage)) || activeTab === "templates") && (
+              {(manualTitle || manualImage) && (
                 <div className="bg-card border-2 border-dashed rounded-3xl aspect-square flex items-center justify-center overflow-hidden shadow-inner relative group">
                   {previewUrl ? (
                     <>
@@ -1752,11 +1940,6 @@ const Dashboard = () => {
                     </div>
                   )}
                 </div>
-              )}
-              {activeTab === "templates" && (
-                <p className="text-center text-xs text-muted-foreground italic">
-                  Viewing rotating scenario preview to see formatting changes.
-                </p>
               )}
             </div>
           )}
@@ -1784,14 +1967,15 @@ const Dashboard = () => {
                      onChange={(e) => setTempTemplateName(e.target.value)}
                      onKeyDown={(e) => {
                         if (e.key === 'Enter') {
-                           // Trigger save
+                            const btn = document.getElementById('saveTemplateBtn');
+                            if (btn) btn.click();
                         }
                      }}
                    />
                 </div>
                 <div className="flex gap-2 justify-end pt-4">
                    <Button variant="ghost" onClick={() => setIsTemplateModalOpen(false)}>Cancel</Button>
-                   <Button onClick={() => {
+                   <Button id="saveTemplateBtn" onClick={() => {
                       if (!tempTemplateName.trim()) {
                         toast.error("Name cannot be empty");
                         return;
@@ -1890,49 +2074,64 @@ const Dashboard = () => {
 
               {/* Word List */}
               <div className="space-y-2">
-                {Object.entries(customMappings)
+                {Object.entries({ ...baseMappings, ...customMappings })
                   .filter(([base, sanitized]) =>
                     base.toLowerCase().includes(sanitizerSearch.toLowerCase()) ||
                     sanitized.toLowerCase().includes(sanitizerSearch.toLowerCase())
                   )
-                  .map(([base, sanitized]) => (
-                    <div key={base} className="flex items-center justify-between p-4 rounded-xl bg-card border hover:border-primary/30 transition-all group">
-                      <div className="flex items-center gap-4 flex-1">
-                        <div className="flex-1">
-                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Base</p>
-                          <p className="font-medium">{base}</p>
+                  .sort((a, b) => a[0].localeCompare(b[0]))
+                  .map(([base, sanitized]) => {
+                    const isSystem = base in baseMappings && !(base in customMappings);
+                    return (
+                      <div key={base} className="flex items-center justify-between p-4 rounded-xl bg-card border hover:border-primary/30 transition-all group">
+                        <div className="flex items-center gap-4 flex-1">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-2">
+                              <p className="text-[10px] text-muted-foreground uppercase font-bold">Base</p>
+                              {isSystem && <span className="text-[8px] bg-muted px-1 rounded text-muted-foreground">SYSTEM</span>}
+                            </div>
+                            <p className="font-medium">{base}</p>
+                          </div>
+                          <ChevronRight className="w-4 h-4 text-muted-foreground opacity-30" />
+                          <div className="flex-1">
+                            <p className="text-[10px] text-muted-foreground uppercase font-bold">Sanitized</p>
+                            <p className="font-medium text-primary">{sanitized}</p>
+                          </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-muted-foreground opacity-30" />
-                        <div className="flex-1">
-                          <p className="text-[10px] text-muted-foreground uppercase font-bold">Sanitized</p>
-                          <p className="font-medium text-primary">{sanitized}</p>
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
+                            setNewBaseWord(base);
+                            setNewSanitizedWord(sanitized);
+                            if (base in customMappings) {
+                              setCustomMappings(prev => {
+                                const next = { ...prev };
+                                delete next[base];
+                                return next;
+                              });
+                            }
+                          }} title="Edit/Override">
+                            <Edit2 className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-destructive"
+                            disabled={isSystem}
+                            onClick={() => {
+                              setCustomMappings(prev => {
+                                const next = { ...prev };
+                                delete next[base];
+                                return next;
+                              });
+                              toast.success("Word removed");
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => {
-                          setNewBaseWord(base);
-                          setNewSanitizedWord(sanitized);
-                          setCustomMappings(prev => {
-                            const next = { ...prev };
-                            delete next[base];
-                            return next;
-                          });
-                        }}>
-                          <Edit2 className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 text-destructive" onClick={() => {
-                          setCustomMappings(prev => {
-                            const next = { ...prev };
-                            delete next[base];
-                            return next;
-                          });
-                          toast.success("Word removed");
-                        }}>
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
               </div>
             </div>
           </div>
