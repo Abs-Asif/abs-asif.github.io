@@ -1,0 +1,38 @@
+Technical Guide: High-Performance Multi-Source News Scraper
+1. Objective
+Build an asynchronous Python scraper to fetch news from 50+ custom URLs (stored in Supabase) every 2 minutes for 18 hours/day. The system must be lightweight, fast, and cost-effective using AWS Lambda and Supabase.
+2. Database Schema (Supabase)
+sources Table: id, site_name, fetch_url (The specific path for latest news), is_active.
+posts Table: id, title, url (Unique Index), image_url, site_id, created_at.
+3. Scraping Strategy (Two-Step Process)
+Instead of Newspaper3k, use BeautifulSoup + HTTPX for maximum efficiency:
+Step 1 (Discovery): Fetch the fetch_url from the sources table. Scrape this page to identify all article links (<a> tags).
+Step 2 (Filtering): Compare discovered links against the posts table. Filter out URLs that already exist.
+Step 3 (Extraction): For new URLs, visit the article page and extract Metadata from <meta> tags:
+og:title (for the headline).
+og:image (for the high-resolution featured image).
+og:url (canonical link).
+4. Technical Implementation
+Concurrency: Use asyncio and httpx.AsyncClient to process all 50+ sites in parallel.
+Lambda Environment:
+Runtime: Python 3.9+ (ARM64).
+Memory: 512MB (Recommended for high concurrency).
+Timeout: 5 minutes.
+CI/CD (GitHub Actions):
+Build a Lambda Layer containing beautifulsoup4, httpx, and supabase-py.
+Automate deployment to AWS Lambda on every push.
+5. Scheduling & Automation
+Trigger: Amazon EventBridge (CloudWatch Events).
+Cron Expression: cron(0/2 0-17 * * ? *) (Runs every 2 minutes for 18 hours daily).
+Deduplication: Use PostgreSQL's ON CONFLICT DO NOTHING or check existing URLs before inserting to keep the DB clean.
+6. Requirements for Developer:
+
+beautifulsoup4
+httpx
+supabase
+lxml
+
+7. Why this approach?
+Customizable: Since fetch_url is stored in the DB, you can target any specific path (e.g., /latest, /all-news, or /category/tech) for each site without changing code.
+Reliable: Meta-tag extraction is much more consistent for images than full HTML parsing.
+Free-Tier Friendly: Designed to stay within AWS and Supabase free limits.
