@@ -147,7 +147,7 @@ const Index = () => {
 
         {/* Compatibility Form */}
         {!showSignup && (
-          <div className="max-w-md mx-auto p-6 bg-card rounded-2xl border shadow-xl space-y-4 animate-fade-in-up">
+          <div className="max-w-md mx-auto space-y-4 animate-fade-in-up">
             <div className="text-left space-y-2">
               <Label htmlFor="portal-url">আপনার নিউজ পোর্টাল ইউআরএল চেক করুন</Label>
               <div className="flex gap-2">
@@ -155,7 +155,7 @@ const Index = () => {
                   id="portal-url"
                   placeholder="https://yournews.com"
                   value={url}
-                  onChange={(e) => setUrl(e.target.value)}
+                  onChange={(e) => setUrl(e.target.value.replace(/[^a-zA-Z0-9.:/-]/g, ''))}
                   disabled={isLoading}
                 />
                 <Button onClick={checkCompatibility} disabled={isLoading}>
