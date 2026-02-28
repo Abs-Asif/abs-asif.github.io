@@ -515,7 +515,7 @@ const Dashboard = () => {
     let adImg: HTMLImageElement | null = null;
     let adHeight = 0;
     if (adsEnabled && activeAdId) {
-      const activeAd = ads.find(a => a.id === activeAdId);
+      const activeAd = ads.find((a: any) => a.id === activeAdId);
       if (activeAd) {
         adImg = new Image();
         adImg.src = activeAd.dataUrl;
@@ -537,132 +537,135 @@ const Dashboard = () => {
 
     let userImgBlobUrl = '';
     try {
-      const template = new Image();
-      template.crossOrigin = "anonymous";
-      template.src = canvasSettings.backgroundImage || "/PhotocardTemplate.png";
-      await new Promise((resolve, reject) => {
-        template.onload = resolve;
-        template.onerror = (e) => {
-          console.error("Template load failed", e);
-          reject(new Error("Template load failed"));
-        };
-      });
-      ctx.drawImage(template, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      const bg = new Image();
+      bg.crossOrigin = "anonymous";
+      bg.src = canvasSettings.backgroundImage || "/PhotocardTemplate.png";
+      await new Promise((resolve) => { bg.onload = resolve; bg.onerror = resolve; });
+      ctx.drawImage(bg, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-      await Promise.all([
-        document.fonts.load(`bold ${canvasSettings.title.size}px "${canvasSettings.title.font}"`),
-        document.fonts.load(`${canvasSettings.date.size}px "${canvasSettings.date.font}"`)
-      ]);
+      const drawText = (element: any, overrideText?: string) => {
+        if (!element || element.enabled === false) return;
+        ctx.save();
+        ctx.font = `bold ${element.size}px "${element.font}"`;
+        ctx.fillStyle = element.color;
+        ctx.textAlign = element.align as CanvasTextAlign;
+        ctx.textBaseline = 'middle';
 
-      userImgBlobUrl = await fetchImageWithProxy(targetImageUrl);
-      const userImg = new Image();
-      userImg.src = userImgBlobUrl;
-      await new Promise((resolve, reject) => {
-        userImg.onload = resolve;
-        userImg.onerror = (e) => {
-          console.error("User image load failed", targetImageUrl, e);
-          reject(new Error("User image load failed"));
-        };
-      });
+        if (element.shadow?.enabled) {
+          ctx.shadowColor = element.shadow.color;
+          ctx.shadowBlur = element.shadow.blur;
+          ctx.shadowOffsetX = element.shadow.offsetX;
+          ctx.shadowOffsetY = element.shadow.offsetY;
+        }
 
-      const imgSettings = canvasSettings.image || { x: 30, y: 32, w: 1020, h: 574, scale: 1, border: { enabled: true, color: '#22C55E', width: 2 } };
-      const baseScale = Math.max(imgSettings.w / userImg.width, imgSettings.h / userImg.height);
-      const finalScale = baseScale * (imgSettings.scale || 1);
-
-      const drawW = userImg.width * finalScale;
-      const drawH = userImg.height * finalScale;
-      const drawX = imgSettings.x + (imgSettings.w - drawW) / 2;
-      const drawY = imgSettings.y + (imgSettings.h - drawH) / 2;
-
-      const radius = 35;
-      const defineBoxPath = (x: number, y: number, w: number, h: number) => {
-        ctx.beginPath();
-        ctx.moveTo(x + radius, y);
-        ctx.lineTo(x + w - radius, y);
-        ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
-        ctx.lineTo(x + w, y + h - radius);
-        ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
-        ctx.lineTo(x + radius, y + h);
-        ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
-        ctx.lineTo(x, y + radius);
-        ctx.quadraticCurveTo(x, y, x + radius, y);
-        ctx.closePath();
+        const textToDraw = overrideText || element.text || "";
+        if (overrideText) {
+          // Wrapped title logic
+          const maxW = 980;
+          let currentFontSize = element.size;
+          let lines: string[] = [];
+          let attempts = 0;
+          while (attempts < 10) {
+            ctx.font = `bold ${currentFontSize}px "${element.font}"`;
+            lines = wrapText(ctx, textToDraw, maxW);
+            let maxLineW = 0;
+            lines.forEach(l => { maxLineW = Math.max(maxLineW, ctx.measureText(l).width); });
+            if (lines.length <= 3 && maxLineW <= maxW) break;
+            if (lines.length > 3) currentFontSize *= 0.9;
+            else if (maxLineW > maxW) currentFontSize *= (maxW / maxLineW);
+            attempts++;
+          }
+          const lineHeight = currentFontSize * (element.lineSpacing || 1.1);
+          const totalHeight = (lines.length - 1) * lineHeight;
+          const startY = element.y - (totalHeight / 2);
+          lines.forEach((line, index) => {
+            ctx.fillText(line, element.x, startY + (index * lineHeight));
+          });
+        } else {
+          ctx.fillText(textToDraw, element.x, element.y);
+        }
+        ctx.restore();
       };
 
-      ctx.save();
-      defineBoxPath(imgSettings.x, imgSettings.y, imgSettings.w, imgSettings.h);
-      ctx.clip();
-      ctx.drawImage(userImg, drawX, drawY, drawW, drawH);
-      ctx.restore();
+      if (canvasSettings.subtitleAbove) drawText(canvasSettings.subtitleAbove);
+      drawText(canvasSettings.title, targetTitle);
+      if (canvasSettings.subtitleBelow) drawText(canvasSettings.subtitleBelow);
+      drawText(canvasSettings.date, formatDate(new Date()));
+      if (canvasSettings.extraTexts) canvasSettings.extraTexts.forEach((et: any) => drawText(et));
 
-      if (imgSettings.border?.enabled) {
+      const drawGraphic = async (element: any, isMainImage = false) => {
+        if (!element || element.enabled === false) return;
         ctx.save();
-        defineBoxPath(imgSettings.x, imgSettings.y, imgSettings.w, imgSettings.h);
-        ctx.lineWidth = imgSettings.border.width || 2;
-        ctx.strokeStyle = imgSettings.border.color || '#22C55E';
-        ctx.stroke();
-        ctx.restore();
-      }
 
-      ctx.font = `${canvasSettings.date.size}px "${canvasSettings.date.font}"`;
-      ctx.fillStyle = canvasSettings.date.color;
-      ctx.textAlign = canvasSettings.date.align as CanvasTextAlign;
-      ctx.textBaseline = 'middle';
-      ctx.letterSpacing = `${canvasSettings.date.letterSpacing}px`;
-      ctx.fillText(formatDate(new Date()), canvasSettings.date.x, canvasSettings.date.y);
-
-      let currentFontSize = canvasSettings.title.size;
-      ctx.fillStyle = canvasSettings.title.color;
-      ctx.textAlign = canvasSettings.title.align as CanvasTextAlign;
-      ctx.textBaseline = 'middle';
-      ctx.letterSpacing = `${canvasSettings.title.letterSpacing}px`;
-
-      const maxW = 980;
-      let lines: string[] = [];
-      let attempts = 0;
-      while (attempts < 10) {
-        ctx.font = `bold ${currentFontSize}px "${canvasSettings.title.font}"`;
-        lines = wrapText(ctx, targetTitle, maxW);
-        let maxLineW = 0;
-        lines.forEach(l => { maxLineW = Math.max(maxLineW, ctx.measureText(l).width); });
-        if (lines.length <= 3 && maxLineW <= maxW) break;
-        if (lines.length > 3) currentFontSize *= 0.9;
-        else if (maxLineW > maxW) currentFontSize *= (maxW / maxLineW);
-        attempts++;
-      }
-
-      const lineHeight = currentFontSize * canvasSettings.title.lineSpacing;
-      const totalHeight = (lines.length - 1) * lineHeight;
-      const startY = canvasSettings.title.y - (totalHeight / 2);
-      lines.forEach((line, index) => {
-        ctx.fillText(line, canvasSettings.title.x, startY + (index * lineHeight));
-      });
-
-      // QR Code rendering
-      if (canvasSettings.qr?.enabled && (qrUrl || "https://drutopost.com")) {
-        const qrDataUrl = await QRCode.toDataURL(qrUrl || "https://drutopost.com", {
-          margin: 1,
-          width: canvasSettings.qr.size,
-          color: {
-            dark: "#000000",
-            light: "#ffffff"
-          }
-        });
-        const qrImg = new Image();
-        qrImg.src = qrDataUrl;
-        await new Promise(r => qrImg.onload = r);
-
-        if (canvasSettings.qr.border?.enabled) {
-          ctx.save();
-          ctx.lineWidth = canvasSettings.qr.border.width || 2;
-          ctx.strokeStyle = canvasSettings.qr.border.color || '#ffffff';
-          ctx.strokeRect(canvasSettings.qr.x, canvasSettings.qr.y, canvasSettings.qr.size, canvasSettings.qr.size);
-          ctx.restore();
+        if (element.shadow?.enabled) {
+          ctx.shadowColor = element.shadow.color;
+          ctx.shadowBlur = element.shadow.blur;
+          ctx.shadowOffsetX = element.shadow.offsetX;
+          ctx.shadowOffsetY = element.shadow.offsetY;
         }
-        ctx.drawImage(qrImg, canvasSettings.qr.x, canvasSettings.qr.y);
-      }
 
-      ctx.letterSpacing = "0px";
+        if (isMainImage || element.type === 'logo') {
+           const imgSrc = isMainImage ? targetImageUrl : element.src;
+           if (imgSrc) {
+             const imgBlob = await fetchImageWithProxy(imgSrc);
+             const img = new Image();
+             img.src = imgBlob;
+             await new Promise((resolve) => { img.onload = resolve; img.onerror = resolve; });
+
+             ctx.globalAlpha = element.opacity ?? 1;
+
+             if (isMainImage) {
+                // Handle main image scaling and clipping
+                const baseScale = Math.max(element.w / img.width, element.h / img.height);
+                const finalScale = baseScale * (element.scale || 1);
+                const drawW = img.width * finalScale;
+                const drawH = img.height * finalScale;
+                const drawX = element.x + (element.w - drawW) / 2;
+                const drawY = element.y + (element.h - drawH) / 2;
+
+                if (element.cornerRoundness > 0) {
+                   const r = element.cornerRoundness;
+                   ctx.beginPath();
+                   ctx.moveTo(element.x + r, element.y);
+                   ctx.lineTo(element.x + element.w - r, element.y);
+                   ctx.quadraticCurveTo(element.x + element.w, element.y, element.x + element.w, element.y + r);
+                   ctx.lineTo(element.x + element.w, element.y + element.h - r);
+                   ctx.quadraticCurveTo(element.x + element.w, element.y + element.h, element.x + element.w - r, element.y + element.h);
+                   ctx.lineTo(element.x + r, element.y + element.h);
+                   ctx.quadraticCurveTo(element.x, element.y + element.h, element.x, element.y + element.h - r);
+                   ctx.lineTo(element.x, element.y + r);
+                   ctx.quadraticCurveTo(element.x, element.y, element.x + r, element.y);
+                   ctx.closePath();
+                   ctx.clip();
+                }
+                ctx.drawImage(img, drawX, drawY, drawW, drawH);
+             } else {
+                ctx.drawImage(img, element.x, element.y, element.w, element.h);
+             }
+           }
+        } else if (element.type === 'qr' || (element.size && !element.w)) { // fallback for old qr
+           const qrSize = element.w || element.size;
+           const qrDataUrl = await QRCode.toDataURL(qrUrl || "https://drutopost.com", { margin: 1, width: qrSize });
+           const qrImg = new Image();
+           qrImg.src = qrDataUrl;
+           await new Promise(r => qrImg.onload = r);
+           ctx.drawImage(qrImg, element.x, element.y, qrSize, qrSize);
+        }
+
+        ctx.restore();
+
+        if (element.border?.enabled) {
+          ctx.strokeStyle = element.border.color;
+          ctx.lineWidth = element.border.width;
+          ctx.strokeRect(element.x, element.y, element.w || element.size, element.h || element.size);
+        }
+      };
+
+      await drawGraphic(canvasSettings.image, true);
+      await drawGraphic(canvasSettings.qr);
+      if (canvasSettings.logos) {
+        for (const logo of canvasSettings.logos) await drawGraphic(logo);
+      }
 
       if (adImg) {
         ctx.drawImage(adImg, 0, CANVAS_HEIGHT, CANVAS_WIDTH, adHeight);
@@ -1357,8 +1360,7 @@ const Dashboard = () => {
                     <button
                       key={template.id}
                       onClick={() => {
-                        setActiveTemplateId(template.id);
-                        setIsEditingTemplate(true);
+                        navigate(`/Edit-Template/${template.id}`);
                       }}
                       className={cn(
                         "relative aspect-square rounded-xl border-2 overflow-hidden transition-all group",
@@ -1404,563 +1406,6 @@ const Dashboard = () => {
                   </button>
                 </div>
 
-                {/* Template Customization */}
-                {isEditingTemplate && (
-                  <div className="space-y-12 relative">
-                    <div className="absolute top-0 right-0 z-10">
-                       <Button variant="ghost" size="icon" onClick={() => setIsEditingTemplate(false)} className="rounded-full hover:bg-muted/50">
-                         <X className="w-6 h-6" />
-                       </Button>
-                    </div>
-
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-                      <div className="flex items-center gap-3">
-                        <div>
-                          <h2 className="text-2xl font-bold tracking-tight">{canvasSettings.name}</h2>
-                          <p className="text-sm text-muted-foreground">Customize your photocard template elements.</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3">
-                        <Button variant="ghost" size="sm" className="rounded-xl px-4 font-bold h-11" onClick={() => {
-                          setTempTemplateName(canvasSettings.name);
-                          setTemplateModalMode('rename');
-                          setIsTemplateModalOpen(true);
-                        }}>
-                          Rename
-                        </Button>
-                        <Button variant="outline" size="sm" className="rounded-xl px-6 font-bold h-11 border-2" onClick={() => {
-                           const input = document.createElement('input');
-                           input.type = 'file';
-                           input.accept = 'image/*';
-                           input.onchange = (e: any) => {
-                             const file = e.target.files?.[0];
-                             if (file) {
-                               const reader = new FileReader();
-                               reader.onload = () => setCanvasSettings({ ...canvasSettings, backgroundImage: reader.result });
-                               reader.readAsDataURL(file);
-                             }
-                           };
-                           input.click();
-                        }}>
-                          Upload Background
-                        </Button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 lg:grid-cols-12 gap-12 items-start">
-                      {/* Sticky Preview (Desktop) */}
-                      <div className="lg:col-span-5 lg:sticky lg:top-8 space-y-6 order-1 lg:order-2">
-                         <div className="w-full space-y-6">
-                            <div className="bg-muted/5 rounded-[2rem] p-6 border-2 border-dashed aspect-square relative overflow-hidden group shadow-sm transition-all hover:shadow-md">
-                               {previewUrl ? (
-                                  <img src={previewUrl} alt="Preview" className="w-full h-full object-contain" />
-                               ) : (
-                                  <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-3">
-                                     <Loader2 className="w-10 h-10 animate-spin text-primary" />
-                                     <p className="text-sm font-medium">Generating preview...</p>
-                                  </div>
-                               )}
-                               <div className="absolute top-6 left-6 bg-primary text-white text-[10px] px-4 py-1.5 font-black rounded-full shadow-xl tracking-widest">LIVE PREVIEW</div>
-                            </div>
-                            <div className="p-6 bg-muted/20 rounded-2xl text-center space-y-3 border backdrop-blur-sm">
-                               <p className="text-[10px] font-black text-muted-foreground uppercase tracking-[0.2em]">Current Preview Scenario</p>
-                               <p className="text-base font-bangla font-medium leading-relaxed">{scenarios[previewScenario]}</p>
-                               <p className="text-[10px] text-muted-foreground italic">Viewing rotating scenarios to see formatting changes.</p>
-                            </div>
-                         </div>
-                      </div>
-
-                      {/* Bottom: Form Controls */}
-                      <div className="lg:col-span-7 space-y-16 order-2 lg:order-1 pb-32">
-                        {/* Title Config */}
-                        <section className="space-y-8">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <Edit2 className="w-4 h-4 text-primary" />
-                            </div>
-                            <h3 className="text-lg font-black uppercase tracking-[0.15em]">Title Settings</h3>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                            <div className="space-y-3">
-                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Family</Label>
-                              <select
-                                className="w-full h-12 px-4 rounded-2xl border-2 bg-muted/5 font-medium text-sm focus:border-primary transition-all outline-none"
-                                value={canvasSettings.title.font}
-                                onChange={(e) => setCanvasSettings({
-                                  ...canvasSettings,
-                                  title: {...canvasSettings.title, font: e.target.value}
-                                })}
-                              >
-                                <option>Kalpurush</option>
-                                <option>Solaiman Lipi</option>
-                                <option>Inter</option>
-                              </select>
-                            </div>
-                            <div className="space-y-3">
-                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Text Color</Label>
-                              <div className="flex gap-3">
-                                <Input
-                                  className="h-12 px-4 text-xs font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all uppercase tracking-widest"
-                                  placeholder="#FFFFFF"
-                                  value={canvasSettings.title.color}
-                                  onChange={(e) => setCanvasSettings({
-                                    ...canvasSettings,
-                                    title: {...canvasSettings.title, color: e.target.value}
-                                  })}
-                                />
-                                {/* TODO: Replace with custom popover color wheel in next step */}
-                                <Popover>
-                                  <PopoverTrigger asChild>
-                                    <Button variant="outline" className="h-12 w-12 rounded-2xl p-0 border-2 shadow-sm" style={{ backgroundColor: canvasSettings.title.color }}>
-                                      <div className="w-full h-full rounded-2xl border-4 border-background/20" />
-                                    </Button>
-                                  </PopoverTrigger>
-                                  <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
-                                    <div className="space-y-2">
-                                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Premium Palette</p>
-                                      <div className="grid grid-cols-5 gap-2">
-                                        {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
-                                          <button
-                                            key={c}
-                                            className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110 shadow-sm", canvasSettings.title.color === c && "ring-2 ring-primary scale-110 shadow-md")}
-                                            style={{backgroundColor: c}}
-                                            onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, color: c}})}
-                                          />
-                                        ))}
-                                      </div>
-                                    </div>
-                                    <div className="space-y-2 pt-2 border-t">
-                                      <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Custom Color</p>
-                                      <div className="flex gap-2">
-                                        <div className="relative flex-1">
-                                          <Input
-                                            type="text"
-                                            className="h-10 pl-8 pr-3 text-[10px] font-black uppercase tracking-widest rounded-xl border-2"
-                                            value={canvasSettings.title.color}
-                                            onChange={(e) => setCanvasSettings({ ...canvasSettings, title: { ...canvasSettings.title, color: e.target.value } })}
-                                          />
-                                          <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-black text-[10px]">#</span>
-                                        </div>
-                                        <div className="relative w-10 h-10">
-                                          <Input
-                                            type="color"
-                                            className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-xl opacity-0"
-                                            value={canvasSettings.title.color}
-                                            onChange={(e) => setCanvasSettings({ ...canvasSettings, title: { ...canvasSettings.title, color: e.target.value } })}
-                                          />
-                                          <div className="w-full h-full rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
-                                            <Palette className="w-4 h-4 text-white" />
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </div>
-                                  </PopoverContent>
-                                </Popover>
-                              </div>
-                            </div>
-                            <div className="space-y-4">
-                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Size ({canvasSettings.title.size}px)</Label>
-                              <div className="flex items-center gap-4">
-                                <Input
-                                  type="range"
-                                  min="20"
-                                  max="150"
-                                  className="flex-1 accent-primary h-1.5 rounded-lg appearance-none cursor-pointer"
-                                  value={canvasSettings.title.size}
-                                  onChange={(e) => setCanvasSettings({
-                                    ...canvasSettings,
-                                    title: {...canvasSettings.title, size: parseInt(e.target.value)}
-                                  })}
-                                />
-                                <Input
-                                  type="number"
-                                  className="w-20 h-12 text-center font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all"
-                                  value={canvasSettings.title.size}
-                                  onChange={(e) => setCanvasSettings({
-                                    ...canvasSettings,
-                                    title: {...canvasSettings.title, size: parseInt(e.target.value) || 0}
-                                  })}
-                                />
-                              </div>
-                            </div>
-                            <div className="space-y-4">
-                              <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Alignment</Label>
-                              <div className="flex gap-2 p-1 border-2 rounded-[1rem] bg-muted/5 h-12">
-                                {['left', 'center', 'right'].map((align) => (
-                                  <button
-                                    key={align}
-                                    className={cn(
-                                      "flex-1 text-[10px] font-black uppercase tracking-widest rounded-[0.5rem] transition-all",
-                                      canvasSettings.title.align === align ? "bg-primary text-white shadow-lg" : "text-muted-foreground hover:bg-muted/50"
-                                    )}
-                                    onClick={() => setCanvasSettings({
-                                      ...canvasSettings,
-                                      title: {...canvasSettings.title, align}
-                                    })}
-                                  >
-                                    {align}
-                                  </button>
-                                ))}
-                              </div>
-                            </div>
-
-                            {/* Positioning Joystick */}
-                            <div className="md:col-span-2 space-y-6 pt-4">
-                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Title Position (X: {canvasSettings.title.x}, Y: {canvasSettings.title.y})</Label>
-                               <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
-                                  <div className="grid grid-cols-3 gap-2 w-fit">
-                                     <div />
-                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y - 10}})}>
-                                        <ChevronUp className="w-5 h-5" />
-                                     </Button>
-                                     <div />
-                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x - 10}})}>
-                                        <ChevronLeft className="w-5 h-5" />
-                                     </Button>
-                                     <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">T</div>
-                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: canvasSettings.title.x + 10}})}>
-                                        <ChevronRightIcon className="w-5 h-5" />
-                                     </Button>
-                                     <div />
-                                     <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: canvasSettings.title.y + 10}})}>
-                                        <ChevronDown className="w-5 h-5" />
-                                     </Button>
-                                     <div />
-                                  </div>
-                                  <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                                     <div className="space-y-2">
-                                       <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
-                                       <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.title.x} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, x: parseInt(e.target.value) || 0}})} />
-                                     </div>
-                                     <div className="space-y-2">
-                                       <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
-                                       <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.title.y} onChange={(e) => setCanvasSettings({...canvasSettings, title: {...canvasSettings.title, y: parseInt(e.target.value) || 0}})} />
-                                     </div>
-                                  </div>
-                               </div>
-                            </div>
-                          </div>
-                        </section>
-
-                        {/* Date Config */}
-                        <section className="space-y-8">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                              <Clock className="w-4 h-4 text-primary" />
-                            </div>
-                            <h3 className="text-lg font-black uppercase tracking-[0.15em]">Date Settings</h3>
-                          </div>
-
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                             <div className="space-y-3">
-                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Font Size</Label>
-                               <Input
-                                 type="number"
-                                 className="h-12 px-4 font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all"
-                                 value={canvasSettings.date.size}
-                                 onChange={(e) => setCanvasSettings({
-                                   ...canvasSettings,
-                                   date: {...canvasSettings.date, size: parseInt(e.target.value) || 0}
-                                 })}
-                               />
-                             </div>
-                             <div className="space-y-3">
-                               <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Date Color</Label>
-                               <div className="flex gap-3">
-                                  <Input
-                                    className="h-12 px-4 text-xs font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all uppercase tracking-widest"
-                                    value={canvasSettings.date.color}
-                                    onChange={(e) => setCanvasSettings({
-                                      ...canvasSettings,
-                                      date: {...canvasSettings.date, color: e.target.value}
-                                    })}
-                                  />
-                                  <Popover>
-                                    <PopoverTrigger asChild>
-                                      <Button variant="outline" className="h-12 w-12 rounded-2xl p-0 border-2 shadow-sm" style={{ backgroundColor: canvasSettings.date.color }}>
-                                        <div className="w-full h-full rounded-2xl border-4 border-background/20" />
-                                      </Button>
-                                    </PopoverTrigger>
-                                    <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
-                                      <div className="space-y-2">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Premium Palette</p>
-                                        <div className="grid grid-cols-5 gap-2">
-                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
-                                            <button
-                                              key={c}
-                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110 shadow-sm", canvasSettings.date.color === c && "ring-2 ring-primary scale-110 shadow-md")}
-                                              style={{backgroundColor: c}}
-                                              onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, color: c}})}
-                                            />
-                                          ))}
-                                        </div>
-                                      </div>
-                                      <div className="space-y-2 pt-2 border-t">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Custom Color</p>
-                                        <div className="flex gap-2">
-                                          <div className="relative flex-1">
-                                            <Input
-                                              type="text"
-                                              className="h-10 pl-8 pr-3 text-[10px] font-black uppercase tracking-widest rounded-xl border-2"
-                                              value={canvasSettings.date.color}
-                                              onChange={(e) => setCanvasSettings({ ...canvasSettings, date: { ...canvasSettings.date, color: e.target.value } })}
-                                            />
-                                            <span className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground font-black text-[10px]">#</span>
-                                          </div>
-                                          <div className="relative w-10 h-10">
-                                            <Input
-                                              type="color"
-                                              className="absolute inset-0 w-full h-full p-0 border-none cursor-pointer rounded-xl opacity-0"
-                                              value={canvasSettings.date.color}
-                                              onChange={(e) => setCanvasSettings({ ...canvasSettings, date: { ...canvasSettings.date, color: e.target.value } })}
-                                            />
-                                            <div className="w-full h-full rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
-                                              <Palette className="w-4 h-4 text-white" />
-                                            </div>
-                                          </div>
-                                        </div>
-                                      </div>
-                                    </PopoverContent>
-                                  </Popover>
-                               </div>
-                             </div>
-
-                             {/* Positioning Joystick */}
-                             <div className="md:col-span-2 space-y-6 pt-4">
-                                <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Date Position (X: {canvasSettings.date.x}, Y: {canvasSettings.date.y})</Label>
-                                <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
-                                   <div className="grid grid-cols-3 gap-2 w-fit">
-                                      <div />
-                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y - 10}})}>
-                                         <ChevronUp className="w-5 h-5" />
-                                      </Button>
-                                      <div />
-                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x - 10}})}>
-                                         <ChevronLeft className="w-5 h-5" />
-                                      </Button>
-                                      <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">D</div>
-                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: canvasSettings.date.x + 10}})}>
-                                         <ChevronRightIcon className="w-5 h-5" />
-                                      </Button>
-                                      <div />
-                                      <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: canvasSettings.date.y + 10}})}>
-                                         <ChevronDown className="w-5 h-5" />
-                                      </Button>
-                                      <div />
-                                   </div>
-                                   <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                                      <div className="space-y-2">
-                                        <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
-                                        <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.date.x} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, x: parseInt(e.target.value) || 0}})} />
-                                      </div>
-                                      <div className="space-y-2">
-                                        <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
-                                        <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.date.y} onChange={(e) => setCanvasSettings({...canvasSettings, date: {...canvasSettings.date, y: parseInt(e.target.value) || 0}})} />
-                                      </div>
-                                   </div>
-                                </div>
-                             </div>
-                          </div>
-                        </section>
-
-                        {/* Image & QR Config */}
-                        <section className="space-y-8">
-                           <div className="flex items-center gap-3">
-                             <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center">
-                               <ImageIcon className="w-4 h-4 text-primary" />
-                             </div>
-                             <h3 className="text-lg font-black uppercase tracking-[0.15em]">Graphics Settings</h3>
-                           </div>
-
-                           <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-10">
-                              <div className="space-y-4">
-                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Scale ({canvasSettings.image?.scale || 1})</Label>
-                                 <Input
-                                   type="range" min="0.5" max="2" step="0.1"
-                                   className="h-1.5 accent-primary rounded-lg appearance-none cursor-pointer"
-                                   value={canvasSettings.image?.scale || 1}
-                                   onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, scale: parseFloat(e.target.value)}})}
-                                 />
-                              </div>
-                              <div className="space-y-4">
-                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Border</Label>
-                                 <div className="flex items-center gap-4 h-12">
-                                    <button
-                                      className={cn("flex-1 h-full px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all shadow-sm", canvasSettings.image?.border?.enabled ? "bg-primary text-white border-primary shadow-lg" : "bg-muted/5 text-muted-foreground")}
-                                      onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, enabled: !canvasSettings.image?.border?.enabled}}})}
-                                    >
-                                       {canvasSettings.image?.border?.enabled ? "Active" : "Disabled"}
-                                    </button>
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <div className="relative h-full aspect-square cursor-pointer group/color">
-                                          <div
-                                            className="w-full h-full rounded-2xl border-2 shadow-sm transition-transform group-hover/color:scale-105 group-hover/color:shadow-md"
-                                            style={{backgroundColor: canvasSettings.image?.border?.color || '#22C55E'}}
-                                          />
-                                        </div>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">Border Color</p>
-                                        <div className="grid grid-cols-5 gap-2">
-                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
-                                            <button
-                                              key={c}
-                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110", (canvasSettings.image?.border?.color || '#22C55E') === c && "ring-2 ring-primary scale-110")}
-                                              style={{backgroundColor: c}}
-                                              onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, color: c}}})}
-                                            />
-                                          ))}
-                                        </div>
-                                        <div className="relative pt-2 border-t">
-                                          <Input
-                                            type="color"
-                                            className="absolute inset-0 w-full h-10 p-0 border-none cursor-pointer rounded-xl opacity-0"
-                                            value={canvasSettings.image?.border?.color || '#22C55E'}
-                                            onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, border: {...canvasSettings.image?.border, color: e.target.value}}})}
-                                          />
-                                          <div className="w-full h-10 rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
-                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Custom Wheel</span>
-                                          </div>
-                                        </div>
-                                      </PopoverContent>
-                                    </Popover>
-                                 </div>
-                              </div>
-
-                              <div className="space-y-4">
-                                 <div className="flex items-center justify-between ml-1">
-                                    <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground">QR Code Size</Label>
-                                    <input type="checkbox" checked={canvasSettings.qr?.enabled} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, enabled: e.target.checked}})} className="accent-primary w-4 h-4 rounded-md" />
-                                 </div>
-                                 <Input type="number" className="h-12 px-4 font-black rounded-2xl border-2 bg-muted/5 focus:border-primary transition-all" value={canvasSettings.qr?.size} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, size: parseInt(e.target.value) || 0}})} />
-                              </div>
-
-                              <div className="space-y-4">
-                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Border</Label>
-                                 <div className="flex items-center gap-4 h-12">
-                                    <button
-                                      className={cn("flex-1 h-full px-4 rounded-2xl text-[10px] font-black uppercase tracking-widest border-2 transition-all shadow-sm", canvasSettings.qr?.border?.enabled ? "bg-primary text-white border-primary shadow-lg" : "bg-muted/5 text-muted-foreground")}
-                                      onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, enabled: !canvasSettings.qr?.border?.enabled}}})}
-                                    >
-                                       {canvasSettings.qr?.border?.enabled ? "Active" : "Disabled"}
-                                    </button>
-                                    <Popover>
-                                      <PopoverTrigger asChild>
-                                        <div className="relative h-full aspect-square cursor-pointer group/color">
-                                          <div
-                                            className="w-full h-full rounded-2xl border-2 shadow-sm transition-transform group-hover/color:scale-105 group-hover/color:shadow-md"
-                                            style={{backgroundColor: canvasSettings.qr?.border?.color || '#ffffff'}}
-                                          />
-                                        </div>
-                                      </PopoverTrigger>
-                                      <PopoverContent className="w-64 p-4 rounded-3xl border-2 shadow-2xl space-y-4">
-                                        <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Border Color</p>
-                                        <div className="grid grid-cols-5 gap-2">
-                                          {['#ffffff', '#22C55E', '#3b82f6', '#ef4444', '#eab308', '#a855f7', '#f97316', '#06b6d4', '#ec4899', '#000000'].map(c => (
-                                            <button
-                                              key={c}
-                                              className={cn("w-8 h-8 rounded-xl border-2 border-white/20 transition-all hover:scale-110", (canvasSettings.qr?.border?.color || '#ffffff') === c && "ring-2 ring-primary scale-110")}
-                                              style={{backgroundColor: c}}
-                                              onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, color: c}}})}
-                                            />
-                                          ))}
-                                        </div>
-                                        <div className="relative pt-2 border-t">
-                                          <Input
-                                            type="color"
-                                            className="absolute inset-0 w-full h-10 p-0 border-none cursor-pointer rounded-xl opacity-0"
-                                            value={canvasSettings.qr?.border?.color || '#ffffff'}
-                                            onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, border: {...canvasSettings.qr?.border, color: e.target.value}}})}
-                                          />
-                                          <div className="w-full h-10 rounded-xl border-2 bg-gradient-to-br from-red-500 via-green-500 to-blue-500 flex items-center justify-center pointer-events-none shadow-sm">
-                                            <span className="text-[9px] font-black text-white uppercase tracking-widest">Custom Wheel</span>
-                                          </div>
-                                        </div>
-                                      </PopoverContent>
-                                    </Popover>
-                                 </div>
-                              </div>
-
-                              {/* Positioning Joystick for QR */}
-                              <div className="md:col-span-2 space-y-6 pt-4">
-                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">QR Position (X: {canvasSettings.qr?.x}, Y: {canvasSettings.qr?.y})</Label>
-                                 <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
-                                    <div className="grid grid-cols-3 gap-2 w-fit">
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: canvasSettings.qr.y - 10}})}>
-                                          <ChevronUp className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: canvasSettings.qr.x - 10}})}>
-                                          <ChevronLeft className="w-5 h-5" />
-                                       </Button>
-                                       <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">Q</div>
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: canvasSettings.qr.x + 10}})}>
-                                          <ChevronRightIcon className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: canvasSettings.qr.y + 10}})}>
-                                          <ChevronDown className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                    </div>
-                                    <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                                       <div className="space-y-2">
-                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
-                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.qr?.x} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, x: parseInt(e.target.value) || 0}})} />
-                                       </div>
-                                       <div className="space-y-2">
-                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
-                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.qr?.y} onChange={(e) => setCanvasSettings({...canvasSettings, qr: {...canvasSettings.qr, y: parseInt(e.target.value) || 0}})} />
-                                       </div>
-                                    </div>
-                                 </div>
-                              </div>
-
-                              {/* Positioning Joystick for Image */}
-                              <div className="md:col-span-2 space-y-6 pt-4">
-                                 <Label className="text-[11px] font-black uppercase tracking-widest text-muted-foreground ml-1">Image Position (X: {canvasSettings.image?.x}, Y: {canvasSettings.image?.y})</Label>
-                                 <div className="flex flex-col sm:flex-row gap-10 items-center bg-muted/5 p-8 rounded-[2rem] border-2 border-dashed">
-                                    <div className="grid grid-cols-3 gap-2 w-fit">
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y - 10}})}>
-                                          <ChevronUp className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x - 10}})}>
-                                          <ChevronLeft className="w-5 h-5" />
-                                       </Button>
-                                       <div className="w-12 h-12 flex items-center justify-center text-xs font-black text-primary border-2 border-primary/20 rounded-2xl">I</div>
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: canvasSettings.image.x + 10}})}>
-                                          <ChevronRightIcon className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                       <Button variant="secondary" size="icon" className="h-12 w-12 rounded-2xl shadow-sm hover:scale-110 active:scale-95 transition-all" onClick={() => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: canvasSettings.image.y + 10}})}>
-                                          <ChevronDown className="w-5 h-5" />
-                                       </Button>
-                                       <div />
-                                    </div>
-                                    <div className="flex-1 w-full grid grid-cols-2 gap-4">
-                                       <div className="space-y-2">
-                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">X Coord</span>
-                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.image?.x} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, x: parseInt(e.target.value) || 0}})} />
-                                       </div>
-                                       <div className="space-y-2">
-                                          <span className="text-[9px] font-black uppercase text-muted-foreground ml-1">Y Coord</span>
-                                          <Input type="number" className="h-12 rounded-2xl font-black border-2 bg-background focus:border-primary" value={canvasSettings.image?.y} onChange={(e) => setCanvasSettings({...canvasSettings, image: {...canvasSettings.image, y: parseInt(e.target.value) || 0}})} />
-                                       </div>
-                                    </div>
-                                 </div>
-                              </div>
-                           </div>
-                        </section>
-                      </div>
-
-                      </div>
-                    </div>
-                )}
               </div>
             )}
 
