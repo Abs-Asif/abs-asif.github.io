@@ -9,7 +9,6 @@ const isStandalone = import.meta.env.VITE_STANDALONE_SECRET === 'true';
 
 const Index = isStandalone ? null : lazy(() => import("./pages/Index"));
 const Dashboard = isStandalone ? null : lazy(() => import("./pages/Dashboard"));
-const EditTemplate = isStandalone ? null : lazy(() => import("./pages/EditTemplate"));
 const Secret = lazy(() => import("./pages/Secret"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -36,7 +35,6 @@ const App = () => {
                 <>
                   <Route path="/" element={Index ? <Index /> : null} />
                   <Route path="/dashboard" element={Dashboard ? <Dashboard /> : null} />
-                  <Route path="/Edit-Template/:templateId" element={EditTemplate ? <EditTemplate /> : null} />
                   <Route path="/secret" element={<Secret />} />
                   <Route path="*" element={<NotFound />} />
                 </>
