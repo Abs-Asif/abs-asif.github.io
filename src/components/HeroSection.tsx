@@ -1,9 +1,10 @@
 import { ChevronRight } from "lucide-react";
 import profilePhoto from "@/assets/profile-photo.png";
+import { VisitorCounter } from "./VisitorCounter";
 
 export const HeroSection = () => {
   return (
-    <section className="min-h-screen flex items-center pt-24 pb-12 relative overflow-hidden">
+    <section className="min-h-screen flex items-center pt-24 pb-0 relative overflow-hidden">
       {/* Background decoration */}
       <div className="absolute top-1/4 -right-20 w-96 h-96 bg-primary/10 rounded-full blur-[120px] -z-10" />
       <div className="absolute bottom-1/4 -left-20 w-96 h-96 bg-accent/10 rounded-full blur-[120px] -z-10" />
@@ -29,7 +30,7 @@ export const HeroSection = () => {
               I'm <span className="text-foreground font-semibold">Md. Abdullah Bari</span>, an aspiring software developer and medical student. I specialize in building bridges between technology and healthcare through code.
             </p>
 
-            <div className="flex flex-wrap justify-center lg:justify-start gap-4 mb-10 animate-fade-in-up opacity-0" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
+            <div className="flex flex-wrap justify-center lg:justify-start gap-4 mb-8 animate-fade-in-up opacity-0" style={{ animationDelay: "400ms", animationFillMode: "forwards" }}>
               <a
                 href="#projects"
                 className="group inline-flex items-center gap-2 px-8 py-4 rounded-lg text-sm font-mono font-bold bg-primary text-primary-foreground transition-all duration-300 hover:shadow-[0_0_20px_rgba(34,197,94,0.4)] active:scale-[0.98]"
@@ -45,6 +46,10 @@ export const HeroSection = () => {
               >
                 contact_me
               </a>
+            </div>
+
+            <div className="flex justify-center lg:justify-start mb-8">
+              <VisitorCounter />
             </div>
 
           </div>

@@ -17,10 +17,8 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Roboto', 'Inter', 'system-ui', 'sans-serif'],
+        sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
-        roboto: ['Roboto', 'sans-serif'],
-        viga: ['Viga', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
@@ -83,5 +81,5 @@ export default {
       },
     },
   },
-  plugins: [require("tailwindcss-animate"), require("@tailwindcss/typography")],
+  plugins: [require("tailwindcss-animate")],
 } satisfies Config;

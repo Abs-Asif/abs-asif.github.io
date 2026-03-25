@@ -1,9 +1,3 @@
 {
-  "rewrites": [
-    {
-      "source": "/api/validate-font-key",
-      "destination": "https://piwlolibeztmjkzhqnzc.supabase.co/functions/v1/validate-font-key"
-    },
-    { "source": "/(.*)", "destination": "/index.html" }
-  ]
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
 }
