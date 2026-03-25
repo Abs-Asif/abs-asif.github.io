@@ -8,7 +8,6 @@ import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 const isStandalone = import.meta.env.VITE_STANDALONE_SECRET === 'true';
 
 const Index = isStandalone ? null : lazy(() => import("./pages/Index"));
-const Dashboard = isStandalone ? null : lazy(() => import("./pages/Dashboard"));
 const Secret = lazy(() => import("./pages/Secret"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 
@@ -34,7 +33,6 @@ const App = () => {
               ) : (
                 <>
                   <Route path="/" element={Index ? <Index /> : null} />
-                  <Route path="/dashboard" element={Dashboard ? <Dashboard /> : null} />
                   <Route path="/secret" element={<Secret />} />
                   <Route path="*" element={<NotFound />} />
                 </>
