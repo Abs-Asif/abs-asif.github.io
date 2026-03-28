@@ -4,6 +4,7 @@ import { CalendarWidget } from "@/components/ecosystem/CalendarWidget";
 import { TodoList } from "@/components/ecosystem/TodoList";
 import { WebsiteChecker } from "@/components/ecosystem/WebsiteChecker";
 import { IslamicHub } from "@/components/ecosystem/IslamicHub";
+import { NHentaiWidget } from "@/components/ecosystem/NHentaiWidget";
 
 const Index = () => {
   return (
@@ -14,7 +15,7 @@ const Index = () => {
         </h1>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
           <p className="font-mono text-[10px] md:text-xs uppercase font-bold bg-black text-white px-2 py-1 dark:bg-white dark:text-black">
-            v2.0.BRUTAL
+            v2.1.BRUTAL
           </p>
           <p className="font-mono text-[10px] md:text-xs uppercase font-bold">
             Minimalist Brutalist Web Environment // All-in-One Utility
@@ -35,7 +36,8 @@ const Index = () => {
         <TodoList />
 
         {/* Row 3 */}
-        <div className="lg:col-span-3">
+        <NHentaiWidget />
+        <div className="lg:col-span-2">
           <WebsiteChecker />
         </div>
       </main>
