@@ -3,7 +3,9 @@ import { cn } from "@/lib/utils";
 import { Terminal } from "lucide-react";
 
 const navItems = [
+  { label: "Skills", href: "#skills" },
   { label: "Projects", href: "#projects" },
+  { label: "Experience", href: "#experience" },
   { label: "Contact", href: "#contact" },
 ];
 
@@ -48,7 +50,6 @@ export const Header = () => {
                 href={item.href}
                 className="px-4 py-1.5 rounded-md text-xs font-mono font-medium text-muted-foreground transition-all duration-200 hover:text-primary hover:bg-primary/10"
               >
-                <span className="text-primary/50 mr-1 opacity-0 group-hover:opacity-100 transition-opacity">./</span>
                 {item.label}
               </a>
             </li>
