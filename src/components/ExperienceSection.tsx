@@ -3,14 +3,6 @@ import { GraduationCap, Briefcase, Calendar, ChevronRight } from "lucide-react";
 
 const experience = [
   {
-    type: "Education",
-    title: "Bachelor of Medicine & Bachelor of Surgery (MBBS)",
-    organization: "Armed Forces Medical College (AFMC), Dhaka",
-    period: "2023 - Present",
-    description: "Focusing on medical sciences while integrating digital solutions into healthcare workflows.",
-    icon: GraduationCap,
-  },
-  {
     type: "Project Lead",
     title: "Founder & Lead Developer",
     organization: "গ্রামরক্তি (GramRokti)",
@@ -18,19 +10,11 @@ const experience = [
     description: "Spearheading the development of a blood donation platform aimed at rural accessibility and impact.",
     icon: Briefcase,
   },
-  {
-    type: "Education",
-    title: "Higher Secondary Certificate (HSC)",
-    organization: "Rajshahi College",
-    period: "2019 - 2021",
-    description: "Science background with strong focus on biology and mathematics.",
-    icon: GraduationCap,
-  },
 ];
 
 export const ExperienceSection = () => {
   return (
-    <Section id="experience" title="Education & Professional Path" index="03">
+    <Section id="experience" title="Professional Path" index="03">
       <div className="max-w-4xl mx-auto">
         <div className="space-y-12">
           {experience.map((item, index) => (
