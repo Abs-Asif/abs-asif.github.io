@@ -11,7 +11,7 @@ interface Message {
 const AIChat = () => {
   const navigate = useNavigate();
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "System initialized. Gemini 2.5 Flash at your service. How can I assist you today?" }
+    { role: "assistant", content: "System initialized. Neural Link established via Gemini 2.5 Flash. How can I assist you today?" }
   ]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -35,8 +35,10 @@ const AIChat = () => {
     setIsLoading(true);
     setError(null);
 
+    // Using api.airforce as a public proxy for Gemini models.
+    // It's client-side compatible (CORS: *) and supports various models.
     try {
-      const response = await fetch("https://g4f.space/api/gemini/chat/completions", {
+      const response = await fetch("https://api.airforce/v1/chat/completions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -48,15 +50,37 @@ const AIChat = () => {
       });
 
       if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("Neural link saturated (Rate Limit). Please wait a moment.");
+        }
         throw new Error(`Error: ${response.status} ${response.statusText}`);
       }
 
       const data = await response.json();
       const assistantMessage: Message = data.choices[0].message;
-      setMessages((prev) => [...prev, assistantMessage]);
+
+      if (!assistantMessage || (!assistantMessage.content && assistantMessage.content !== "")) {
+          throw new Error("Received an invalid response from the neural network.");
+      }
+
+      if (assistantMessage.content.includes("Ratelimit Exceeded!")) {
+           throw new Error("Neural link saturated (Provider Rate Limit). Please wait a moment.");
+      }
+
+      if (assistantMessage.content === "") {
+           throw new Error("Neural link unstable. Received an empty response. Please try again.");
+      }
+
+      // Cleanup content from ads/metadata if present
+      const cleanedContent = assistantMessage.content
+        .replace(/Need proxies cheaper than the market\?.*$/gm, "")
+        .replace(/https:\/\/op\.wtf/g, "")
+        .trim();
+
+      setMessages((prev) => [...prev, { ...assistantMessage, content: cleanedContent }]);
     } catch (err) {
       console.error("AI Chat Error:", err);
-      setError("Failed to connect to the neural network. Please check your connection or try again later.");
+      setError(err instanceof Error ? err.message : "Failed to connect to the neural network. Please check your connection or try again later.");
     } finally {
       setIsLoading(false);
     }
@@ -86,7 +110,7 @@ const AIChat = () => {
                 Neural.Link
               </h1>
               <p className="text-muted-foreground font-mono text-[10px] md:text-sm truncate">
-                {"// Conversational AI Interface"}
+                {"// Powerful Conversational Gemini AI"}
               </p>
             </div>
           </div>
@@ -105,7 +129,7 @@ const AIChat = () => {
           <div className="terminal-header flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Terminal size={14} className="text-primary" />
-              <span className="text-xs font-mono text-primary">SESSION::ACTIVE // MODEL::GEMINI-2.5-FLASH</span>
+              <span className="text-xs font-mono text-primary">SESSION::ACTIVE // LINK::GEMINI-2.5-FLASH</span>
             </div>
             <div className="flex gap-1">
               <div className="w-2 h-2 rounded-full bg-border" />
@@ -149,7 +173,7 @@ const AIChat = () => {
                 </div>
                 <div className="p-4 rounded-2xl bg-surface-1 border border-border flex items-center gap-2">
                   <Loader2 size={16} className="animate-spin text-primary" />
-                  <span className="text-xs font-mono text-muted-foreground">Processing...</span>
+                  <span className="text-xs font-mono text-muted-foreground">Neural computation in progress...</span>
                 </div>
               </div>
             )}
