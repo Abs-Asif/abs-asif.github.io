@@ -69,7 +69,7 @@ const SOURCES = [
   {
     id: "db",
     name: "Daily Bangladesh",
-    api: "https://backoffice.daily-bangladesh.com/api-en/archive",
+    api: "https://backoffice.daily-bangladesh.com/api/archive",
     site: "https://daily-bangladesh.com",
     media: "https://backoffice.daily-bangladesh.com/media/imgAll/"
   }
