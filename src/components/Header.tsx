@@ -6,7 +6,7 @@ import { Terminal } from "lucide-react";
 const navItems = [
   { label: "Projects", href: "/#projects" },
   { label: "AI Chat", href: "/ai" },
-  { label: "BG Inspector", href: "/Inspector" },
+  { label: "Inspector", href: "/Inspector" },
   { label: "Contact", href: "/#contact" },
 ];
 

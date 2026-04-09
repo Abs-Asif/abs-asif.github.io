@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
   ArrowLeft,
   Search,
@@ -17,12 +17,19 @@ import {
   Info,
   Code2,
   BookOpen,
-  Eye,
-  EyeOff,
   Filter,
   Globe,
   Layout,
-  Smartphone
+  Smartphone,
+  Eye,
+  Images,
+  Zap,
+  Terminal,
+  FileCode,
+  ArrowRightLeft,
+  Settings,
+  ShieldCheck,
+  Cpu
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -53,7 +60,27 @@ interface QueryParams {
   category_name: number | "";
   limit: number;
   offset: number;
+  // Experimental/Audited params
+  ContentID?: number | "";
+  q?: string;
 }
+
+const SOURCES = [
+  {
+    id: "bg",
+    name: "Bangladesh Guardian",
+    api: "https://backoffice.bangladeshguardian.com/api-en/archive",
+    site: "https://bangladeshguardian.com",
+    media: "https://backoffice.bangladeshguardian.com/media/imgAll/"
+  },
+  {
+    id: "db",
+    name: "Daily Bangladesh",
+    api: "https://backoffice.daily-bangladesh.com/api-en/archive",
+    site: "https://daily-bangladesh.com",
+    media: "https://backoffice.daily-bangladesh.com/media/imgAll/"
+  }
+];
 
 const CATEGORIES = [
   { id: 1, name: "National" },
@@ -75,45 +102,58 @@ const CATEGORIES = [
   { id: 18, name: "ICC World Cup" },
 ];
 
+const FIELD_DEFS: { field: keyof BGArchiveItem; type: string; desc: string }[] = [
+  { field: "ContentID", type: "Int", desc: "Unique global identifier for the article." },
+  { field: "CategoryID", type: "Int", desc: "Internal ID for news classification." },
+  { field: "CategoryName", type: "String", desc: "Human-readable category label." },
+  { field: "Slug", type: "String", desc: "Category URL slug." },
+  { field: "ContentHeading", type: "String", desc: "Primary title of the news content." },
+  { field: "ContentBrief", type: "String", desc: "Short summary or lead paragraph text." },
+  { field: "ImageThumbPath", type: "String", desc: "Path to smallest thumbnail image." },
+  { field: "ImageSmPath", type: "String", desc: "Path to medium-sized thumbnail." },
+  { field: "ImageBgPath", type: "String", desc: "Path to full-sized hero image." },
+  { field: "URLAlies", type: "String", desc: "SEO-optimized article URL slug." },
+  { field: "VideoID", type: "String?", desc: "External video ID (e.g. YouTube ID)." },
+  { field: "VideoPath", type: "String?", desc: "Relative path to local video file." },
+  { field: "VideoType", type: "String?", desc: "Type of video provider/format." },
+  { field: "VideoSource", type: "String?", desc: "Original source of the video content." },
+  { field: "create_date", type: "String", desc: "Creation timestamp (human readable)." },
+  { field: "updated_date", type: "String?", desc: "Last modification timestamp." },
+];
+
 const PRESETS = [
   {
-    name: "Latest National",
-    params: { start_date: "", end_date: "", category_name: 1, limit: 10, offset: 0 }
+    name: "Latest Headlines",
+    params: { start_date: "", end_date: "", category_name: "", limit: 10, offset: 0 }
+  },
+  {
+    name: "National News",
+    params: { start_date: "", end_date: "", category_name: 1, limit: 12, offset: 0 }
   },
   {
     name: "Sports Highlights",
-    params: { start_date: "", end_date: "", category_name: 7, limit: 5, offset: 0 }
-  },
-  {
-    name: "Global Affairs",
-    params: { start_date: "", end_date: "", category_name: 5, limit: 8, offset: 0 }
+    params: { start_date: "", end_date: "", category_name: 7, limit: 8, offset: 0 }
   },
   {
     name: "Tech & Science",
     params: { start_date: "", end_date: "", category_name: 11, limit: 6, offset: 0 }
-  },
-  {
-    name: "Recent All",
-    params: { start_date: "", end_date: "", category_name: "", limit: 12, offset: 0 }
   }
-];
-
-const ALL_FIELDS: (keyof BGArchiveItem)[] = [
-  "ContentID", "CategoryID", "CategoryName", "Slug", "ContentHeading",
-  "ContentBrief", "ImageThumbPath", "ImageSmPath", "ImageBgPath",
-  "URLAlies", "VideoID", "VideoPath", "VideoType", "VideoSource",
-  "create_date", "updated_date"
 ];
 
 const Inspector = () => {
   const navigate = useNavigate();
+  const [source, setSource] = useState(SOURCES[0]);
   const [params, setParams] = useState<QueryParams>({
     start_date: "",
     end_date: "",
     category_name: "",
     limit: 10,
-    offset: 0
+    offset: 0,
+    ContentID: "",
+    q: ""
   });
+
+  // UI States
   const [showCustomCategory, setShowCustomCategory] = useState(false);
   const [results, setResults] = useState<BGArchiveItem[] | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -121,20 +161,47 @@ const Inspector = () => {
   const [activeTab, setActiveTab] = useState<"results" | "json">("results");
   const [rawResponse, setRawResponse] = useState<any>(null);
   const [visibleFields, setVisibleFields] = useState<Record<string, boolean>>(
-    ALL_FIELDS.reduce((acc, field) => ({ ...acc, [field]: true }), {})
+    FIELD_DEFS.reduce((acc, f) => ({ ...acc, [f.field]: true }), {})
   );
+
+  const toggleField = (field: string) => {
+    setVisibleFields(prev => ({
+      ...prev,
+      [field]: !prev[field]
+    }));
+  };
+
+  // Advanced Settings
+  const [compareImages, setCompareImages] = useState(false);
+  const [showPayload, setShowPayload] = useState(true);
+  const [autoFetch, setAutoFetch] = useState(false);
+  const [jsonIndent, setJsonIndent] = useState(2);
+  const [experimentalMode, setExperimentalMode] = useState(false);
 
   const fetchData = async (overrideParams?: QueryParams) => {
     const queryParams = overrideParams || params;
+
+    // Clean payload for API (remove empty experimental params if not used)
+    const payload: any = {
+      start_date: queryParams.start_date,
+      end_date: queryParams.end_date,
+      category_name: queryParams.category_name,
+      limit: queryParams.limit,
+      offset: queryParams.offset,
+    };
+
+    if (queryParams.ContentID) payload.ContentID = queryParams.ContentID;
+    if (queryParams.q) payload.q = queryParams.q;
+
     setIsLoading(true);
     setError(null);
     setRawResponse(null);
 
     try {
-      const response = await fetch("https://backoffice.bangladeshguardian.com/api-en/archive", {
+      const response = await fetch(source.api, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(queryParams)
+        body: JSON.stringify(payload)
       });
 
       const data = await response.json();
@@ -143,6 +210,7 @@ const Inspector = () => {
       if (response.ok) {
         if (data.archive_data) {
           setResults(data.archive_data);
+          toast.success(`Fetched ${data.archive_data.length} items from ${source.name}`);
         } else if (data.category_name) {
           setError(`API Error: ${data.category_name[0]}`);
           setResults(null);
@@ -153,81 +221,130 @@ const Inspector = () => {
         setError(`HTTP Error: ${response.status} ${response.statusText}`);
       }
     } catch (err) {
-      setError("Failed to fetch data. Ensure your connection is active and CORS is handled.");
+      setError("Failed to connect to backend. Check CORS or network status.");
       console.error(err);
     } finally {
       setIsLoading(false);
     }
   };
 
-  const applyPreset = (preset: typeof PRESETS[0]) => {
-    setParams(preset.params as QueryParams);
-    setShowCustomCategory(false);
-    fetchData(preset.params as QueryParams);
-    toast.success(`Applied preset: ${preset.name}`);
-  };
+  useEffect(() => {
+    if (autoFetch) {
+      const timer = setTimeout(() => fetchData(), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [params, source, autoFetch]);
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
     toast.success("Copied to clipboard");
   };
 
-  const toggleField = (field: string) => {
-    setVisibleFields(prev => ({ ...prev, [field]: !prev[field] }));
+  const getPayloadString = () => {
+    const p: any = { ...params };
+    if (!p.ContentID) delete p.ContentID;
+    if (!p.q) delete p.q;
+    return JSON.stringify(p, null, jsonIndent);
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans selection:bg-primary/10">
-      {/* Refined Navigation Header */}
-      <header className="sticky top-0 z-40 w-full bg-white/80 backdrop-blur-md border-b border-slate-200">
-        <div className="max-w-7xl mx-auto px-4 h-16 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+    <div className="min-h-screen bg-[#f8fafc] text-slate-900 font-sans selection:bg-primary/20 select-text">
+      {/* Dynamic Header */}
+      <header className="sticky top-0 z-50 w-full bg-white/90 backdrop-blur-xl border-b border-slate-200 shadow-sm">
+        <div className="max-w-[1600px] mx-auto px-6 h-16 flex items-center justify-between">
+          <div className="flex items-center gap-6">
             <button
               onClick={() => navigate("/")}
-              className="p-2 rounded-lg hover:bg-slate-100 transition-colors text-slate-600"
+              className="p-2.5 rounded-xl hover:bg-slate-100 transition-all text-slate-500 hover:text-primary active:scale-95"
             >
               <ArrowLeft size={20} />
             </button>
-            <div>
-              <h1 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Database size={20} className="text-primary" />
-                BG Archive Inspector
+            <div className="h-6 w-px bg-slate-200" />
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-primary/10 rounded-xl flex items-center justify-center">
+                <Terminal size={20} className="text-primary" />
+              </div>
+              <h1 className="text-lg font-black tracking-tight text-slate-900 uppercase">
+                Inspector <span className="text-primary font-normal lowercase opacity-40">/ engine</span>
               </h1>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 text-xs font-medium text-slate-500">
-               <span className="flex h-2 w-2 rounded-full bg-emerald-500" />
-               API_ONLINE
+            <div className="hidden lg:flex items-center gap-6 px-4 py-2 bg-slate-100 rounded-full border border-slate-200/50">
+               <div className="flex items-center gap-2">
+                 <div className={cn("w-2 h-2 rounded-full animate-pulse", isLoading ? "bg-amber-500" : "bg-emerald-500")} />
+                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{isLoading ? "Processing" : "Idle_Online"}</span>
+               </div>
+               <div className="h-4 w-px bg-slate-300/50" />
+               <div className="flex items-center gap-2">
+                 <ShieldCheck size={12} className="text-primary" />
+                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">v2.0_Stable</span>
+               </div>
             </div>
+
             <button
               onClick={() => fetchData()}
               disabled={isLoading}
-              className="flex items-center gap-2 px-4 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary/90 transition-all shadow-sm active:scale-95 disabled:opacity-50"
+              className="flex items-center gap-2.5 px-6 py-2.5 bg-slate-900 text-white rounded-xl text-sm font-bold hover:bg-primary hover:shadow-lg hover:shadow-primary/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              {isLoading ? <Loader2 size={16} className="animate-spin" /> : <Play size={16} />}
-              <span className="hidden sm:inline">Fetch Data</span>
+              {isLoading ? <Loader2 size={18} className="animate-spin" /> : <Zap size={18} />}
+              <span>Execute</span>
             </button>
           </div>
         </div>
       </header>
 
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-[1600px] mx-auto px-6 py-8">
+        {/* Source Selector */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+           {SOURCES.map(s => (
+             <button
+               key={s.id}
+               onClick={() => {
+                 setSource(s);
+                 setResults(null);
+               }}
+               className={cn(
+                 "relative overflow-hidden group p-5 rounded-2xl border-2 transition-all text-left",
+                 source.id === s.id
+                   ? "bg-white border-primary shadow-xl shadow-primary/5"
+                   : "bg-white/50 border-slate-200 hover:border-slate-300 hover:bg-white"
+               )}
+             >
+               <div className="flex items-center justify-between relative z-10">
+                 <div className="flex items-center gap-4">
+                   <div className={cn(
+                     "w-12 h-12 rounded-xl flex items-center justify-center transition-colors",
+                     source.id === s.id ? "bg-primary text-white" : "bg-slate-100 text-slate-400 group-hover:bg-slate-200"
+                   )}>
+                     <Globe size={24} />
+                   </div>
+                   <div>
+                     <h3 className={cn("font-bold text-sm uppercase tracking-tight", source.id === s.id ? "text-slate-900" : "text-slate-500")}>{s.name}</h3>
+                     <p className="text-[10px] font-mono text-slate-400 mt-0.5 truncate max-w-[200px]">{s.api}</p>
+                   </div>
+                 </div>
+                 {source.id === s.id && <CheckCircle2 className="text-primary" size={24} />}
+               </div>
+               {source.id === s.id && <div className="absolute top-0 right-0 w-32 h-32 bg-primary/5 rounded-full -translate-y-1/2 translate-x-1/2" />}
+             </button>
+           ))}
+        </div>
+
         <div className="flex flex-col lg:flex-row gap-8">
           {/* Controls Sidebar */}
-          <aside className="lg:w-80 space-y-6 shrink-0">
-            {/* Configuration */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between">
-                <h3 className="text-sm font-bold flex items-center gap-2">
-                  <Settings2 size={16} className="text-slate-400" />
-                  Query Config
+          <aside className="lg:w-[380px] space-y-6 shrink-0">
+            {/* Main Config */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm overflow-hidden">
+              <div className="px-6 py-4 bg-slate-50/50 border-b border-slate-200 flex items-center justify-between">
+                <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                  <Settings size={14} /> Basic Params
                 </h3>
               </div>
-              <div className="p-4 space-y-4">
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Category</label>
+              <div className="p-6 space-y-5">
+                <div className="space-y-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Category Focus</label>
                   <select
                     value={showCustomCategory ? "999" : params.category_name}
                     onChange={(e) => {
@@ -239,224 +356,389 @@ const Inspector = () => {
                         setParams({ ...params, category_name: val ? parseInt(val) : "" });
                       }
                     }}
-                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all"
+                    className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all appearance-none cursor-pointer"
                   >
-                    <option value="">All Categories</option>
+                    <option value="">Fetch All Content</option>
                     {CATEGORIES.map(cat => (
                       <option key={cat.id} value={cat.id}>{cat.name}</option>
                     ))}
-                    <option value="999">Custom ID...</option>
+                    <option value="999">Manually defined ID...</option>
                   </select>
                   {showCustomCategory && (
                     <input
                       type="number"
-                      placeholder="Enter ID..."
+                      placeholder="Input custom CategoryID..."
                       value={params.category_name}
                       onChange={(e) => setParams({ ...params, category_name: e.target.value ? parseInt(e.target.value) : "" })}
-                      className="w-full mt-2 h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      className="w-full mt-2 h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary transition-all"
                     />
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Limit</label>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Buffer Limit</label>
                     <input
                       type="number"
                       value={params.limit}
                       onChange={(e) => setParams({ ...params, limit: parseInt(e.target.value) || 0 })}
-                      className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary"
                     />
                   </div>
-                  <div className="space-y-1.5">
-                    <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Offset</label>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Data Offset</label>
                     <input
                       type="number"
                       value={params.offset}
                       onChange={(e) => setParams({ ...params, offset: parseInt(e.target.value) || 0 })}
-                      className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
+                      className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm font-medium focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary"
                     />
                   </div>
                 </div>
 
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">Start Date</label>
-                  <input
-                    type="date"
-                    value={params.start_date}
-                    onChange={(e) => setParams({ ...params, start_date: e.target.value })}
-                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <label className="text-[11px] font-bold text-slate-500 uppercase tracking-wider">End Date</label>
-                  <input
-                    type="date"
-                    value={params.end_date}
-                    onChange={(e) => setParams({ ...params, end_date: e.target.value })}
-                    className="w-full h-10 rounded-lg border border-slate-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary"
-                  />
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">Start Window</label>
+                    <input
+                      type="date"
+                      value={params.start_date}
+                      onChange={(e) => setParams({ ...params, start_date: e.target.value })}
+                      className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-400 uppercase tracking-[0.15em]">End Window</label>
+                    <input
+                      type="date"
+                      value={params.end_date}
+                      onChange={(e) => setParams({ ...params, end_date: e.target.value })}
+                      className="w-full h-11 rounded-xl border border-slate-200 bg-white px-4 text-sm focus:outline-none focus:ring-4 focus:ring-primary/10 focus:border-primary"
+                    />
+                  </div>
                 </div>
               </div>
             </div>
 
-            {/* Visibility Filters */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                <Filter size={16} className="text-slate-400" />
-                <h3 className="text-sm font-bold">Field Visibility</h3>
-              </div>
-              <div className="p-4 max-h-60 overflow-y-auto scrollbar-hide">
-                <div className="space-y-2">
-                  {ALL_FIELDS.map(field => (
-                    <label key={field} className="flex items-center gap-3 cursor-pointer group">
-                      <div
-                        onClick={() => toggleField(field)}
+            {/* Experimental/Audit Params */}
+            <div className="bg-slate-900 rounded-2xl border border-slate-800 shadow-xl overflow-hidden">
+               <div className="px-6 py-4 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                  <h3 className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                    <Cpu size={14} className="text-amber-500" /> Experimental Logic
+                  </h3>
+                  <div
+                    onClick={() => setExperimentalMode(!experimentalMode)}
+                    className={cn(
+                      "w-8 h-4 rounded-full relative transition-colors cursor-pointer",
+                      experimentalMode ? "bg-amber-500" : "bg-slate-700"
+                    )}
+                  >
+                    <div className={cn("absolute top-0.5 w-3 h-3 bg-white rounded-full transition-all", experimentalMode ? "left-4.5" : "left-0.5")} />
+                  </div>
+               </div>
+               <div className={cn("p-6 space-y-5 transition-all", !experimentalMode && "opacity-20 pointer-events-none grayscale")}>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em]">Pull by Content ID</label>
+                    <div className="relative">
+                      <Hash size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                      <input
+                        type="number"
+                        placeholder="Search specific ID..."
+                        value={params.ContentID}
+                        onChange={(e) => setParams({ ...params, ContentID: e.target.value ? parseInt(e.target.value) : "" })}
+                        className="w-full h-11 rounded-xl border border-slate-800 bg-slate-950 px-10 text-sm font-mono text-amber-500 focus:outline-none focus:border-amber-500 transition-all"
+                      />
+                    </div>
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-[10px] font-black text-slate-500 uppercase tracking-[0.15em]">Experimental Query (q)</label>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-600" />
+                      <input
+                        type="text"
+                        placeholder="Global search..."
+                        value={params.q}
+                        onChange={(e) => setParams({ ...params, q: e.target.value })}
+                        className="w-full h-11 rounded-xl border border-slate-800 bg-slate-950 px-10 text-sm font-mono text-amber-500 focus:outline-none focus:border-amber-500 transition-all"
+                      />
+                    </div>
+                  </div>
+               </div>
+            </div>
+
+            {/* Settings Toggles */}
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-sm p-4 space-y-3">
+               <button
+                 onClick={() => setCompareImages(!compareImages)}
+                 className={cn(
+                   "w-full flex items-center justify-between p-3 rounded-xl transition-all",
+                   compareImages ? "bg-primary/10 text-primary" : "hover:bg-slate-50 text-slate-600"
+                 )}
+               >
+                 <div className="flex items-center gap-3">
+                   <Images size={16} />
+                   <span className="text-xs font-bold uppercase tracking-tight">Image Comparison Mode</span>
+                 </div>
+                 {compareImages && <div className="w-1.5 h-1.5 rounded-full bg-primary" />}
+               </button>
+
+               <button
+                 onClick={() => setAutoFetch(!autoFetch)}
+                 className={cn(
+                   "w-full flex items-center justify-between p-3 rounded-xl transition-all",
+                   autoFetch ? "bg-amber-100 text-amber-700" : "hover:bg-slate-50 text-slate-600"
+                 )}
+               >
+                 <div className="flex items-center gap-3">
+                   <Zap size={16} />
+                   <span className="text-xs font-bold uppercase tracking-tight">Auto-Execute on Change</span>
+                 </div>
+                 {autoFetch && <div className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />}
+               </button>
+
+               <button
+                 onClick={() => setShowPayload(!showPayload)}
+                 className={cn(
+                   "w-full flex items-center justify-between p-3 rounded-xl transition-all",
+                   showPayload ? "bg-slate-100 text-slate-900" : "hover:bg-slate-50 text-slate-600"
+                 )}
+               >
+                 <div className="flex items-center gap-3">
+                   <FileCode size={16} />
+                   <span className="text-xs font-bold uppercase tracking-tight">Show Payload Preview</span>
+                 </div>
+                 <Eye size={16} className={showPayload ? "opacity-100" : "opacity-20"} />
+               </button>
+
+               <div className="pt-4 border-t border-slate-100">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Layers size={14} className="text-slate-400" />
+                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Visibility Layer</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {FIELD_DEFS.map(f => (
+                      <button
+                        key={f.field}
+                        onClick={() => toggleField(f.field)}
                         className={cn(
-                          "w-4 h-4 rounded border flex items-center justify-center transition-all",
-                          visibleFields[field] ? "bg-primary border-primary" : "border-slate-300"
+                          "px-2 py-1 text-[9px] font-bold border transition-all rounded-md",
+                          visibleFields[f.field]
+                            ? "bg-primary text-white border-primary"
+                            : "bg-white text-slate-400 border-slate-200 line-through opacity-60"
                         )}
                       >
-                        {visibleFields[field] && <CheckCircle2 size={10} className="text-white" />}
-                      </div>
-                      <span className="text-xs text-slate-600 group-hover:text-slate-900 transition-colors">{field}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
+                        {f.field}
+                      </button>
+                    ))}
+                  </div>
+               </div>
             </div>
 
-            {/* Presets */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm">
-              <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center gap-2">
-                <Layout size={16} className="text-slate-400" />
-                <h3 className="text-sm font-bold">Presets</h3>
-              </div>
-              <div className="p-2 grid grid-cols-1 gap-1">
-                {PRESETS.map((preset, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => applyPreset(preset)}
-                    className="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-slate-50 text-left transition-colors group"
-                  >
-                    <span className="text-xs font-medium text-slate-600 group-hover:text-slate-900">{preset.name}</span>
-                    <ExternalLink size={12} className="text-slate-300 group-hover:text-primary" />
-                  </button>
-                ))}
-              </div>
+            {/* Presets Grid */}
+            <div className="grid grid-cols-2 gap-3">
+               {PRESETS.map((preset, idx) => (
+                 <button
+                   key={idx}
+                   onClick={() => {
+                     setParams({ ...params, ...preset.params });
+                     setShowCustomCategory(false);
+                     fetchData({ ...params, ...preset.params });
+                   }}
+                   className="p-3 rounded-xl bg-white border border-slate-200 text-left hover:border-primary hover:shadow-md transition-all group"
+                 >
+                   <p className="text-[10px] font-black text-slate-400 uppercase tracking-tighter group-hover:text-primary mb-1">Preset {idx + 1}</p>
+                   <p className="text-[11px] font-bold text-slate-700 line-clamp-1">{preset.name}</p>
+                 </button>
+               ))}
             </div>
           </aside>
 
-          {/* Results Area */}
-          <main className="flex-1 min-w-0 space-y-6">
-            <div className="bg-white rounded-xl border border-slate-200 shadow-sm flex flex-col min-h-[600px]">
-              <div className="flex border-b border-slate-200">
+          {/* Main Workspace */}
+          <main className="flex-1 min-w-0 space-y-8">
+            {/* Payload Preview */}
+            {showPayload && (
+              <div className="bg-slate-950 rounded-2xl border border-slate-800 overflow-hidden shadow-2xl relative group">
+                <div className="px-6 py-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                   <div className="flex items-center gap-2">
+                     <FileJson size={14} className="text-emerald-500" />
+                     <span className="text-[10px] font-black text-slate-500 uppercase tracking-[0.2em]">Request_Payload_Manifest</span>
+                   </div>
+                   <div className="flex items-center gap-4">
+                      <select
+                        value={jsonIndent}
+                        onChange={(e) => setJsonIndent(parseInt(e.target.value))}
+                        className="bg-transparent text-[10px] font-bold text-slate-500 outline-none cursor-pointer"
+                      >
+                        <option value={0}>Minified</option>
+                        <option value={2}>Standard</option>
+                        <option value={4}>Expanded</option>
+                      </select>
+                      <button
+                        onClick={() => copyToClipboard(getPayloadString())}
+                        className="p-1 text-slate-500 hover:text-white transition-colors"
+                      >
+                        <Copy size={14} />
+                      </button>
+                   </div>
+                </div>
+                <pre className="p-6 text-emerald-400 text-xs font-mono leading-relaxed overflow-x-auto max-h-48 scrollbar-hide">
+                  {getPayloadString()}
+                </pre>
+              </div>
+            )}
+
+            <div className="bg-white rounded-2xl border border-slate-200 shadow-xl flex flex-col min-h-[700px] overflow-hidden">
+              <div className="flex border-b border-slate-200 bg-slate-50/50">
                 <button
                   onClick={() => setActiveTab("results")}
                   className={cn(
-                    "px-6 py-4 text-sm font-semibold transition-all relative",
-                    activeTab === "results" ? "text-primary" : "text-slate-500 hover:text-slate-700"
+                    "px-8 py-5 text-xs font-black uppercase tracking-widest transition-all relative",
+                    activeTab === "results" ? "text-primary bg-white shadow-[inset_0_-2px_0_0_#22c55e]" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Visual Results
-                  {activeTab === "results" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                  <div className="flex items-center gap-2">
+                    <Layout size={14} />
+                    Engine View
+                  </div>
                 </button>
                 <button
                   onClick={() => setActiveTab("json")}
                   className={cn(
-                    "px-6 py-4 text-sm font-semibold transition-all relative",
-                    activeTab === "json" ? "text-primary" : "text-slate-500 hover:text-slate-700"
+                    "px-8 py-5 text-xs font-black uppercase tracking-widest transition-all relative",
+                    activeTab === "json" ? "text-primary bg-white shadow-[inset_0_-2px_0_0_#22c55e]" : "text-slate-400 hover:text-slate-600"
                   )}
                 >
-                  Raw Response
-                  {activeTab === "json" && <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary" />}
+                  <div className="flex items-center gap-2">
+                    <FileCode size={14} />
+                    Raw JSON
+                  </div>
                 </button>
               </div>
 
-              <div className="flex-1 p-6">
+              <div className="flex-1 p-8">
                 {isLoading && (
-                  <div className="h-full flex flex-col items-center justify-center py-20">
-                    <Loader2 className="w-10 h-10 text-primary animate-spin mb-4" />
-                    <p className="text-sm font-medium text-slate-500">Querying archive database...</p>
+                  <div className="h-full flex flex-col items-center justify-center py-32">
+                    <div className="relative">
+                      <div className="w-16 h-16 border-4 border-slate-100 rounded-full" />
+                      <div className="w-16 h-16 border-4 border-t-primary rounded-full animate-spin absolute top-0" />
+                    </div>
+                    <p className="text-[10px] font-black text-slate-400 uppercase tracking-[0.3em] mt-8">Interrogating Database...</p>
                   </div>
                 )}
 
                 {error && !isLoading && (
-                  <div className="bg-red-50 border border-red-100 rounded-xl p-6 flex gap-4 items-start">
-                    <AlertCircle className="text-red-500 shrink-0" size={24} />
+                  <div className="bg-red-50 border border-red-100 rounded-2xl p-8 flex gap-6 items-start">
+                    <div className="w-12 h-12 bg-red-100 rounded-xl flex items-center justify-center shrink-0">
+                      <AlertCircle className="text-red-600" size={24} />
+                    </div>
                     <div>
-                      <h4 className="font-bold text-red-800">API Connection Issue</h4>
-                      <p className="text-sm text-red-600 mt-1">{error}</p>
+                      <h4 className="font-black text-red-900 uppercase tracking-tight">Operational Failure</h4>
+                      <p className="text-sm text-red-700/80 mt-1 font-medium leading-relaxed">{error}</p>
+                      <button
+                        onClick={() => fetchData()}
+                        className="mt-4 text-xs font-bold text-red-700 underline underline-offset-4 hover:text-red-900 transition-colors"
+                      >
+                        Attempt reconnection_
+                      </button>
                     </div>
                   </div>
                 )}
 
                 {!isLoading && activeTab === "results" && results && (
-                  <div className="space-y-6">
+                  <div className="space-y-8">
                     {results.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-32 text-slate-400">
-                        <Search size={48} className="mb-4 opacity-20" />
-                        <p className="text-sm font-medium">No results found for current query</p>
+                      <div className="flex flex-col items-center justify-center py-40 text-slate-300">
+                        <Database size={64} className="mb-6 opacity-20" />
+                        <p className="text-xs font-black uppercase tracking-widest">Zero entries detected for this segment</p>
                       </div>
                     ) : (
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6">
+                      <div className={cn("grid gap-8", compareImages ? "grid-cols-1" : "grid-cols-1 md:grid-cols-2")}>
                         {results.map((item) => (
-                          <div key={item.ContentID} className="bg-white rounded-xl border border-slate-200 overflow-hidden hover:shadow-md transition-shadow group flex flex-col">
-                            {visibleFields.ImageBgPath && (
-                              <div className="aspect-video bg-slate-100 relative overflow-hidden">
-                                <img
-                                  src={`https://backoffice.bangladeshguardian.com/media/imgAll/${item.ImageBgPath}`}
-                                  alt={item.ContentHeading}
-                                  className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                  onError={(e) => {
-                                    (e.target as HTMLImageElement).src = "https://via.placeholder.com/400x225?text=No+Image";
-                                  }}
-                                />
-                                {visibleFields.CategoryName && (
-                                  <div className="absolute top-3 left-3 px-2 py-1 rounded bg-black/60 backdrop-blur-md text-[10px] font-bold text-white uppercase tracking-wider">
-                                    {item.CategoryName}
+                          <div key={item.ContentID} className="bg-white rounded-2xl border border-slate-200 overflow-hidden hover:border-primary/50 hover:shadow-2xl hover:shadow-primary/5 transition-all group flex flex-col">
+                            {compareImages ? (
+                               <div className="p-6 bg-slate-50 border-b border-slate-200">
+                                  <div className="flex items-center justify-between mb-6">
+                                     <h4 className="font-black text-slate-900 uppercase tracking-tight text-sm truncate max-w-[400px]">{item.ContentHeading}</h4>
+                                     <span className="px-3 py-1 bg-white border border-slate-200 rounded-lg text-[10px] font-bold text-slate-500">ID: {item.ContentID}</span>
                                   </div>
-                                )}
-                              </div>
-                            )}
+                                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                                     {[
+                                       { label: "THUMB_PATH", path: item.ImageThumbPath },
+                                       { label: "SM_PATH", path: item.ImageSmPath },
+                                       { label: "BG_PATH", path: item.ImageBgPath }
+                                     ].map((img, i) => (
+                                       <div key={i} className="space-y-3">
+                                          <div className="flex items-center justify-between">
+                                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{img.label}</span>
+                                            <button onClick={() => copyToClipboard(img.path)} className="p-1 hover:text-primary transition-colors"><Copy size={12} /></button>
+                                          </div>
+                                          <div className="aspect-video bg-slate-200 rounded-xl overflow-hidden border border-slate-200 shadow-sm relative group/img">
+                                            <img
+                                              src={`${source.media}${img.path}`}
+                                              className="w-full h-full object-cover group-hover/img:scale-110 transition-transform duration-700"
+                                              onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/400x225?text=Invalid+Asset")}
+                                            />
+                                          </div>
+                                          <p className="text-[10px] font-mono text-slate-500 truncate">{img.path}</p>
+                                       </div>
+                                     ))}
+                                  </div>
+                               </div>
+                            ) : (
+                              <>
+                                <div className="aspect-video bg-slate-100 relative overflow-hidden group">
+                                  <img
+                                    src={`${source.media}${item.ImageBgPath}`}
+                                    alt={item.ContentHeading}
+                                    className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700"
+                                    onError={(e) => (e.currentTarget.src = "https://via.placeholder.com/400x225?text=Image+Not+Found")}
+                                  />
+                                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-60 group-hover:opacity-40 transition-opacity" />
+                                  <div className="absolute top-4 left-4 flex gap-2">
+                                     <div className="px-3 py-1.5 rounded-lg bg-black/60 backdrop-blur-md text-[9px] font-black text-white uppercase tracking-[0.2em] border border-white/10">
+                                       {item.CategoryName}
+                                     </div>
+                                  </div>
+                                  <div className="absolute bottom-4 left-4 right-4 translate-y-2 group-hover:translate-y-0 transition-transform duration-500">
+                                     <h4 className="font-bold text-white text-sm line-clamp-2 leading-tight">
+                                       {item.ContentHeading}
+                                     </h4>
+                                  </div>
+                                </div>
 
-                            <div className="p-4 flex-1 space-y-4">
-                              <div>
-                                {visibleFields.ContentHeading && (
-                                  <h4 className="font-bold text-slate-900 leading-snug group-hover:text-primary transition-colors line-clamp-2">
-                                    {item.ContentHeading}
-                                  </h4>
-                                )}
-                                {visibleFields.ContentBrief && (
-                                  <p className="text-xs text-slate-500 mt-2 line-clamp-3 leading-relaxed">
+                                <div className="p-6 flex-1 space-y-6">
+                                  <p className="text-xs text-slate-500 font-medium leading-relaxed line-clamp-3">
                                     {item.ContentBrief}
                                   </p>
-                                )}
-                              </div>
 
-                              {/* Dynamic Field Display */}
-                              <div className="pt-4 border-t border-slate-100 grid grid-cols-1 gap-2">
-                                {ALL_FIELDS.filter(f => !["ImageBgPath", "ContentHeading", "ContentBrief", "CategoryName"].includes(f) && visibleFields[f]).map(field => (
-                                  <div key={field} className="flex items-start justify-between gap-4">
-                                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter shrink-0">{field}</span>
-                                    <span className="text-[10px] text-slate-600 truncate max-w-[200px] text-right">
-                                      {item[field] === null ? "null" : String(item[field])}
-                                    </span>
+                                  <div className="pt-6 border-t border-slate-100 grid grid-cols-1 gap-2.5">
+                                    {FIELD_DEFS.filter(f => !["ImageBgPath", "ContentHeading", "ContentBrief", "CategoryName", "ImageThumbPath", "ImageSmPath"].includes(f.field) && visibleFields[f.field]).map(f => (
+                                      <div key={f.field} className="flex items-center justify-between gap-4 py-1 group/field">
+                                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-tighter shrink-0 transition-colors group-hover/field:text-primary">{f.field}</span>
+                                        <span className="text-[10px] font-mono text-slate-600 truncate max-w-[200px] text-right bg-slate-50 px-2 py-0.5 rounded border border-slate-100">
+                                          {item[f.field] === null ? "null" : String(item[f.field])}
+                                        </span>
+                                      </div>
+                                    ))}
                                   </div>
-                                ))}
-                              </div>
-                            </div>
+                                </div>
+                              </>
+                            )}
 
-                            <div className="px-4 py-3 bg-slate-50 border-t border-slate-100 flex items-center justify-between">
-                              <span className="text-[10px] font-medium text-slate-400">{item.create_date}</span>
-                              <a
-                                href={`https://bangladeshguardian.com/${item.Slug}/${item.ContentID}`}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="text-slate-400 hover:text-primary transition-colors"
-                              >
-                                <ExternalLink size={14} />
-                              </a>
+                            <div className="px-6 py-4 bg-slate-50 border-t border-slate-100 flex items-center justify-between group-hover:bg-primary/5 transition-colors">
+                              <div className="flex items-center gap-3">
+                                 <Calendar size={14} className="text-slate-400" />
+                                 <span className="text-[10px] font-bold text-slate-400 tracking-tight">{item.create_date}</span>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <a
+                                  href={`${source.site}/${item.Slug}/${item.ContentID}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="p-2 text-slate-400 hover:text-primary hover:bg-white rounded-lg border border-transparent hover:border-primary/20 transition-all shadow-sm active:scale-90"
+                                >
+                                  <ExternalLink size={16} />
+                                </a>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -466,27 +748,37 @@ const Inspector = () => {
                 )}
 
                 {!isLoading && activeTab === "json" && (
-                  <div className="relative">
-                    <button
-                      onClick={() => copyToClipboard(JSON.stringify(rawResponse, null, 2))}
-                      className="absolute top-4 right-4 p-2 bg-slate-800 text-slate-300 rounded-lg hover:text-white transition-colors flex items-center gap-2 text-xs"
-                    >
-                      <Copy size={14} />
-                      Copy JSON
-                    </button>
-                    <pre className="bg-slate-900 text-emerald-400 p-6 rounded-xl overflow-auto max-h-[700px] text-xs font-mono leading-relaxed">
-                      {rawResponse ? JSON.stringify(rawResponse, null, 2) : "// Awaiting data fetch..."}
+                  <div className="relative group">
+                    <div className="absolute top-4 right-4 flex gap-2">
+                       <button
+                         onClick={() => setJsonIndent(jsonIndent === 2 ? 0 : 2)}
+                         className="p-2 bg-slate-800 text-slate-300 rounded-lg hover:text-white transition-colors text-[10px] font-bold uppercase tracking-widest"
+                       >
+                         {jsonIndent === 2 ? "Minify" : "Expand"}
+                       </button>
+                       <button
+                         onClick={() => copyToClipboard(JSON.stringify(rawResponse, null, jsonIndent))}
+                         className="p-2 bg-primary text-white rounded-lg hover:shadow-lg hover:shadow-primary/20 transition-all flex items-center gap-2 text-[10px] font-bold uppercase tracking-widest"
+                       >
+                         <Copy size={14} />
+                         Copy_Manifest
+                       </button>
+                    </div>
+                    <pre className="bg-slate-900 text-emerald-400 p-8 rounded-2xl overflow-auto max-h-[750px] text-[11px] font-mono leading-relaxed border border-slate-800 shadow-2xl">
+                      {rawResponse ? JSON.stringify(rawResponse, null, jsonIndent) : "// No data available in stream"}
                     </pre>
                   </div>
                 )}
 
                 {!isLoading && !results && !error && (
-                  <div className="h-full flex flex-col items-center justify-center py-32 text-slate-400 text-center">
-                    <div className="w-20 h-20 bg-slate-100 rounded-full flex items-center justify-center mb-6">
-                      <Smartphone size={32} className="opacity-20" />
+                  <div className="h-full flex flex-col items-center justify-center py-40 text-center">
+                    <div className="w-24 h-24 bg-slate-50 rounded-3xl flex items-center justify-center mb-8 shadow-inner">
+                      <Cpu size={40} className="text-slate-200" />
                     </div>
-                    <h3 className="text-lg font-bold text-slate-800">Ready to Inspect</h3>
-                    <p className="text-sm max-w-xs mx-auto mt-2">Adjust your parameters in the sidebar and click "Fetch Data" to start the audit.</p>
+                    <h3 className="text-lg font-black text-slate-900 uppercase tracking-tight">System_Ready</h3>
+                    <p className="text-sm text-slate-500 max-w-sm mx-auto mt-3 font-medium leading-relaxed italic">
+                      "Adjust parameters in the left command console and initiate the sequence to fetch live archives."
+                    </p>
                   </div>
                 )}
               </div>
@@ -494,170 +786,110 @@ const Inspector = () => {
           </main>
         </div>
 
-        {/* Professional Documentation Section */}
+        {/* Optimized Documentation Section */}
         <section className="mt-20 pt-20 border-t border-slate-200">
-          <div className="max-w-4xl mx-auto space-y-16">
+          <div className="max-w-[1200px] mx-auto space-y-16">
             <div className="text-center">
-               <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full text-primary text-xs font-bold uppercase tracking-widest mb-6">
-                 <BookOpen size={14} /> Documentation
+               <div className="inline-flex items-center gap-3 px-5 py-2 bg-primary/10 rounded-full text-primary text-[10px] font-black uppercase tracking-[0.3em] mb-6">
+                 <ShieldCheck size={16} /> Technical Documentation
                </div>
-               <h2 className="text-4xl font-extrabold text-slate-900 tracking-tight">API Engineering Handbook</h2>
-               <p className="text-slate-500 mt-4 text-lg">A comprehensive guide to mastering the Bangladesh Guardian Archive API.</p>
+               <h2 className="text-4xl font-black text-slate-900 tracking-tighter uppercase">Protocol Engineering Handbook</h2>
+               <p className="text-slate-500 mt-4 text-lg font-medium">Standard Operating Procedures for Interacting with News Archives.</p>
             </div>
 
-            <div className="space-y-12">
-              {/* Endpoint Specs */}
-              <div className="grid md:grid-cols-5 gap-8 items-start">
-                <div className="md:col-span-2">
-                  <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Globe size={20} className="text-primary" /> Core Endpoint
-                  </h3>
-                  <p className="text-slate-500 mt-3 text-sm leading-relaxed">
-                    The Archive API facilitates robust data retrieval from the central news repository. It supports high-performance querying with native pagination and filtering.
-                  </p>
-                </div>
-                <div className="md:col-span-3 bg-slate-900 rounded-xl p-5 shadow-lg border border-slate-800">
-                   <div className="flex items-center justify-between mb-4">
-                      <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">POST URL</span>
-                      <div className="flex gap-1.5">
-                        <div className="w-2 h-2 rounded-full bg-red-500/20" />
-                        <div className="w-2 h-2 rounded-full bg-yellow-500/20" />
-                        <div className="w-2 h-2 rounded-full bg-green-500/20" />
-                      </div>
-                   </div>
-                   <code className="text-emerald-400 text-xs md:text-sm font-mono break-all">
-                     https://backoffice.bangladeshguardian.com/api-en/archive
-                   </code>
-                </div>
-              </div>
+            <div className="grid lg:grid-cols-12 gap-12">
+               {/* Left Column: Specs */}
+               <div className="lg:col-span-7 space-y-12">
+                  <div className="space-y-6">
+                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                        <Database size={18} className="text-primary" /> Response Schema Definition
+                     </h3>
+                     <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm">
+                        <table className="w-full text-left border-collapse">
+                           <thead>
+                              <tr className="bg-slate-50/50 border-b border-slate-200">
+                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Field_Key</th>
+                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Data_Type</th>
+                                 <th className="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Description</th>
+                              </tr>
+                           </thead>
+                           <tbody className="divide-y divide-slate-100">
+                              {FIELD_DEFS.map(f => (
+                                 <tr key={f.field} className="hover:bg-slate-50/50 transition-colors">
+                                    <td className="px-6 py-4 text-[11px] font-mono font-bold text-slate-900">{f.field}</td>
+                                    <td className="px-6 py-4">
+                                       <span className="px-2 py-0.5 rounded bg-slate-100 text-[9px] font-black text-slate-500 uppercase tracking-tighter">{f.type}</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-[11px] text-slate-500 font-medium leading-relaxed">{f.desc}</td>
+                                 </tr>
+                              ))}
+                           </tbody>
+                        </table>
+                     </div>
+                  </div>
+               </div>
 
-              {/* Data Schema */}
-              <div className="space-y-6">
-                 <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <FileJson size={20} className="text-primary" /> Schema Definitions
-                 </h3>
-                 <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {[
-                      { field: "ContentID", type: "Integer", desc: "Unique global identifier for the article." },
-                      { field: "CategoryID", type: "Integer", desc: "Internal ID for news classification." },
-                      { field: "CategoryName", type: "String", desc: "Human-readable category label (e.g. National)." },
-                      { field: "ContentHeading", type: "String", desc: "Primary title of the news content." },
-                      { field: "ContentBrief", type: "String", desc: "Short summary or lead paragraph text." },
-                      { field: "Slug", type: "String", desc: "URL-friendly version of the category." },
-                      { field: "URLAlies", type: "String", desc: "SEO-optimized URL slug for the article." },
-                      { field: "ImageBgPath", type: "String", desc: "Relative path to the high-resolution image." },
-                      { field: "create_date", type: "String", desc: "Formatted timestamp of article creation." },
-                    ].map(item => (
-                      <div key={item.field} className="p-4 bg-white border border-slate-200 rounded-lg hover:border-primary transition-colors group">
-                         <div className="flex items-center justify-between mb-1">
-                            <span className="text-xs font-bold text-slate-900">{item.field}</span>
-                            <span className="text-[9px] font-medium text-slate-400 uppercase">{item.type}</span>
-                         </div>
-                         <p className="text-[11px] text-slate-500 group-hover:text-slate-600 leading-normal">{item.desc}</p>
-                      </div>
-                    ))}
-                 </div>
-              </div>
-
-              {/* Implementation Patterns */}
-              <div className="space-y-6">
-                 <h3 className="text-xl font-bold text-slate-900 flex items-center gap-2">
-                    <Code2 size={20} className="text-primary" /> Implementation Patterns
-                 </h3>
-
-                 <div className="bg-white border border-slate-200 rounded-xl overflow-hidden shadow-sm">
-                   <div className="bg-slate-50 px-5 py-3 border-b border-slate-200 flex items-center justify-between">
-                      <div className="flex gap-2">
-                        <div className="px-2 py-0.5 rounded bg-emerald-100 text-emerald-700 text-[10px] font-bold">PRO_PATTERN</div>
-                        <span className="text-xs font-bold text-slate-700">Standard Fetch Hook (React)</span>
-                      </div>
-                      <button onClick={() => copyToClipboard(`const useArchive = (params) => {
-  const [data, setData] = useState([]);
-
-  useEffect(() => {
-    fetch('https://backoffice.bangladeshguardian.com/api-en/archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
+               {/* Right Column: Implementation */}
+               <div className="lg:col-span-5 space-y-8">
+                  <div className="space-y-6">
+                     <h3 className="text-sm font-black text-slate-900 uppercase tracking-widest flex items-center gap-3">
+                        <Code2 size={18} className="text-primary" /> Node_Fetch Pattern
+                     </h3>
+                     <div className="bg-slate-950 rounded-2xl overflow-hidden border border-slate-800 shadow-2xl">
+                        <div className="px-6 py-3 bg-white/5 border-b border-white/10 flex items-center justify-between">
+                           <span className="text-[10px] font-bold text-slate-500">fetch_v1.js</span>
+                           <Copy size={12} className="text-slate-500" />
+                        </div>
+                        <pre className="p-6 text-emerald-400 text-[11px] font-mono leading-relaxed">
+{`const syncArchive = async () => {
+  const req = await fetch('ARCHIVE_API', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      limit: 10,
+      offset: 0,
+      category_name: 1
     })
-    .then(res => res.json())
-    .then(json => setData(json.archive_data));
-  }, [params]);
+  });
 
-  return data;
-};`)} className="text-slate-400 hover:text-primary transition-colors"><Copy size={16} /></button>
-                   </div>
-                   <div className="p-5 overflow-x-auto bg-slate-900">
-                     <pre className="text-emerald-400 text-xs font-mono leading-relaxed">
-{`const useArchive = (params) => {
-  const [data, setData] = useState([]);
-
-  useEffect(() => {
-    fetch('https://backoffice.bangladeshguardian.com/api-en/archive', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(params)
-    })
-    .then(res => res.json())
-    .then(json => setData(json.archive_data));
-  }, [params]);
-
-  return data;
+  const { archive_data } = await req.json();
+  return archive_data.map(item => ({
+    id: item.ContentID,
+    img: MEDIA_BASE + item.ImageBgPath
+  }));
 };`}
-                     </pre>
-                   </div>
-                 </div>
+                        </pre>
+                     </div>
+                  </div>
 
-                 <div className="grid md:grid-cols-2 gap-6">
-                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-                       <h4 className="font-bold text-slate-900 mb-4">Query Optimization</h4>
-                       <ul className="space-y-3">
-                          {[
-                            "Implement debounce for date filters to prevent API flood.",
-                            "Cache category lists locally (they change infrequently).",
-                            "Handle 422 errors specifically for 'Category must be integer'.",
-                            "Use ImageSmPath for thumbnails to save bandwidth."
-                          ].map((tip, i) => (
-                            <li key={i} className="text-sm text-slate-600 flex gap-3">
-                               <CheckCircle2 size={16} className="text-primary shrink-0 mt-0.5" />
-                               {tip}
-                            </li>
-                          ))}
-                       </ul>
-                    </div>
-                    <div className="p-6 bg-slate-50 rounded-xl border border-slate-200">
-                       <h4 className="font-bold text-slate-900 mb-4">Common Pitfalls</h4>
-                       <ul className="space-y-3">
-                          {[
-                            "Passing Category Name instead of Category ID.",
-                            "Incorrect date format (Always use YYYY-MM-DD).",
-                            "Missing 'Content-Type: application/json' header.",
-                            "Neglecting to prefix image paths with the media server URL."
-                          ].map((pitfall, i) => (
-                            <li key={i} className="text-sm text-slate-600 flex gap-3">
-                               <AlertCircle size={16} className="text-red-400 shrink-0 mt-0.5" />
-                               {pitfall}
-                            </li>
-                          ))}
-                       </ul>
-                    </div>
-                 </div>
-              </div>
+                  <div className="p-8 bg-slate-900 rounded-3xl border border-slate-800 space-y-6">
+                     <h4 className="text-xs font-black text-white uppercase tracking-widest">Infrastructure Notes</h4>
+                     <ul className="space-y-4">
+                        {[
+                          "Both BG and DB share identical JSON schemas.",
+                          "Experimental 'q' param handles keyword scanning.",
+                          "Images must be prefixed with media server URL.",
+                          "Categories are strictly integer-based.",
+                          "Timestamps are pre-formatted for display."
+                        ].map((note, i) => (
+                           <li key={i} className="flex gap-4 items-start">
+                              <div className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 shrink-0" />
+                              <span className="text-xs text-slate-400 font-medium leading-relaxed">{note}</span>
+                           </li>
+                        ))}
+                     </ul>
+                  </div>
+               </div>
             </div>
 
-            <div className="bg-slate-900 rounded-2xl p-10 text-center relative overflow-hidden shadow-2xl">
-               <div className="absolute top-0 right-0 w-64 h-64 bg-primary/20 rounded-full blur-[100px] -z-0" />
-               <div className="relative z-10">
-                 <h3 className="text-3xl font-bold text-white mb-4">System Verification Complete</h3>
-                 <p className="text-slate-400 max-w-lg mx-auto mb-8">
-                   You have successfully audited the Bangladesh Guardian API. This testing ground is now fully optimized for professional integration.
-                 </p>
-                 <button
-                   onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
-                   className="px-8 py-3 bg-white text-slate-900 font-bold rounded-xl hover:bg-slate-100 transition-all shadow-lg active:scale-95"
-                 >
-                   Back to Control Panel
-                 </button>
+            <div className="bg-white rounded-3xl p-12 border-2 border-slate-900 shadow-[8px_8px_0_0_#0f172a] text-center">
+               <h3 className="text-2xl font-black text-slate-900 uppercase tracking-tight">Audit Protocol Terminated</h3>
+               <p className="text-slate-500 max-w-lg mx-auto mt-4 font-medium leading-relaxed">
+                 Operational capability confirmed for multiple news segments. Engine is optimized for rapid forensic inspection and data extraction.
+               </p>
+               <div className="flex flex-wrap justify-center gap-4 mt-8">
+                  <button onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} className="px-8 py-3 bg-slate-900 text-white font-black text-xs uppercase tracking-widest rounded-xl hover:bg-primary transition-all active:scale-95">Restart_Sequence</button>
+                  <button onClick={() => navigate('/')} className="px-8 py-3 bg-white border-2 border-slate-900 text-slate-900 font-black text-xs uppercase tracking-widest rounded-xl hover:bg-slate-50 transition-all active:scale-95">Exit_Module</button>
                </div>
             </div>
           </div>
