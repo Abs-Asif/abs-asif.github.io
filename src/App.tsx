@@ -6,6 +6,7 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import Index from "./pages/Index";
 import Dictionary from "./pages/Dictionary";
 import AIChat from "./pages/AIChat";
+import Inspector from "./pages/Inspector";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -20,6 +21,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/D" element={<Dictionary />} />
           <Route path="/ai" element={<AIChat />} />
+          <Route path="/Inspector" element={<Inspector />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
