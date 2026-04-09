@@ -61,8 +61,15 @@ interface QueryParams {
 const SOURCES = [
   {
     id: "bg",
-    name: "Bangladesh Guardian",
+    name: "BG English",
     api: "https://backoffice.bangladeshguardian.com/api-en/archive",
+    site: "https://bangladeshguardian.com",
+    media: "https://backoffice.bangladeshguardian.com/media/imgAll/"
+  },
+  {
+    id: "bg-bn",
+    name: "BG Bangla",
+    api: "https://backoffice.bangladeshguardian.com/api/archive",
     site: "https://bangladeshguardian.com",
     media: "https://backoffice.bangladeshguardian.com/media/imgAll/"
   },
@@ -72,6 +79,13 @@ const SOURCES = [
     api: "https://backoffice.daily-bangladesh.com/api/archive",
     site: "https://daily-bangladesh.com",
     media: "https://backoffice.daily-bangladesh.com/media/imgAll/"
+  },
+  {
+    id: "c24",
+    name: "Channel24",
+    api: "https://backoffice.channel24bd.tv/api/archive",
+    site: "https://www.channel24bd.tv",
+    media: "https://backoffice.channel24bd.tv/media/imgAll/"
   }
 ];
 
@@ -191,7 +205,7 @@ const Inspector = () => {
           <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter truncate">Archive_Inspector</h1>
         </div>
         <div className="flex flex-wrap items-center gap-4 justify-center w-full lg:w-auto">
-          <div className="flex border-2 border-black">
+          <div className="flex flex-wrap border-2 border-black">
             {SOURCES.map(s => (
               <button
                 key={s.id}
