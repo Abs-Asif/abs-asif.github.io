@@ -80,8 +80,102 @@ const NEWS_SOURCES: NewsSource[] = [
   { id: "swadhindesh", name: "Swadhin Desh", url: "https://www.swadhindesh.com/feed/", type: 'rss' },
   { id: "kolikal", name: "Kolikal", url: "https://kolikal.com/feed/", type: 'rss' },
   { id: "dainikbanglarnabokantha", name: "Dainik Banglar Nabokantha", url: "https://dainikbanglarnabokantha.com/feed/", type: 'rss' },
-  { id: "karatoa", name: "Karatoa", url: "https://karatoa.com.bd/sitemap.xml", type: 'sitemap-standard' },
+  { id: "durbinnews", name: "Durbin News", url: "https://durbinnews.com/sitemap.xml", type: 'sitemap-standard' },
 ];
+
+const NewsItemCard = ({ item, viewMode }: { item: NewsItem, viewMode: "grid" | "list" }) => {
+    const [imageUrl, setImageUrl] = useState<string | undefined>(item.image);
+    const [isFetchingImage, setIsFetchingImage] = useState(false);
+    const fetchedRef = useRef(false);
+
+    useEffect(() => {
+        if (!imageUrl && !fetchedRef.current) {
+            fetchedRef.current = true;
+            setIsFetchingImage(true);
+            // Try to fetch metadata using NEWSOrigin (proxy 0)
+            fetch(getProxyUrl(item.link, 0))
+                .then(res => res.json())
+                .then(data => {
+                    if (data.image) {
+                        setImageUrl(data.image);
+                    }
+                })
+                .catch(() => {})
+                .finally(() => setIsFetchingImage(false));
+        }
+    }, [item.link, imageUrl]);
+
+    return (
+        <article
+            className={cn(
+                "border-4 border-black bg-white group hover:shadow-[6px_6px_0_0_#000] transition-all flex flex-col",
+                viewMode === "list" && "md:flex-row"
+            )}
+        >
+            {imageUrl ? (
+                <div className={cn(
+                    "overflow-hidden border-black bg-slate-100 relative",
+                    viewMode === "grid" ? "aspect-video border-b-4" : "w-full md:w-48 md:border-r-4 aspect-square md:aspect-auto"
+                )}>
+                    <img
+                        src={getProxyUrl(imageUrl)}
+                        alt={item.title}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                        loading="lazy"
+                        onError={(e) => {
+                            (e.target as HTMLImageElement).parentElement?.remove();
+                        }}
+                    />
+                    <div className="absolute top-2 left-2 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
+                        {item.source}
+                    </div>
+                </div>
+            ) : isFetchingImage ? (
+                <div className={cn(
+                    "bg-slate-50 flex items-center justify-center relative",
+                    viewMode === "grid" ? "aspect-video border-b-4" : "w-full md:w-48 md:border-r-4 aspect-square md:aspect-auto"
+                )}>
+                    <Loader2 size={20} className="animate-spin text-slate-300" />
+                </div>
+            ) : null}
+            <div className="p-4 flex-1 flex flex-col gap-3">
+                <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase">
+                        <Calendar size={10} />
+                        {item.pubDate.toLocaleDateString()}
+                        <span className="mx-1">•</span>
+                        <Clock size={10} />
+                        {item.pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </div>
+                    {!imageUrl && !isFetchingImage && (
+                        <span className="bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
+                            {item.source}
+                        </span>
+                    )}
+                </div>
+                <h3 className="text-sm md:text-base font-black uppercase leading-tight group-hover:text-primary transition-colors">
+                    {item.title}
+                </h3>
+                {item.description && viewMode === "grid" && (
+                    <p className="text-[10px] font-bold text-slate-600 line-clamp-2">
+                        {item.description}
+                    </p>
+                )}
+                <div className="mt-auto pt-4 flex items-center justify-between border-t-2 border-slate-100">
+                    <a
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-[10px] font-black uppercase flex items-center gap-1 hover:underline text-primary"
+                    >
+                        INTERROGATE_DOC <ExternalLink size={12} />
+                    </a>
+                    <span className="text-[9px] font-bold text-slate-300">ID: {item.id.substring(0, 6)}</span>
+                </div>
+            </div>
+        </article>
+    );
+};
 
 const Newsroom = () => {
   const navigate = useNavigate();
@@ -114,7 +208,7 @@ const Newsroom = () => {
 
     if (xml.getElementsByTagName("parsererror").length > 0) return [];
 
-    // RSS 2.0 / 0.9 / 1.0
+    // RSS Detection
     const rssItems = xml.getElementsByTagName("item");
     if (rssItems.length > 0) {
         for (let i = 0; i < rssItems.length; i++) {
@@ -123,21 +217,10 @@ const Newsroom = () => {
             let link = item.getElementsByTagName("link")[0]?.textContent ||
                        item.getElementsByTagName("guid")[0]?.textContent || "";
 
-            // WordPress & CDATA Link Hack
-            if (!link || link.trim().length < 5) {
-                const linkTag = item.getElementsByTagName("link")[0];
-                if (linkTag) {
-                    link = linkTag.textContent || linkTag.innerHTML || "";
-                    if (!link.includes("http")) {
-                        // Look for text nodes manually
-                        for (let j=0; j<linkTag.childNodes.length; j++) {
-                            if (linkTag.childNodes[j].nodeType === 3 || linkTag.childNodes[j].nodeType === 4) {
-                                link = linkTag.childNodes[j].nodeValue || "";
-                                break;
-                            }
-                        }
-                    }
-                }
+            // Fix for WordPress feeds where link is a text node
+            if (!link && item.getElementsByTagName("link")[0]) {
+                const linkNode = item.getElementsByTagName("link")[0];
+                link = linkNode.nextSibling?.nodeValue || linkNode.textContent || "";
             }
 
             const pubDateStr = item.getElementsByTagName("pubDate")[0]?.textContent ||
@@ -150,17 +233,14 @@ const Newsroom = () => {
             let image = "";
             const mediaContent = item.getElementsByTagName("media:content")[0];
             if (mediaContent) image = mediaContent.getAttribute("url") || "";
-
             if (!image) {
                 const enclosure = item.getElementsByTagName("enclosure")[0];
                 if (enclosure) image = enclosure.getAttribute("url") || "";
             }
-
             if (!image) {
                 const thumb = item.getElementsByTagName("media:thumbnail")[0];
                 if (thumb) image = thumb.getAttribute("url") || "";
             }
-
             if (!image) {
                 const imgMatch = (content || description).match(/<img[^>]+src="([^">]+)"/);
                 if (imgMatch) image = imgMatch[1];
@@ -181,7 +261,7 @@ const Newsroom = () => {
         }
     }
 
-    // Atom
+    // Atom Detection
     const atomEntries = xml.getElementsByTagName("entry");
     if (atomEntries.length > 0 && extracted.length === 0) {
         for (let i = 0; i < atomEntries.length; i++) {
@@ -217,7 +297,7 @@ const Newsroom = () => {
         }
     }
 
-    // Sitemap (Google News / standard)
+    // Sitemap Detection
     const urls = xml.getElementsByTagName("url");
     if (urls.length > 0 && extracted.length === 0) {
         for (let i = 0; i < urls.length; i++) {
@@ -236,8 +316,21 @@ const Newsroom = () => {
                 const newsDate = newsNode.getElementsByTagName("news:publication_date")[0]?.textContent ||
                                  newsNode.getElementsByTagName("publication_date")[0]?.textContent || "";
                 if (newsDate) pubDate = new Date(newsDate);
-            } else {
-                title = loc.split('/').filter(Boolean).pop()?.replace(/(-|.html)/g, ' ') || "Untitled";
+            }
+
+            if (!title || title.length < 5 || title.match(/^\d+$/)) {
+                // Better slug extraction
+                const parts = loc.split('/').filter(Boolean);
+                let slug = parts.pop() || "";
+                // If the last part is a number or short, try to combine with the one before it
+                if ((slug.match(/^\d+$/) || slug.length < 5) && parts.length > 0) {
+                    const prev = parts.pop() || "";
+                    if (!prev.includes("http")) {
+                        slug = prev + " " + slug;
+                    }
+                }
+                title = decodeURIComponent(slug).replace(/(-|_|\.html|\.php)/g, ' ').trim();
+                // Capitalize
                 title = title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
                 if (lastmod) pubDate = new Date(lastmod);
             }
@@ -312,8 +405,6 @@ const Newsroom = () => {
     setIsLoading(false);
     if (allItems.length > 0) {
         toast.success(`Success: ${allItems.length} news packets interrogated`);
-    } else {
-        toast.error("Handshake failed: Zero packets received");
     }
   };
 
@@ -481,68 +572,7 @@ const Newsroom = () => {
                     )}>
                         {displayedItems.length > 0 ? (
                             displayedItems.map((item) => (
-                                <article
-                                    key={item.id}
-                                    className={cn(
-                                        "border-4 border-black bg-white group hover:shadow-[6px_6px_0_0_#000] transition-all flex flex-col",
-                                        viewMode === "list" && "md:flex-row"
-                                    )}
-                                >
-                                    {item.image && (
-                                        <div className={cn(
-                                            "overflow-hidden border-black bg-slate-100 relative",
-                                            viewMode === "grid" ? "aspect-video border-b-4" : "w-full md:w-48 md:border-r-4 aspect-square md:aspect-auto"
-                                        )}>
-                                            <img
-                                                src={getProxyUrl(item.image)}
-                                                alt={item.title}
-                                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
-                                                loading="lazy"
-                                                onError={(e) => {
-                                                    (e.target as HTMLImageElement).parentElement?.remove();
-                                                }}
-                                            />
-                                            <div className="absolute top-2 left-2 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
-                                                {item.source}
-                                            </div>
-                                        </div>
-                                    )}
-                                    <div className="p-4 flex-1 flex flex-col gap-3">
-                                        <div className="flex items-center justify-between">
-                                            <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase">
-                                                <Calendar size={10} />
-                                                {item.pubDate.toLocaleDateString()}
-                                                <span className="mx-1">•</span>
-                                                <Clock size={10} />
-                                                {item.pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                                            </div>
-                                            {!item.image && (
-                                                <span className="bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
-                                                    {item.source}
-                                                </span>
-                                            )}
-                                        </div>
-                                        <h3 className="text-sm md:text-base font-black uppercase leading-tight group-hover:text-primary transition-colors">
-                                            {item.title}
-                                        </h3>
-                                        {item.description && viewMode === "grid" && (
-                                            <p className="text-[10px] font-bold text-slate-600 line-clamp-2">
-                                                {item.description}
-                                            </p>
-                                        )}
-                                        <div className="mt-auto pt-4 flex items-center justify-between border-t-2 border-slate-100">
-                                            <a
-                                                href={item.link}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="text-[10px] font-black uppercase flex items-center gap-1 hover:underline text-primary"
-                                            >
-                                                INTERROGATE_DOC <ExternalLink size={12} />
-                                            </a>
-                                            <span className="text-[9px] font-bold text-slate-300">CRC_{item.id.substring(0, 4).toUpperCase()}</span>
-                                        </div>
-                                    </div>
-                                </article>
+                                <NewsItemCard key={item.id} item={item} viewMode={viewMode} />
                             ))
                         ) : (
                             <div className="col-span-full border-4 border-black p-20 bg-white text-center shadow-[8px_8px_0_0_#000]">
