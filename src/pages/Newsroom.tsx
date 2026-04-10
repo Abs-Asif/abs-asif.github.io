@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import {
   ArrowLeft,
   Search,
@@ -6,19 +6,19 @@ import {
   ExternalLink,
   Filter,
   RefreshCw,
-  Newspaper,
   Calendar,
   Clock,
   LayoutGrid,
   List,
   ChevronDown,
-  Globe,
-  Image as ImageIcon
+  Image as ImageIcon,
+  AlertTriangle,
+  Globe
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { fetchXmlWithProxy, getProxyUrl } from "@/lib/api-utils";
+import { fetchXmlWithProxy, getProxyUrl, PROXIES } from "@/lib/api-utils";
 
 interface NewsItem {
   id: string;
@@ -90,6 +90,9 @@ const Newsroom = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+  const [failedSources, setFailedSources] = useState<string[]>([]);
+
+  const initialized = useRef(false);
 
   const getSourceUrl = (source: NewsSource) => {
     const now = new Date();
@@ -104,129 +107,162 @@ const Newsroom = () => {
     return url;
   };
 
-  const parseRss = (xml: Document, source: NewsSource): NewsItem[] => {
-    const items: NewsItem[] = [];
-    const entries = xml.querySelectorAll("item");
-    entries.forEach((entry) => {
-      const title = entry.querySelector("title")?.textContent || "";
-      const link = entry.querySelector("link")?.textContent || "";
-      const pubDateStr = entry.querySelector("pubDate")?.textContent || "";
-      const description = entry.querySelector("description")?.textContent || "";
+  const universalParser = (xml: Document, source: NewsSource): NewsItem[] => {
+    const extracted: NewsItem[] = [];
 
-      // Try to find image
-      let image = "";
-      const mediaContent = entry.getElementsByTagName("media:content")[0];
-      if (mediaContent) {
-        image = mediaContent.getAttribute("url") || "";
-      }
-      if (!image) {
-        const enclosure = entry.querySelector("enclosure");
-        if (enclosure) {
-          image = enclosure.getAttribute("url") || "";
-        }
-      }
-      if (!image) {
-          // Try to extract from description html
-          const imgMatch = description.match(/<img[^>]+src="([^">]+)"/);
-          if (imgMatch) image = imgMatch[1];
-      }
+    // 1. Try RSS / Atom
+    const rssItems = xml.querySelectorAll("item");
+    const atomEntries = xml.querySelectorAll("entry");
 
-      items.push({
-        id: link || Math.random().toString(36).substring(2, 11),
-        title,
-        link,
-        pubDate: new Date(pubDateStr),
-        source: source.name,
-        sourceId: source.id,
-        image,
-        description: description.replace(/<[^>]*>?/gm, '').substring(0, 150) + "..."
-      });
-    });
-    return items;
-  };
+    if (rssItems.length > 0) {
+        rssItems.forEach(item => {
+            const title = item.querySelector("title")?.textContent || "";
+            const link = item.querySelector("link")?.textContent || "";
+            const pubDateStr = item.querySelector("pubDate")?.textContent || item.querySelector("dc\\:date")?.textContent || "";
+            const description = item.querySelector("description")?.textContent || "";
+            const content = item.getElementsByTagName("content:encoded")[0]?.textContent || "";
 
-  const parseSitemapNews = (xml: Document, source: NewsSource): NewsItem[] => {
-    const items: NewsItem[] = [];
-    const urls = xml.querySelectorAll("url");
-    urls.forEach((urlNode) => {
-      const loc = urlNode.querySelector("loc")?.textContent || "";
-      const newsNode = urlNode.getElementsByTagName("news:news")[0];
-      if (newsNode) {
-        const title = newsNode.getElementsByTagName("news:title")[0]?.textContent || "";
-        const pubDateStr = newsNode.getElementsByTagName("news:publication_date")[0]?.textContent || "";
+            let image = "";
+            const mediaContent = item.getElementsByTagName("media:content")[0];
+            if (mediaContent) image = mediaContent.getAttribute("url") || "";
+            if (!image) {
+                const enclosure = item.querySelector("enclosure");
+                if (enclosure) image = enclosure.getAttribute("url") || "";
+            }
+            if (!image) {
+                const imgMatch = (content || description).match(/<img[^>]+src="([^">]+)"/);
+                if (imgMatch) image = imgMatch[1];
+            }
 
-        items.push({
-          id: loc || Math.random().toString(36).substring(2, 11),
-          title,
-          link: loc,
-          pubDate: new Date(pubDateStr),
-          source: source.name,
-          sourceId: source.id,
-          description: ""
+            extracted.push({
+                id: link || Math.random().toString(36).substring(2, 11),
+                title,
+                link,
+                pubDate: new Date(pubDateStr),
+                source: source.name,
+                sourceId: source.id,
+                image,
+                description: description.replace(/<[^>]*>?/gm, '').substring(0, 150).trim() + "..."
+            });
         });
-      } else {
-          // Fallback for standard sitemap nodes if they happen to be mixed in
-          const lastmod = urlNode.querySelector("lastmod")?.textContent || "";
-          if (loc && lastmod) {
-              items.push({
-                  id: loc,
-                  title: loc.split('/').pop()?.replace(/-/g, ' ') || "Untitled",
-                  link: loc,
-                  pubDate: new Date(lastmod),
-                  source: source.name,
-                  sourceId: source.id,
-                  description: ""
-              });
-          }
-      }
-    });
-    return items;
-  };
+    } else if (atomEntries.length > 0) {
+        atomEntries.forEach(entry => {
+            const title = entry.querySelector("title")?.textContent || "";
+            const link = entry.querySelector("link[rel='alternate']")?.getAttribute("href") || entry.querySelector("link")?.getAttribute("href") || "";
+            const pubDateStr = entry.querySelector("updated")?.textContent || entry.querySelector("published")?.textContent || "";
+            const summary = entry.querySelector("summary")?.textContent || entry.querySelector("content")?.textContent || "";
 
-  const parseStandardSitemap = (xml: Document, source: NewsSource): NewsItem[] => {
-      const items: NewsItem[] = [];
-      const urls = xml.querySelectorAll("url");
-      urls.forEach((urlNode) => {
-          const loc = urlNode.querySelector("loc")?.textContent || "";
-          const lastmod = urlNode.querySelector("lastmod")?.textContent || "";
-          if (loc) {
-              items.push({
-                  id: loc,
-                  title: loc.split('/').pop()?.replace(/(-|.html)/g, ' ') || "Untitled",
-                  link: loc,
-                  pubDate: lastmod ? new Date(lastmod) : new Date(),
-                  source: source.name,
-                  sourceId: source.id,
-                  description: ""
-              });
-          }
-      });
-      return items;
+            let image = "";
+            const imgMatch = summary.match(/<img[^>]+src="([^">]+)"/);
+            if (imgMatch) image = imgMatch[1];
+
+            extracted.push({
+                id: link || Math.random().toString(36).substring(2, 11),
+                title,
+                link,
+                pubDate: new Date(pubDateStr),
+                source: source.name,
+                sourceId: source.id,
+                image,
+                description: summary.replace(/<[^>]*>?/gm, '').substring(0, 150).trim() + "..."
+            });
+        });
+    } else {
+        // 2. Try Sitemap (Google News or Standard)
+        const urls = xml.querySelectorAll("url");
+        urls.forEach(urlNode => {
+            const loc = urlNode.querySelector("loc")?.textContent || "";
+            const lastmod = urlNode.querySelector("lastmod")?.textContent || "";
+            const newsNode = urlNode.getElementsByTagName("news:news")[0];
+
+            let title = "";
+            let pubDate = new Date();
+            let image = "";
+
+            if (newsNode) {
+                title = newsNode.getElementsByTagName("news:title")[0]?.textContent || "";
+                const newsDate = newsNode.getElementsByTagName("news:publication_date")[0]?.textContent || "";
+                if (newsDate) pubDate = new Date(newsDate);
+            } else {
+                title = loc.split('/').filter(Boolean).pop()?.replace(/(-|.html)/g, ' ') || "Untitled";
+                title = title.split(' ').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                if (lastmod) pubDate = new Date(lastmod);
+            }
+
+            const imageNode = urlNode.getElementsByTagName("image:image")[0];
+            if (imageNode) {
+                image = imageNode.getElementsByTagName("image:loc")[0]?.textContent || "";
+            }
+
+            if (loc) {
+                extracted.push({
+                    id: loc,
+                    title,
+                    link: loc,
+                    pubDate,
+                    source: source.name,
+                    sourceId: source.id,
+                    image,
+                    description: ""
+                });
+            }
+        });
+    }
+
+    return extracted;
   };
 
   const fetchAllNews = async () => {
+    if (isLoading) return;
     setIsLoading(true);
+    setFailedSources([]);
+
     let allItems: NewsItem[] = [];
 
-    const fetchPromises = NEWS_SOURCES.map(async (source, index) => {
-      try {
-        const url = getSourceUrl(source);
-        const xml = await fetchXmlWithProxy(url, index % 5);
-        let sourceItems: NewsItem[] = [];
+    const fetchPromises = NEWS_SOURCES.map(async (source) => {
+      // Try multiple proxies in sequence for each source
+      // Start with NEWSOrigin if appropriate, then fall back
+      const proxiesToTry = [0, 1, 2, 4]; // NEWSOrigin, AllOrigins, CodeTabs, Cors.lol
 
-        if (source.type === 'rss') {
-          sourceItems = parseRss(xml, source);
-        } else if (source.type === 'sitemap-news' || source.type === 'sitemap-daily' || source.type === 'sitemap-monthly' || source.type === 'php-sitemap') {
-          sourceItems = parseSitemapNews(xml, source);
-        } else if (source.type === 'sitemap-standard') {
-          sourceItems = parseStandardSitemap(xml, source);
-        }
+      for (const proxyIdx of proxiesToTry) {
+          try {
+              const url = getSourceUrl(source);
+              // NEWSOrigin (index 0) returns JSON for HTML/News, might need special handling
+              const response = await fetch(getProxyUrl(url, proxyIdx));
+              if (!response.ok) continue;
 
-        return sourceItems;
-      } catch (err) {
-        console.error(`Failed to fetch from ${source.name}:`, err);
-        return [];
+              const contentType = response.headers.get("content-type") || "";
+              let sourceItems: NewsItem[] = [];
+
+              if (contentType.includes("json")) {
+                  const data = await response.json();
+                  // If it's NEWSOrigin's metadata format, we might only get ONE item or it might be a feed dump
+                  if (data.title && data.url === url && data.title.includes("<?xml")) {
+                      // NEWSOrigin sometimes wraps XML in its JSON title field
+                      const parser = new DOMParser();
+                      const xml = parser.parseFromString(data.title, "text/xml");
+                      sourceItems = universalParser(xml, source);
+                  } else if (data.contents) {
+                      // AllOrigins format (if not using /raw)
+                      const parser = new DOMParser();
+                      const xml = parser.parseFromString(data.contents, "text/xml");
+                      sourceItems = universalParser(xml, source);
+                  }
+              } else {
+                  const text = await response.text();
+                  const parser = new DOMParser();
+                  const xml = parser.parseFromString(text, "text/xml");
+                  sourceItems = universalParser(xml, source);
+              }
+
+              if (sourceItems.length > 0) return sourceItems;
+          } catch (err) {
+              continue;
+          }
       }
+
+      setFailedSources(prev => [...prev, source.name]);
+      return [];
     });
 
     const results = await Promise.all(fetchPromises);
@@ -234,16 +270,29 @@ const Newsroom = () => {
       allItems = [...allItems, ...res];
     });
 
-    // Sort by date newest first
+    allItems = allItems.filter(item => !isNaN(item.pubDate.getTime()));
     allItems.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime());
+
+    const seen = new Set();
+    allItems = allItems.filter(item => {
+        const val = item.link || item.id;
+        if (seen.has(val)) return false;
+        seen.add(val);
+        return true;
+    });
 
     setItems(allItems);
     setIsLoading(false);
-    toast.success(`Loaded ${allItems.length} news items from all sources`);
+    if (allItems.length > 0) {
+        toast.success(`Active_Feed: ${allItems.length} items acquired`);
+    }
   };
 
   useEffect(() => {
-    fetchAllNews();
+    if (!initialized.current) {
+        fetchAllNews();
+        initialized.current = true;
+    }
   }, []);
 
   const filteredItems = useMemo(() => {
@@ -267,7 +316,7 @@ const Newsroom = () => {
           </button>
           <div className="flex flex-col">
             <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter truncate">News_Room</h1>
-            <span className="text-[10px] font-bold text-primary">LIVE_FEED_AGGREGATOR_v1.0</span>
+            <span className="text-[10px] font-bold text-primary">UNIVERSAL_DATA_INTERROGATOR_v1.2</span>
           </div>
         </div>
 
@@ -309,12 +358,21 @@ const Newsroom = () => {
         </div>
       </div>
 
+      {failedSources.length > 0 && failedSources.length < NEWS_SOURCES.length && (
+          <div className="mb-8 border-4 border-yellow-500 bg-yellow-50 p-4 flex items-start gap-3 shadow-[4px_4px_0_0_#eab308]">
+              <AlertTriangle className="text-yellow-600 shrink-0" size={20} />
+              <div className="text-[10px] font-bold text-yellow-800 uppercase">
+                  Partial Data Acquisition. Offline Nodes: {failedSources.length}/{NEWS_SOURCES.length}. Protocol auto-retrying via failover proxies.
+              </div>
+          </div>
+      )}
+
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Filters Sidebar */}
         <aside className="lg:col-span-3 space-y-6">
             <section className="border-4 border-black p-6 bg-white shadow-[6px_6px_0_0_#000]">
                 <h2 className="text-lg font-black uppercase mb-4 flex items-center gap-2 border-b-4 border-black pb-2">
-                    <Filter size={18} /> Sources
+                    <Filter size={18} /> Source_Matrix
                 </h2>
                 <div className="space-y-2 max-h-[400px] overflow-y-auto pr-2 scrollbar-hide">
                     <button
@@ -324,7 +382,7 @@ const Newsroom = () => {
                             selectedSource === "all" ? "bg-primary text-white" : "hover:bg-slate-100"
                         )}
                     >
-                        All_Sources ({items.length})
+                        Master_Stream ({items.length})
                     </button>
                     {NEWS_SOURCES.map(source => {
                         const count = items.filter(i => i.sourceId === source.id).length;
@@ -347,19 +405,23 @@ const Newsroom = () => {
 
             <section className="border-4 border-black p-6 bg-slate-900 text-white shadow-[6px_6px_0_0_#000]">
                 <h2 className="text-lg font-black uppercase mb-4 flex items-center gap-2 text-primary border-b-2 border-primary/30 pb-2">
-                    <Clock size={18} /> Stats
+                    <Clock size={18} /> Log_Manifest
                 </h2>
                 <div className="space-y-4 text-[10px] font-bold">
                     <div className="flex justify-between">
-                        <span className="text-slate-400">TOTAL_ITEMS:</span>
+                        <span className="text-slate-400">INDEXED_ITEMS:</span>
                         <span>{filteredItems.length}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">ACTIVE_SOURCES:</span>
-                        <span>{new Set(items.map(i => i.sourceId)).size}</span>
+                        <span className="text-slate-400">ACTIVE_TUNNELS:</span>
+                        <span>{PROXIES.length}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">LAST_SYNC:</span>
+                        <span className="text-slate-400">STATUS:</span>
+                        <span className="text-green-400">ENCRYPTED_STREAM</span>
+                    </div>
+                    <div className="flex justify-between pt-2 border-t border-white/10">
+                        <span className="text-slate-400">TIME_STAMP:</span>
                         <span>{new Date().toLocaleTimeString()}</span>
                     </div>
                 </div>
@@ -371,8 +433,8 @@ const Newsroom = () => {
             {isLoading && items.length === 0 ? (
                 <div className="border-4 border-black bg-white p-20 flex flex-col items-center justify-center shadow-[8px_8px_0_0_#000]">
                     <Loader2 size={64} className="animate-spin text-primary mb-6" />
-                    <h2 className="text-2xl font-black uppercase tracking-widest">Initial_Sync_In_Progress</h2>
-                    <p className="text-sm font-bold text-slate-500 mt-2">Connecting to {NEWS_SOURCES.length} distributed news nodes...</p>
+                    <h2 className="text-2xl font-black uppercase tracking-widest text-center">Global_Handshake_Initiated</h2>
+                    <p className="text-sm font-bold text-slate-500 mt-2 text-center uppercase tracking-tighter">Syncing 41 distributed nodes via multi-proxy failover cluster...</p>
                 </div>
             ) : (
                 <>
@@ -398,8 +460,9 @@ const Newsroom = () => {
                                                 src={getProxyUrl(item.image)}
                                                 alt={item.title}
                                                 className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
+                                                loading="lazy"
                                                 onError={(e) => {
-                                                    (e.target as HTMLImageElement).style.display = 'none';
+                                                    (e.target as HTMLImageElement).parentElement?.remove();
                                                 }}
                                             />
                                             <div className="absolute top-2 left-2 bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
@@ -408,19 +471,19 @@ const Newsroom = () => {
                                         </div>
                                     )}
                                     <div className="p-4 flex-1 flex flex-col gap-3">
-                                        {!item.image && (
-                                            <div className="flex items-center gap-2">
+                                        <div className="flex items-center justify-between">
+                                            <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase">
+                                                <Calendar size={10} />
+                                                {item.pubDate.toLocaleDateString()}
+                                                <span className="mx-1">•</span>
+                                                <Clock size={10} />
+                                                {item.pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            </div>
+                                            {!item.image && (
                                                 <span className="bg-black text-white px-2 py-0.5 text-[8px] font-black uppercase">
                                                     {item.source}
                                                 </span>
-                                            </div>
-                                        )}
-                                        <div className="flex items-center gap-2 text-[9px] font-black text-slate-400 uppercase">
-                                            <Calendar size={10} />
-                                            {item.pubDate.toLocaleDateString()}
-                                            <span className="mx-1">•</span>
-                                            <Clock size={10} />
-                                            {item.pubDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                            )}
                                         </div>
                                         <h3 className="text-sm md:text-base font-black uppercase leading-tight group-hover:text-primary transition-colors">
                                             {item.title}
@@ -437,9 +500,9 @@ const Newsroom = () => {
                                                 rel="noopener noreferrer"
                                                 className="text-[10px] font-black uppercase flex items-center gap-1 hover:underline text-primary"
                                             >
-                                                Read_Full_Article <ExternalLink size={12} />
+                                                INTERROGATE_DOC <ExternalLink size={12} />
                                             </a>
-                                            <span className="text-[9px] font-bold text-slate-300">#{item.sourceId}</span>
+                                            <span className="text-[9px] font-bold text-slate-300">ID: {item.id.substring(0, 6)}</span>
                                         </div>
                                     </div>
                                 </article>
@@ -447,8 +510,8 @@ const Newsroom = () => {
                         ) : (
                             <div className="col-span-full border-4 border-black p-20 bg-white text-center">
                                 <ImageIcon size={48} className="mx-auto text-slate-200 mb-4" />
-                                <h3 className="text-xl font-black uppercase">No_Results_Found</h3>
-                                <p className="text-sm font-bold text-slate-400">Adjust your search or filter parameters.</p>
+                                <h3 className="text-xl font-black uppercase">Null_Result_Return</h3>
+                                <p className="text-sm font-bold text-slate-400">Zero data packets matched specified keywords.</p>
                             </div>
                         )}
                     </div>
@@ -460,7 +523,7 @@ const Newsroom = () => {
                                 className="px-12 py-4 bg-white text-black border-4 border-black font-black uppercase shadow-[6px_6px_0_0_#000] hover:bg-primary hover:text-white hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all flex items-center gap-3"
                             >
                                 <ChevronDown size={24} />
-                                Load_More_Results (+50)
+                                FETCH_SEQUENTIAL_BUFFER (+50)
                             </button>
                         </div>
                     )}
@@ -475,36 +538,35 @@ const Newsroom = () => {
               <div className="space-y-4 max-w-md">
                   <div className="flex items-center gap-2">
                       <div className="w-6 h-6 bg-primary border-2 border-black" />
-                      <h4 className="text-xl font-black uppercase tracking-tighter">Newsroom_Protocol</h4>
+                      <h4 className="text-xl font-black uppercase tracking-tighter">System_Logistics</h4>
                   </div>
                   <p className="text-xs font-bold text-slate-500 leading-relaxed uppercase">
-                      Decentralized news aggregation engine utilizing distributed CORS proxies to bypass origin restrictions and normalize heterogeneous XML streams into a unified data schema.
+                      Decentralized ingestion engine with multi-layered proxy failover. Normalized 8-field schema implementation for heterogeneous Bangladeshi news streams.
                   </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
                   <div className="space-y-2">
                       <span className="text-[10px] font-black text-primary uppercase">Engine</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
-                          <li>v1.0.4-stable</li>
-                          <li>React 18.3</li>
-                          <li>TailwindCSS</li>
+                          <li>v1.2.0-stable</li>
+                          <li>Failover_L3</li>
+                          <li>React_v18</li>
                       </ul>
                   </div>
                   <div className="space-y-2">
                       <span className="text-[10px] font-black text-primary uppercase">Proxies</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
-                          <li>AllOrigins</li>
-                          <li>CodeTabs</li>
-                          <li>CorsProxy.io</li>
-                          <li>Cors.lol</li>
+                          <li>NEWSOrigin_L1</li>
+                          <li>AllOrigins_L2</li>
+                          <li>CodeTabs_L3</li>
                       </ul>
                   </div>
                   <div className="space-y-2">
-                      <span className="text-[10px] font-black text-primary uppercase">Contact</span>
+                      <span className="text-[10px] font-black text-primary uppercase">Authority</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
-                          <li>@abs-asif</li>
-                          <li>GitHub</li>
-                          <li>LinkedIn</li>
+                          <li>Md. Abdullah Bari</li>
+                          <li>MBBS @ AFMC</li>
+                          <li>DevOps & SysArch</li>
                       </ul>
                   </div>
               </div>
