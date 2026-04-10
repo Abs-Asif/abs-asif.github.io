@@ -12,24 +12,57 @@ export const getProxyUrl = (url: string, index?: number) => {
   return `${proxyBase}${encodeURIComponent(url)}`;
 };
 
-export const fetchWithProxy = async (url: string, proxyIndex?: number) => {
-  const proxiedUrl = getProxyUrl(url, proxyIndex);
-  const response = await fetch(proxiedUrl);
-  if (!response.ok) throw new Error(`Failed to fetch from proxy: ${response.statusText}`);
-  return response;
+export const fetchWithProxyFallback = async (url: string, preferredIndices?: number[]) => {
+    const indices = preferredIndices || [0, 1, 2, 4];
+
+    for (const i of indices) {
+        try {
+            const proxiedUrl = getProxyUrl(url, i);
+            const response = await fetch(proxiedUrl);
+            if (response.ok) {
+                const contentType = response.headers.get("content-type") || "";
+                let text = "";
+                if (contentType.includes("json")) {
+                    const data = await response.json();
+                    text = data.contents || data.title || "";
+
+                    // Validate if we got actual content or just metadata
+                    if (i === 0) {
+                        const isXmlUrl = url.includes("feed") || url.includes("xml") || url.includes("sitemap");
+                        const looksLikeXml = text.includes("<?xml") || text.includes("<rss") || text.includes("<urlset");
+                        if (isXmlUrl && !looksLikeXml) continue; // Skip NEWSOrigin metadata for XML urls
+                    }
+                } else {
+                    text = await response.text();
+                }
+
+                if (text && text.length > 50) {
+                    return { text, proxyIndex: i };
+                }
+            }
+        } catch (e) {
+            // silent fail
+        }
+    }
+    throw new Error(`All proxies failed for ${url}`);
 };
 
 export const fetchXmlWithProxy = async (url: string, proxyIndex?: number) => {
-  const response = await fetchWithProxy(url, proxyIndex);
-  const contentType = response.headers.get("content-type") || "";
   let text = "";
-
-  if (contentType.includes("json")) {
-      const data = await response.json();
-      // Handle NEWSOrigin or AllOrigins JSON wrappers
-      text = data.contents || data.title || "";
+  if (proxyIndex !== undefined) {
+      const response = await fetch(getProxyUrl(url, proxyIndex));
+      if (response.ok) {
+          const contentType = response.headers.get("content-type") || "";
+          if (contentType.includes("json")) {
+              const data = await response.json();
+              text = data.contents || data.title || "";
+          } else {
+              text = await response.text();
+          }
+      }
   } else {
-      text = await response.text();
+      const result = await fetchWithProxyFallback(url);
+      text = result.text;
   }
 
   const parser = new DOMParser();

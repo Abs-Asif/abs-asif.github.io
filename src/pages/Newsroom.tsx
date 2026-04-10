@@ -13,12 +13,13 @@ import {
   ChevronDown,
   Image as ImageIcon,
   AlertTriangle,
-  Globe
+  Globe,
+  Database
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { fetchXmlWithProxy, getProxyUrl, PROXIES } from "@/lib/api-utils";
+import { fetchXmlWithProxy, getProxyUrl, PROXIES, fetchWithProxyFallback } from "@/lib/api-utils";
 
 interface NewsItem {
   id: string;
@@ -91,6 +92,7 @@ const Newsroom = () => {
   const [selectedSource, setSelectedSource] = useState<string>("all");
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [failedSources, setFailedSources] = useState<string[]>([]);
+  const [activeProxies, setActiveProxies] = useState<number>(0);
 
   const initialized = useRef(false);
 
@@ -110,47 +112,93 @@ const Newsroom = () => {
   const universalParser = (xml: Document, source: NewsSource): NewsItem[] => {
     const extracted: NewsItem[] = [];
 
-    // 1. Try RSS / Atom
-    const rssItems = xml.querySelectorAll("item");
-    const atomEntries = xml.querySelectorAll("entry");
+    if (xml.getElementsByTagName("parsererror").length > 0) return [];
 
+    // RSS 2.0 / 0.9 / 1.0
+    const rssItems = xml.getElementsByTagName("item");
     if (rssItems.length > 0) {
-        rssItems.forEach(item => {
-            const title = item.querySelector("title")?.textContent || "";
-            const link = item.querySelector("link")?.textContent || "";
-            const pubDateStr = item.querySelector("pubDate")?.textContent || item.querySelector("dc\\:date")?.textContent || "";
-            const description = item.querySelector("description")?.textContent || "";
+        for (let i = 0; i < rssItems.length; i++) {
+            const item = rssItems[i];
+            const title = item.getElementsByTagName("title")[0]?.textContent || "";
+            let link = item.getElementsByTagName("link")[0]?.textContent ||
+                       item.getElementsByTagName("guid")[0]?.textContent || "";
+
+            // WordPress & CDATA Link Hack
+            if (!link || link.trim().length < 5) {
+                const linkTag = item.getElementsByTagName("link")[0];
+                if (linkTag) {
+                    link = linkTag.textContent || linkTag.innerHTML || "";
+                    if (!link.includes("http")) {
+                        // Look for text nodes manually
+                        for (let j=0; j<linkTag.childNodes.length; j++) {
+                            if (linkTag.childNodes[j].nodeType === 3 || linkTag.childNodes[j].nodeType === 4) {
+                                link = linkTag.childNodes[j].nodeValue || "";
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+
+            const pubDateStr = item.getElementsByTagName("pubDate")[0]?.textContent ||
+                               item.getElementsByTagName("dc:date")[0]?.textContent ||
+                               item.getElementsByTagName("published")[0]?.textContent || "";
+
+            const description = item.getElementsByTagName("description")[0]?.textContent || "";
             const content = item.getElementsByTagName("content:encoded")[0]?.textContent || "";
 
             let image = "";
             const mediaContent = item.getElementsByTagName("media:content")[0];
             if (mediaContent) image = mediaContent.getAttribute("url") || "";
+
             if (!image) {
-                const enclosure = item.querySelector("enclosure");
+                const enclosure = item.getElementsByTagName("enclosure")[0];
                 if (enclosure) image = enclosure.getAttribute("url") || "";
             }
+
+            if (!image) {
+                const thumb = item.getElementsByTagName("media:thumbnail")[0];
+                if (thumb) image = thumb.getAttribute("url") || "";
+            }
+
             if (!image) {
                 const imgMatch = (content || description).match(/<img[^>]+src="([^">]+)"/);
                 if (imgMatch) image = imgMatch[1];
             }
 
-            extracted.push({
-                id: link || Math.random().toString(36).substring(2, 11),
-                title,
-                link,
-                pubDate: new Date(pubDateStr),
-                source: source.name,
-                sourceId: source.id,
-                image,
-                description: description.replace(/<[^>]*>?/gm, '').substring(0, 150).trim() + "..."
-            });
-        });
-    } else if (atomEntries.length > 0) {
-        atomEntries.forEach(entry => {
-            const title = entry.querySelector("title")?.textContent || "";
-            const link = entry.querySelector("link[rel='alternate']")?.getAttribute("href") || entry.querySelector("link")?.getAttribute("href") || "";
-            const pubDateStr = entry.querySelector("updated")?.textContent || entry.querySelector("published")?.textContent || "";
-            const summary = entry.querySelector("summary")?.textContent || entry.querySelector("content")?.textContent || "";
+            if (title || link) {
+                extracted.push({
+                    id: link || Math.random().toString(36).substring(2, 11),
+                    title: title.trim(),
+                    link: link.trim(),
+                    pubDate: new Date(pubDateStr),
+                    source: source.name,
+                    sourceId: source.id,
+                    image,
+                    description: description.replace(/<[^>]*>?/gm, '').substring(0, 150).trim() + "..."
+                });
+            }
+        }
+    }
+
+    // Atom
+    const atomEntries = xml.getElementsByTagName("entry");
+    if (atomEntries.length > 0 && extracted.length === 0) {
+        for (let i = 0; i < atomEntries.length; i++) {
+            const entry = atomEntries[i];
+            const title = entry.getElementsByTagName("title")[0]?.textContent || "";
+            let link = "";
+            const links = entry.getElementsByTagName("link");
+            for (let j = 0; j < links.length; j++) {
+                if (links[j].getAttribute("rel") === "alternate" || !link) {
+                    link = links[j].getAttribute("href") || "";
+                }
+            }
+
+            const pubDateStr = entry.getElementsByTagName("updated")[0]?.textContent ||
+                               entry.getElementsByTagName("published")[0]?.textContent || "";
+            const summary = entry.getElementsByTagName("summary")[0]?.textContent ||
+                            entry.getElementsByTagName("content")[0]?.textContent || "";
 
             let image = "";
             const imgMatch = summary.match(/<img[^>]+src="([^">]+)"/);
@@ -158,30 +206,35 @@ const Newsroom = () => {
 
             extracted.push({
                 id: link || Math.random().toString(36).substring(2, 11),
-                title,
-                link,
+                title: title.trim(),
+                link: link.trim(),
                 pubDate: new Date(pubDateStr),
                 source: source.name,
                 sourceId: source.id,
                 image,
                 description: summary.replace(/<[^>]*>?/gm, '').substring(0, 150).trim() + "..."
             });
-        });
-    } else {
-        // 2. Try Sitemap (Google News or Standard)
-        const urls = xml.querySelectorAll("url");
-        urls.forEach(urlNode => {
-            const loc = urlNode.querySelector("loc")?.textContent || "";
-            const lastmod = urlNode.querySelector("lastmod")?.textContent || "";
-            const newsNode = urlNode.getElementsByTagName("news:news")[0];
+        }
+    }
+
+    // Sitemap (Google News / standard)
+    const urls = xml.getElementsByTagName("url");
+    if (urls.length > 0 && extracted.length === 0) {
+        for (let i = 0; i < urls.length; i++) {
+            const urlNode = urls[i];
+            const loc = urlNode.getElementsByTagName("loc")[0]?.textContent || "";
+            const lastmod = urlNode.getElementsByTagName("lastmod")[0]?.textContent || "";
+            const newsNode = urlNode.getElementsByTagName("news:news")[0] || urlNode.getElementsByTagName("news")[0];
 
             let title = "";
             let pubDate = new Date();
             let image = "";
 
             if (newsNode) {
-                title = newsNode.getElementsByTagName("news:title")[0]?.textContent || "";
-                const newsDate = newsNode.getElementsByTagName("news:publication_date")[0]?.textContent || "";
+                title = newsNode.getElementsByTagName("news:title")[0]?.textContent ||
+                        newsNode.getElementsByTagName("title")[0]?.textContent || "";
+                const newsDate = newsNode.getElementsByTagName("news:publication_date")[0]?.textContent ||
+                                 newsNode.getElementsByTagName("publication_date")[0]?.textContent || "";
                 if (newsDate) pubDate = new Date(newsDate);
             } else {
                 title = loc.split('/').filter(Boolean).pop()?.replace(/(-|.html)/g, ' ') || "Untitled";
@@ -189,16 +242,17 @@ const Newsroom = () => {
                 if (lastmod) pubDate = new Date(lastmod);
             }
 
-            const imageNode = urlNode.getElementsByTagName("image:image")[0];
+            const imageNode = urlNode.getElementsByTagName("image:image")[0] || urlNode.getElementsByTagName("image")[0];
             if (imageNode) {
-                image = imageNode.getElementsByTagName("image:loc")[0]?.textContent || "";
+                image = imageNode.getElementsByTagName("image:loc")[0]?.textContent ||
+                        imageNode.getElementsByTagName("loc")[0]?.textContent || "";
             }
 
             if (loc) {
                 extracted.push({
                     id: loc,
-                    title,
-                    link: loc,
+                    title: title.trim(),
+                    link: loc.trim(),
                     pubDate,
                     source: source.name,
                     sourceId: source.id,
@@ -206,7 +260,7 @@ const Newsroom = () => {
                     description: ""
                 });
             }
-        });
+        }
     }
 
     return extracted;
@@ -216,53 +270,26 @@ const Newsroom = () => {
     if (isLoading) return;
     setIsLoading(true);
     setFailedSources([]);
+    setActiveProxies(0);
 
     let allItems: NewsItem[] = [];
 
     const fetchPromises = NEWS_SOURCES.map(async (source) => {
-      // Try multiple proxies in sequence for each source
-      // Start with NEWSOrigin if appropriate, then fall back
-      const proxiesToTry = [0, 1, 2, 4]; // NEWSOrigin, AllOrigins, CodeTabs, Cors.lol
+        try {
+            const url = getSourceUrl(source);
+            const { text, proxyIndex } = await fetchWithProxyFallback(url);
+            setActiveProxies(p => Math.max(p, proxyIndex + 1));
 
-      for (const proxyIdx of proxiesToTry) {
-          try {
-              const url = getSourceUrl(source);
-              // NEWSOrigin (index 0) returns JSON for HTML/News, might need special handling
-              const response = await fetch(getProxyUrl(url, proxyIdx));
-              if (!response.ok) continue;
+            const parser = new DOMParser();
+            const xml = parser.parseFromString(text, "text/xml");
+            const sourceItems = universalParser(xml, source);
 
-              const contentType = response.headers.get("content-type") || "";
-              let sourceItems: NewsItem[] = [];
-
-              if (contentType.includes("json")) {
-                  const data = await response.json();
-                  // If it's NEWSOrigin's metadata format, we might only get ONE item or it might be a feed dump
-                  if (data.title && data.url === url && data.title.includes("<?xml")) {
-                      // NEWSOrigin sometimes wraps XML in its JSON title field
-                      const parser = new DOMParser();
-                      const xml = parser.parseFromString(data.title, "text/xml");
-                      sourceItems = universalParser(xml, source);
-                  } else if (data.contents) {
-                      // AllOrigins format (if not using /raw)
-                      const parser = new DOMParser();
-                      const xml = parser.parseFromString(data.contents, "text/xml");
-                      sourceItems = universalParser(xml, source);
-                  }
-              } else {
-                  const text = await response.text();
-                  const parser = new DOMParser();
-                  const xml = parser.parseFromString(text, "text/xml");
-                  sourceItems = universalParser(xml, source);
-              }
-
-              if (sourceItems.length > 0) return sourceItems;
-          } catch (err) {
-              continue;
-          }
-      }
-
-      setFailedSources(prev => [...prev, source.name]);
-      return [];
+            if (sourceItems.length === 0) throw new Error("Parsed zero items");
+            return sourceItems;
+        } catch (err) {
+            setFailedSources(prev => [...prev, source.name]);
+            return [];
+        }
     });
 
     const results = await Promise.all(fetchPromises);
@@ -270,13 +297,13 @@ const Newsroom = () => {
       allItems = [...allItems, ...res];
     });
 
-    allItems = allItems.filter(item => !isNaN(item.pubDate.getTime()));
+    allItems = allItems.filter(item => item.pubDate && !isNaN(item.pubDate.getTime()));
     allItems.sort((a, b) => b.pubDate.getTime() - a.pubDate.getTime());
 
     const seen = new Set();
     allItems = allItems.filter(item => {
-        const val = item.link || item.id;
-        if (seen.has(val)) return false;
+        const val = (item.link || item.id).trim();
+        if (!val || seen.has(val)) return false;
         seen.add(val);
         return true;
     });
@@ -284,7 +311,9 @@ const Newsroom = () => {
     setItems(allItems);
     setIsLoading(false);
     if (allItems.length > 0) {
-        toast.success(`Active_Feed: ${allItems.length} items acquired`);
+        toast.success(`Success: ${allItems.length} news packets interrogated`);
+    } else {
+        toast.error("Handshake failed: Zero packets received");
     }
   };
 
@@ -316,7 +345,7 @@ const Newsroom = () => {
           </button>
           <div className="flex flex-col">
             <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter truncate">News_Room</h1>
-            <span className="text-[10px] font-bold text-primary">UNIVERSAL_DATA_INTERROGATOR_v1.2</span>
+            <span className="text-[10px] font-bold text-primary">UNIVERSAL_DATA_INTERROGATOR_v1.5</span>
           </div>
         </div>
 
@@ -358,11 +387,11 @@ const Newsroom = () => {
         </div>
       </div>
 
-      {failedSources.length > 0 && failedSources.length < NEWS_SOURCES.length && (
+      {failedSources.length > 0 && (
           <div className="mb-8 border-4 border-yellow-500 bg-yellow-50 p-4 flex items-start gap-3 shadow-[4px_4px_0_0_#eab308]">
               <AlertTriangle className="text-yellow-600 shrink-0" size={20} />
               <div className="text-[10px] font-bold text-yellow-800 uppercase">
-                  Partial Data Acquisition. Offline Nodes: {failedSources.length}/{NEWS_SOURCES.length}. Protocol auto-retrying via failover proxies.
+                  {failedSources.length === NEWS_SOURCES.length ? "FATAL_CONNECTION_ERROR: ALL NODES OFFLINE" : `Node failure detected: ${failedSources.length}/${NEWS_SOURCES.length} sources unresponsive. Check failover logs.`}
               </div>
           </div>
       )}
@@ -386,17 +415,18 @@ const Newsroom = () => {
                     </button>
                     {NEWS_SOURCES.map(source => {
                         const count = items.filter(i => i.sourceId === source.id).length;
+                        const isFailed = failedSources.includes(source.name);
                         return (
                             <button
                                 key={source.id}
                                 onClick={() => setSelectedSource(source.id)}
                                 className={cn(
                                     "w-full text-left px-3 py-2 text-[10px] font-black uppercase border-2 border-black transition-all flex justify-between items-center",
-                                    selectedSource === source.id ? "bg-primary text-white" : "hover:bg-slate-100"
+                                    selectedSource === source.id ? "bg-primary text-white" : isFailed ? "bg-red-50 text-red-400 border-red-200" : "hover:bg-slate-100"
                                 )}
                             >
                                 <span className="truncate mr-2">{source.name}</span>
-                                <span className={cn("shrink-0", selectedSource === source.id ? "text-white" : "text-primary")}>[{count}]</span>
+                                <span className={cn("shrink-0", selectedSource === source.id ? "text-white" : isFailed ? "text-red-300" : "text-primary")}>[{count}]</span>
                             </button>
                         );
                     })}
@@ -405,23 +435,25 @@ const Newsroom = () => {
 
             <section className="border-4 border-black p-6 bg-slate-900 text-white shadow-[6px_6px_0_0_#000]">
                 <h2 className="text-lg font-black uppercase mb-4 flex items-center gap-2 text-primary border-b-2 border-primary/30 pb-2">
-                    <Clock size={18} /> Log_Manifest
+                    <Clock size={18} /> Engine_Logs
                 </h2>
                 <div className="space-y-4 text-[10px] font-bold">
                     <div className="flex justify-between">
-                        <span className="text-slate-400">INDEXED_ITEMS:</span>
+                        <span className="text-slate-400">PACKETS_INDEXED:</span>
                         <span>{filteredItems.length}</span>
                     </div>
                     <div className="flex justify-between">
-                        <span className="text-slate-400">ACTIVE_TUNNELS:</span>
-                        <span>{PROXIES.length}</span>
+                        <span className="text-slate-400">ACTIVE_GATEWAYS:</span>
+                        <span className="text-primary">{activeProxies || "DISCONNECTED"}</span>
                     </div>
                     <div className="flex justify-between">
                         <span className="text-slate-400">STATUS:</span>
-                        <span className="text-green-400">ENCRYPTED_STREAM</span>
+                        <span className={cn(isLoading ? "text-yellow-400 animate-pulse" : "text-green-400")}>
+                            {isLoading ? "INTERROGATING..." : "STABILIZED"}
+                        </span>
                     </div>
                     <div className="flex justify-between pt-2 border-t border-white/10">
-                        <span className="text-slate-400">TIME_STAMP:</span>
+                        <span className="text-slate-400">LOCAL_TIME:</span>
                         <span>{new Date().toLocaleTimeString()}</span>
                     </div>
                 </div>
@@ -432,9 +464,14 @@ const Newsroom = () => {
         <main className="lg:col-span-9 space-y-8">
             {isLoading && items.length === 0 ? (
                 <div className="border-4 border-black bg-white p-20 flex flex-col items-center justify-center shadow-[8px_8px_0_0_#000]">
-                    <Loader2 size={64} className="animate-spin text-primary mb-6" />
-                    <h2 className="text-2xl font-black uppercase tracking-widest text-center">Global_Handshake_Initiated</h2>
-                    <p className="text-sm font-bold text-slate-500 mt-2 text-center uppercase tracking-tighter">Syncing 41 distributed nodes via multi-proxy failover cluster...</p>
+                    <div className="relative mb-10">
+                        <Loader2 size={80} className="animate-spin text-primary" />
+                        <Database className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-black" size={24} />
+                    </div>
+                    <h2 className="text-2xl font-black uppercase tracking-widest text-center">Protocol_Initialization</h2>
+                    <p className="text-sm font-bold text-slate-500 mt-4 text-center uppercase tracking-tighter max-w-md">
+                        Establishing encrypted handshake with 41 distributed nodes. Sequentially bypassing origin security via multi-layered proxy failover...
+                    </p>
                 </div>
             ) : (
                 <>
@@ -502,16 +539,16 @@ const Newsroom = () => {
                                             >
                                                 INTERROGATE_DOC <ExternalLink size={12} />
                                             </a>
-                                            <span className="text-[9px] font-bold text-slate-300">ID: {item.id.substring(0, 6)}</span>
+                                            <span className="text-[9px] font-bold text-slate-300">CRC_{item.id.substring(0, 4).toUpperCase()}</span>
                                         </div>
                                     </div>
                                 </article>
                             ))
                         ) : (
-                            <div className="col-span-full border-4 border-black p-20 bg-white text-center">
+                            <div className="col-span-full border-4 border-black p-20 bg-white text-center shadow-[8px_8px_0_0_#000]">
                                 <ImageIcon size={48} className="mx-auto text-slate-200 mb-4" />
                                 <h3 className="text-xl font-black uppercase">Null_Result_Return</h3>
-                                <p className="text-sm font-bold text-slate-400">Zero data packets matched specified keywords.</p>
+                                <p className="text-sm font-bold text-slate-400 uppercase">Zero data packets intercepted for current parameters.</p>
                             </div>
                         )}
                     </div>
@@ -523,7 +560,7 @@ const Newsroom = () => {
                                 className="px-12 py-4 bg-white text-black border-4 border-black font-black uppercase shadow-[6px_6px_0_0_#000] hover:bg-primary hover:text-white hover:shadow-none hover:translate-x-[2px] hover:translate-y-[2px] transition-all flex items-center gap-3"
                             >
                                 <ChevronDown size={24} />
-                                FETCH_SEQUENTIAL_BUFFER (+50)
+                                LOAD_NEXT_BUFFER (+50)
                             </button>
                         </div>
                     )}
@@ -538,35 +575,35 @@ const Newsroom = () => {
               <div className="space-y-4 max-w-md">
                   <div className="flex items-center gap-2">
                       <div className="w-6 h-6 bg-primary border-2 border-black" />
-                      <h4 className="text-xl font-black uppercase tracking-tighter">System_Logistics</h4>
+                      <h4 className="text-xl font-black uppercase tracking-tighter">Protocol_System_OS</h4>
                   </div>
                   <p className="text-xs font-bold text-slate-500 leading-relaxed uppercase">
-                      Decentralized ingestion engine with multi-layered proxy failover. Normalized 8-field schema implementation for heterogeneous Bangladeshi news streams.
+                      Decentralized data ingestion engine with multi-layered failover. Normalizing 41 heterogeneous Bangladeshi news streams into a unified 8-field schema.
                   </p>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 gap-8">
                   <div className="space-y-2">
                       <span className="text-[10px] font-black text-primary uppercase">Engine</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
-                          <li>v1.2.0-stable</li>
-                          <li>Failover_L3</li>
-                          <li>React_v18</li>
+                          <li>v1.5.2-stable</li>
+                          <li>Failover_L4</li>
+                          <li>React_v18.3</li>
                       </ul>
                   </div>
                   <div className="space-y-2">
-                      <span className="text-[10px] font-black text-primary uppercase">Proxies</span>
+                      <span className="text-[10px] font-black text-primary uppercase">Nodes</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
-                          <li>NEWSOrigin_L1</li>
-                          <li>AllOrigins_L2</li>
-                          <li>CodeTabs_L3</li>
+                          <li>41_Sources</li>
+                          <li>5_Gateways</li>
+                          <li>Encrypted_Stream</li>
                       </ul>
                   </div>
                   <div className="space-y-2">
-                      <span className="text-[10px] font-black text-primary uppercase">Authority</span>
+                      <span className="text-[10px] font-black text-primary uppercase">SysOp</span>
                       <ul className="text-[9px] font-bold space-y-1 uppercase">
                           <li>Md. Abdullah Bari</li>
-                          <li>MBBS @ AFMC</li>
-                          <li>DevOps & SysArch</li>
+                          <li>Medical_Informatics</li>
+                          <li>AFMC_Archives</li>
                       </ul>
                   </div>
               </div>
