@@ -8,6 +8,7 @@ import Dictionary from "./pages/Dictionary";
 import AIChat from "./pages/AIChat";
 import Inspector from "./pages/Inspector";
 import Newsroom from "./pages/Newsroom";
+import PortAnalyzer from "./pages/PortAnalyzer";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -24,6 +25,7 @@ const App = () => (
           <Route path="/ai" element={<AIChat />} />
           <Route path="/Inspector" element={<Inspector />} />
           <Route path="/news" element={<Newsroom />} />
+          <Route path="/port" element={<PortAnalyzer />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
