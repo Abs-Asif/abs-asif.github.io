@@ -67,7 +67,7 @@ const Somoy = () => {
 
   // Use the verified HTTPS endpoint that supports CORS and provides live news data
   const BASE_URL = "https://backoffice.nilasi.com";
-  const API_ENDPOINT = `${BASE_URL}/api/archive`;
+  const API_ENDPOINT = `${BASE_URL}/api-en/archive`;
 
   const fetchNews = async (overrideParams?: QueryParams) => {
     const q = overrideParams || params;
