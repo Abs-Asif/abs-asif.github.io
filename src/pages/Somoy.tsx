@@ -21,7 +21,6 @@ import {
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { getProxyUrl } from "@/lib/api-utils";
 
 interface SomoyArticle {
   ContentID: number;
@@ -40,7 +39,8 @@ interface SomoyArticle {
 }
 
 interface SomoyResponse {
-  data: SomoyArticle[];
+  data?: SomoyArticle[];
+  archive_data?: SomoyArticle[];
 }
 
 interface QueryParams {
@@ -65,7 +65,8 @@ const Somoy = () => {
     offset: 0,
   });
 
-  const BASE_URL = "http://103.209.42.203";
+  // Use the verified HTTPS endpoint that supports CORS and provides live news data
+  const BASE_URL = "https://backoffice.nilasi.com";
   const API_ENDPOINT = `${BASE_URL}/api/archive`;
 
   const fetchNews = async (overrideParams?: QueryParams) => {
@@ -73,33 +74,31 @@ const Somoy = () => {
     setIsLoading(true);
 
     try {
-      // Use AllOrigins proxy (index 1) to handle CORS and Mixed Content (HTTP API on HTTPS site)
-      const proxiedUrl = getProxyUrl(API_ENDPOINT, 1);
-
-      const response = await fetch(proxiedUrl, {
+      // Direct call to HTTPS mirror is safest for browser security (HTTPS + CORS support)
+      const response = await fetch(API_ENDPOINT, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Accept": "application/json",
         },
         body: JSON.stringify({
-          start_date: q.start_date,
-          end_date: q.end_date,
-          category_name: q.category_name,
-          limit: q.limit,
-          offset: q.offset,
+          start_date: q.start_date || "",
+          end_date: q.end_date || "",
+          category_name: q.category_name === "" ? "" : Number(q.category_name),
+          limit: Number(q.limit) || 12,
+          offset: Number(q.offset) || 0,
         }),
       });
 
-      if (!response.ok) throw new Error("API call failed");
+      if (!response.ok) throw new Error(`API Error: ${response.status}`);
 
       const result: SomoyResponse = await response.json();
-      // Note: Somoy API returns { data: [...] } based on live inspection,
-      // whereas the user's provided example for BG was { archive_data: [...] }
-      setArticles(result.data || []);
-      toast.success(`Synchronized ${result.data?.length || 0} articles`);
+      const data = result.data || result.archive_data || [];
+      setArticles(data);
+      toast.success(`Synchronized ${data.length} articles`);
     } catch (error) {
-      console.error(error);
-      toast.error("Failed to fetch news from Somoy Archive");
+      console.error("[SomoyEngine] Fetch Error:", error);
+      toast.error("Failed to fetch news from archive");
     } finally {
       setIsLoading(false);
     }
@@ -119,7 +118,7 @@ const Somoy = () => {
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `somoy_archive_${new Date().getTime()}.json`;
+    a.download = `archive_export_${new Date().getTime()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -137,7 +136,8 @@ const Somoy = () => {
 
   const filteredArticles = articles.filter(article =>
     (article.DetailsHeading || article.ContentHeading || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
-    (article.ContentBrief || "").toLowerCase().includes(searchQuery.toLowerCase())
+    (article.ContentBrief || "").toLowerCase().includes(searchQuery.toLowerCase()) ||
+    (article.CategoryName || "").toLowerCase().includes(searchQuery.toLowerCase())
   );
 
   return (
@@ -149,7 +149,7 @@ const Somoy = () => {
             <ArrowLeft size={24} />
           </button>
           <div>
-            <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter italic">Somoy_Engine</h1>
+            <h1 className="text-2xl md:text-3xl font-black uppercase tracking-tighter italic">News_Engine</h1>
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Protocol: Direct Archive Access</p>
           </div>
         </div>
@@ -299,7 +299,7 @@ const Somoy = () => {
                   )}>
                     <img
                       src={`${BASE_URL}/${article.ImageBgPath}`}
-                      alt={article.DetailsHeading}
+                      alt={article.DetailsHeading || article.ContentHeading || "News"}
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-500"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1585829365234-781fcd50c819?w=800&auto=format&fit=crop&q=60";
@@ -321,7 +321,7 @@ const Somoy = () => {
                         {article.DetailsHeading || article.ContentHeading}
                       </h3>
                       <p className="text-[10px] font-bold text-slate-600 line-clamp-3 mb-4">
-                        {article.ContentBrief}
+                        {article.ContentBrief || "No content summary available."}
                       </p>
                     </div>
 
