@@ -15,7 +15,8 @@ import {
   Download,
   Filter,
   RefreshCw,
-  Layout
+  Layout,
+  Video
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
@@ -35,6 +36,7 @@ interface SomoyArticle {
   ImageBgPath: string;
   CategorySlug: string;
   created_at: string;
+  ShowVideo?: number;
 }
 
 interface SomoyResponse {
@@ -306,6 +308,11 @@ const Somoy = () => {
                     <div className="absolute top-0 right-0 bg-black text-white px-2 py-1 text-[8px] font-black uppercase">
                       {article.CategoryName}
                     </div>
+                    {article.ShowVideo === 1 && (
+                      <div className="absolute top-0 left-0 bg-red-600 text-white p-1 shadow-[2px_2px_0_0_#000]">
+                        <Video size={12} fill="currentColor" />
+                      </div>
+                    )}
                   </div>
 
                   <div className="p-4 flex flex-col justify-between flex-1">
