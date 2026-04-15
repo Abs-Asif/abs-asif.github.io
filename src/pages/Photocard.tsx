@@ -333,16 +333,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">DATE_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {dateSize}</label>
-                      <input type="range" min="10" max="100" value={dateSize} onChange={(e) => setDateSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={dateSize} onChange={(e) => setDateSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {dateX}</label>
-                      <input type="range" min="0" max="1000" value={dateX} onChange={(e) => setDateX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={dateX} onChange={(e) => setDateX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y: {dateY}</label>
-                      <input type="range" min="0" max="1000" value={dateY} onChange={(e) => setDateY(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y</label>
+                      <input type="number" value={dateY} onChange={(e) => setDateY(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -352,24 +352,24 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">QUOTE_CONTROLS</span>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {quoteSize}</label>
-                      <input type="range" min="10" max="150" value={quoteSize} onChange={(e) => setQuoteSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={quoteSize} onChange={(e) => setQuoteSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {quoteX}</label>
-                      <input type="range" min="0" max="1000" value={quoteX} onChange={(e) => setQuoteX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={quoteX} onChange={(e) => setQuoteX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y: {quoteY}</label>
-                      <input type="range" min="0" max="1000" value={quoteY} onChange={(e) => setQuoteY(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y</label>
+                      <input type="number" value={quoteY} onChange={(e) => setQuoteY(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Line Height: {quoteLineHeight}</label>
-                      <input type="range" min="10" max="200" value={quoteLineHeight} onChange={(e) => setQuoteLineHeight(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Line Height</label>
+                      <input type="number" value={quoteLineHeight} onChange={(e) => setQuoteLineHeight(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Max Width: {quoteMaxWidth}</label>
-                      <input type="range" min="100" max="1000" value={quoteMaxWidth} onChange={(e) => setQuoteMaxWidth(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Max Width</label>
+                      <input type="number" value={quoteMaxWidth} onChange={(e) => setQuoteMaxWidth(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -379,16 +379,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">SAYER_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {sayerSize}</label>
-                      <input type="range" min="10" max="100" value={sayerSize} onChange={(e) => setSayerSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={sayerSize} onChange={(e) => setSayerSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {sayerX}</label>
-                      <input type="range" min="0" max="1000" value={sayerX} onChange={(e) => setSayerX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={sayerX} onChange={(e) => setSayerX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y Offset: {sayerYOffset}</label>
-                      <input type="range" min="0" max="200" value={sayerYOffset} onChange={(e) => setSayerYOffset(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y Offset</label>
+                      <input type="number" value={sayerYOffset} onChange={(e) => setSayerYOffset(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -398,16 +398,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">DESCRIPTION_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {descSize}</label>
-                      <input type="range" min="10" max="100" value={descSize} onChange={(e) => setDescSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={descSize} onChange={(e) => setDescSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {descX}</label>
-                      <input type="range" min="0" max="1000" value={descX} onChange={(e) => setDescX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={descX} onChange={(e) => setDescX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y Offset: {descYOffset}</label>
-                      <input type="range" min="0" max="200" value={descYOffset} onChange={(e) => setDescYOffset(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y Offset</label>
+                      <input type="number" value={descYOffset} onChange={(e) => setDescYOffset(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -422,48 +422,40 @@ const Photocard = () => {
                 </h2>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">X Position: {imgX}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">X Position</label>
                     <input
-                      type="range"
-                      min="-500"
-                      max="1000"
+                      type="number"
                       value={imgX}
-                      onChange={(e) => setImgX(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgX(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Y Position: {imgY}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Y Position</label>
                     <input
-                      type="range"
-                      min="0"
-                      max="1000"
+                      type="number"
                       value={imgY}
-                      onChange={(e) => setImgY(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgY(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Scale: {imgScale.toFixed(2)}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Scale</label>
                     <input
-                      type="range"
-                      min="0.1"
-                      max="5"
+                      type="number"
                       step="0.01"
                       value={imgScale}
-                      onChange={(e) => setImgScale(parseFloat(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgScale(parseFloat(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Base Width: {imgWidth}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Base Width</label>
                     <input
-                      type="range"
-                      min="50"
-                      max="1500"
+                      type="number"
                       value={imgWidth}
-                      onChange={(e) => setImgWidth(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgWidth(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                 </div>
