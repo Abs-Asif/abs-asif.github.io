@@ -4,9 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { toBanglaDate, toBanglaNumber } from "@/lib/bangla-utils";
 import { cn } from "@/lib/utils";
 
+const REMOVE_BG_API_KEY = "5caof7A3FqdYDNBPsGJWVTqS";
+
 const Photocard = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
   const [date, setDate] = useState(toBanglaDate(new Date()));
   const [quote, setQuote] = useState("");
@@ -82,6 +85,13 @@ const Photocard = () => {
       setSayerImage(null);
       setImageLoaded(false);
     }
+
+    // Cleanup blob URLs to prevent memory leaks
+    return () => {
+      if (image && image.startsWith("blob:")) {
+        URL.revokeObjectURL(image);
+      }
+    };
   }, [image]);
 
   useEffect(() => {
@@ -159,89 +169,50 @@ const Photocard = () => {
     return lines;
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processImage = async (file: File) => {
     setIsProcessing(true);
-
-    const cloudName = "dgj9dzyyo";
-    const uploadPreset = "ml_default";
+    lastFileRef.current = file;
 
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
+    formData.append("image_file", file);
+    formData.append("size", "auto");
 
     try {
-      // For background removal to work on upload via unsigned preset,
-      // the preset must have background removal enabled.
-      // If it doesn't, we'll use the on-the-fly transformation.
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      const response = await fetch("https://api.remove.bg/v1.0/removebg", {
         method: "POST",
+        headers: {
+          "X-Api-Key": REMOVE_BG_API_KEY,
+        },
         body: formData,
       });
 
       if (response.ok) {
-        const data = await response.json();
-        // Cloudinary on-the-fly background removal URL
-        // Using fl_layer_apply is not needed for simple effect, but e_background_removal is.
-        const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
-        // Important: f_png is needed for transparency
-        const processedUrl = `${baseUrl}/e_background_removal/f_png/v${data.version}/${data.public_id}.png`;
-
-        setImage(processedUrl);
-
-        // Start polling logic
-        let attempts = 0;
-        const maxAttempts = 15;
-        const checkImage = () => {
-          const testImg = new Image();
-          testImg.crossOrigin = "anonymous";
-          // Use a timestamp to bypass browser cache during polling
-          testImg.src = `${processedUrl}?poll=${attempts}`;
-          testImg.onload = () => {
-             setImage(`${processedUrl}?t=${Date.now()}`);
-             setImageLoaded(true);
-             setIsProcessing(false);
-          };
-          testImg.onerror = () => {
-            if (attempts < maxAttempts) {
-              attempts++;
-              setTimeout(checkImage, 3000);
-            } else {
-              console.error("Cloudinary processing failed or timed out");
-              setIsProcessing(false);
-              // Fallback to original image without bg removal if AI fails
-              setImage(data.secure_url);
-            }
-          };
-        };
-        checkImage();
+        const arrayBuffer = await response.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: "image/png" });
+        const imageUrl = URL.createObjectURL(blob);
+        setImage(imageUrl);
       } else {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setImage(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("remove.bg error:", response.status, errorData);
+        alert(`Background removal failed: ${errorData.errors?.[0]?.title || response.statusText}`);
       }
     } catch (error) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImage(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      console.error("Processing error:", error);
+      alert("An error occurred while processing the image.");
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImage(file);
+  };
+
   const reloadImage = () => {
-    if (image) {
-      // Force reload by adding a timestamp if it's a Cloudinary URL
-      if (image.includes("cloudinary.com")) {
-        const separator = image.includes("?") ? "&" : "?";
-        setImage(`${image}${separator}t=${Date.now()}`);
-      }
+    if (lastFileRef.current) {
+      processImage(lastFileRef.current);
     }
   };
 
@@ -526,7 +497,7 @@ const Photocard = () => {
                 <p className="text-muted-foreground italic tracking-tight">
                   {"// Real-time Preview Engine Active"}
                 </p>
-                {image?.includes("e_background_removal") && !imageLoaded && (
+                {isProcessing && (
                   <p className="text-accent flex items-center gap-2 animate-pulse">
                     <Loader2 size={10} className="animate-spin" /> AI_PROCESSING_BACKGROUND_REMOVAL...
                   </p>
