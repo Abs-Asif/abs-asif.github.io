@@ -4,9 +4,12 @@ import { useNavigate } from "react-router-dom";
 import { toBanglaDate, toBanglaNumber } from "@/lib/bangla-utils";
 import { cn } from "@/lib/utils";
 
+const REMOVE_BG_API_KEY = "5caof7A3FqdYDNBPsGJWVTqS";
+
 const Photocard = () => {
   const navigate = useNavigate();
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const lastFileRef = useRef<File | null>(null);
 
   const [date, setDate] = useState(toBanglaDate(new Date()));
   const [quote, setQuote] = useState("");
@@ -82,6 +85,13 @@ const Photocard = () => {
       setSayerImage(null);
       setImageLoaded(false);
     }
+
+    // Cleanup blob URLs to prevent memory leaks
+    return () => {
+      if (image && image.startsWith("blob:")) {
+        URL.revokeObjectURL(image);
+      }
+    };
   }, [image]);
 
   useEffect(() => {
@@ -159,89 +169,50 @@ const Photocard = () => {
     return lines;
   };
 
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
+  const processImage = async (file: File) => {
     setIsProcessing(true);
-
-    const cloudName = "dgj9dzyyo";
-    const uploadPreset = "ml_default";
+    lastFileRef.current = file;
 
     const formData = new FormData();
-    formData.append("file", file);
-    formData.append("upload_preset", uploadPreset);
+    formData.append("image_file", file);
+    formData.append("size", "auto");
 
     try {
-      // For background removal to work on upload via unsigned preset,
-      // the preset must have background removal enabled.
-      // If it doesn't, we'll use the on-the-fly transformation.
-      const response = await fetch(`https://api.cloudinary.com/v1_1/${cloudName}/image/upload`, {
+      const response = await fetch("https://api.remove.bg/v1.0/removebg", {
         method: "POST",
+        headers: {
+          "X-Api-Key": REMOVE_BG_API_KEY,
+        },
         body: formData,
       });
 
       if (response.ok) {
-        const data = await response.json();
-        // Cloudinary on-the-fly background removal URL
-        // Using fl_layer_apply is not needed for simple effect, but e_background_removal is.
-        const baseUrl = `https://res.cloudinary.com/${cloudName}/image/upload`;
-        // Important: f_png is needed for transparency
-        const processedUrl = `${baseUrl}/e_background_removal/f_png/v${data.version}/${data.public_id}.png`;
-
-        setImage(processedUrl);
-
-        // Start polling logic
-        let attempts = 0;
-        const maxAttempts = 15;
-        const checkImage = () => {
-          const testImg = new Image();
-          testImg.crossOrigin = "anonymous";
-          // Use a timestamp to bypass browser cache during polling
-          testImg.src = `${processedUrl}?poll=${attempts}`;
-          testImg.onload = () => {
-             setImage(`${processedUrl}?t=${Date.now()}`);
-             setImageLoaded(true);
-             setIsProcessing(false);
-          };
-          testImg.onerror = () => {
-            if (attempts < maxAttempts) {
-              attempts++;
-              setTimeout(checkImage, 3000);
-            } else {
-              console.error("Cloudinary processing failed or timed out");
-              setIsProcessing(false);
-              // Fallback to original image without bg removal if AI fails
-              setImage(data.secure_url);
-            }
-          };
-        };
-        checkImage();
+        const arrayBuffer = await response.arrayBuffer();
+        const blob = new Blob([arrayBuffer], { type: "image/png" });
+        const imageUrl = URL.createObjectURL(blob);
+        setImage(imageUrl);
       } else {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-          setImage(event.target?.result as string);
-        };
-        reader.readAsDataURL(file);
+        const errorData = await response.json().catch(() => ({}));
+        console.error("remove.bg error:", response.status, errorData);
+        alert(`Background removal failed: ${errorData.errors?.[0]?.title || response.statusText}`);
       }
     } catch (error) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setImage(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
+      console.error("Processing error:", error);
+      alert("An error occurred while processing the image.");
     } finally {
       setIsProcessing(false);
     }
   };
 
+  const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    processImage(file);
+  };
+
   const reloadImage = () => {
-    if (image) {
-      // Force reload by adding a timestamp if it's a Cloudinary URL
-      if (image.includes("cloudinary.com")) {
-        const separator = image.includes("?") ? "&" : "?";
-        setImage(`${image}${separator}t=${Date.now()}`);
-      }
+    if (lastFileRef.current) {
+      processImage(lastFileRef.current);
     }
   };
 
@@ -362,16 +333,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">DATE_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {dateSize}</label>
-                      <input type="range" min="10" max="100" value={dateSize} onChange={(e) => setDateSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={dateSize} onChange={(e) => setDateSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {dateX}</label>
-                      <input type="range" min="0" max="1000" value={dateX} onChange={(e) => setDateX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={dateX} onChange={(e) => setDateX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y: {dateY}</label>
-                      <input type="range" min="0" max="1000" value={dateY} onChange={(e) => setDateY(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y</label>
+                      <input type="number" value={dateY} onChange={(e) => setDateY(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -381,24 +352,24 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">QUOTE_CONTROLS</span>
                   <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {quoteSize}</label>
-                      <input type="range" min="10" max="150" value={quoteSize} onChange={(e) => setQuoteSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={quoteSize} onChange={(e) => setQuoteSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {quoteX}</label>
-                      <input type="range" min="0" max="1000" value={quoteX} onChange={(e) => setQuoteX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={quoteX} onChange={(e) => setQuoteX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y: {quoteY}</label>
-                      <input type="range" min="0" max="1000" value={quoteY} onChange={(e) => setQuoteY(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y</label>
+                      <input type="number" value={quoteY} onChange={(e) => setQuoteY(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Line Height: {quoteLineHeight}</label>
-                      <input type="range" min="10" max="200" value={quoteLineHeight} onChange={(e) => setQuoteLineHeight(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Line Height</label>
+                      <input type="number" value={quoteLineHeight} onChange={(e) => setQuoteLineHeight(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Max Width: {quoteMaxWidth}</label>
-                      <input type="range" min="100" max="1000" value={quoteMaxWidth} onChange={(e) => setQuoteMaxWidth(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Max Width</label>
+                      <input type="number" value={quoteMaxWidth} onChange={(e) => setQuoteMaxWidth(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -408,16 +379,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">SAYER_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {sayerSize}</label>
-                      <input type="range" min="10" max="100" value={sayerSize} onChange={(e) => setSayerSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={sayerSize} onChange={(e) => setSayerSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {sayerX}</label>
-                      <input type="range" min="0" max="1000" value={sayerX} onChange={(e) => setSayerX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={sayerX} onChange={(e) => setSayerX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y Offset: {sayerYOffset}</label>
-                      <input type="range" min="0" max="200" value={sayerYOffset} onChange={(e) => setSayerYOffset(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y Offset</label>
+                      <input type="number" value={sayerYOffset} onChange={(e) => setSayerYOffset(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -427,16 +398,16 @@ const Photocard = () => {
                   <span className="text-[10px] font-mono text-primary font-bold">DESCRIPTION_CONTROLS</span>
                   <div className="grid grid-cols-3 gap-4">
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Size: {descSize}</label>
-                      <input type="range" min="10" max="100" value={descSize} onChange={(e) => setDescSize(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Size</label>
+                      <input type="number" value={descSize} onChange={(e) => setDescSize(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">X: {descX}</label>
-                      <input type="range" min="0" max="1000" value={descX} onChange={(e) => setDescX(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">X</label>
+                      <input type="number" value={descX} onChange={(e) => setDescX(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                     <div>
-                      <label className="text-[10px] font-mono uppercase">Y Offset: {descYOffset}</label>
-                      <input type="range" min="0" max="200" value={descYOffset} onChange={(e) => setDescYOffset(parseInt(e.target.value))} className="w-full accent-primary" />
+                      <label className="text-[10px] font-mono uppercase mb-1 block">Y Offset</label>
+                      <input type="number" value={descYOffset} onChange={(e) => setDescYOffset(parseInt(e.target.value) || 0)} className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10" />
                     </div>
                   </div>
                 </div>
@@ -451,48 +422,40 @@ const Photocard = () => {
                 </h2>
                 <div className="grid grid-cols-2 gap-6">
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">X Position: {imgX}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">X Position</label>
                     <input
-                      type="range"
-                      min="-500"
-                      max="1000"
+                      type="number"
                       value={imgX}
-                      onChange={(e) => setImgX(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgX(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Y Position: {imgY}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Y Position</label>
                     <input
-                      type="range"
-                      min="0"
-                      max="1000"
+                      type="number"
                       value={imgY}
-                      onChange={(e) => setImgY(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgY(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Scale: {imgScale.toFixed(2)}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Scale</label>
                     <input
-                      type="range"
-                      min="0.1"
-                      max="5"
+                      type="number"
                       step="0.01"
                       value={imgScale}
-                      onChange={(e) => setImgScale(parseFloat(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgScale(parseFloat(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                   <div>
-                    <label className="block text-xs font-mono uppercase mb-1">Base Width: {imgWidth}</label>
+                    <label className="block text-[10px] font-mono uppercase mb-1">Base Width</label>
                     <input
-                      type="range"
-                      min="50"
-                      max="1500"
+                      type="number"
                       value={imgWidth}
-                      onChange={(e) => setImgWidth(parseInt(e.target.value))}
-                      className="w-full accent-primary"
+                      onChange={(e) => setImgWidth(parseInt(e.target.value) || 0)}
+                      className="w-full p-1 border-2 border-foreground bg-background font-mono text-xs focus:outline-none focus:bg-primary/10"
                     />
                   </div>
                 </div>
@@ -526,7 +489,7 @@ const Photocard = () => {
                 <p className="text-muted-foreground italic tracking-tight">
                   {"// Real-time Preview Engine Active"}
                 </p>
-                {image?.includes("e_background_removal") && !imageLoaded && (
+                {isProcessing && (
                   <p className="text-accent flex items-center gap-2 animate-pulse">
                     <Loader2 size={10} className="animate-spin" /> AI_PROCESSING_BACKGROUND_REMOVAL...
                   </p>
