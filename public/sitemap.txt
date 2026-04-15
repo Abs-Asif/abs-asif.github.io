@@ -4,3 +4,4 @@
 /Inspector
 /news
 /port
+/p
