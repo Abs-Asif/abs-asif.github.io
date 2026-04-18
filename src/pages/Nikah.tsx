@@ -15,7 +15,7 @@ const Nikah = () => {
   return (
     <div className="w-full h-screen border-none overflow-hidden">
       <iframe
-        src="/nikah/index.html"
+        src="/nikah_site/index.html"
         className="w-full h-full border-none"
         title="NikahGuard"
       />
