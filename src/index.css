@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,700;1,400&family=Scheherazade+New:wght@400;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,63 +6,78 @@
 
 /* Kalpurush font for Bangla text */
 @font-face {
-  font-family: 'Kalpurush';
+  font-family: 'GlobalSerif';
   src: url('/fonts/kalpurush.ttf') format('truetype');
-  font-weight: normal;
-  font-style: normal;
-  font-display: swap;
+  unicode-range: U+0980-09FF; /* Bangla range */
+}
+
+@font-face {
+  font-family: 'GlobalSerif';
+  src: local('Scheherazade New'), url('https://fonts.gstatic.com/s/scheherazadenew/v18/V8mR-REno7Vcx9pP7mO7AIn_T_A.woff2') format('woff2');
+  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; /* Arabic range */
 }
 
 @layer base {
   :root {
-    --background: 222 47% 2%;
-    --foreground: 210 40% 98%;
+    --background: 0 0% 100%;
+    --foreground: 222 47% 2%;
 
-    --card: 222 47% 4%;
-    --card-foreground: 210 40% 98%;
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 2%;
 
-    --popover: 222 47% 2%;
-    --popover-foreground: 210 40% 98%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222 47% 2%;
 
-    --primary: 142 70% 50%;
-    --primary-foreground: 144 70% 5%;
+    --primary: 222 47% 2%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 222 47% 11%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222 47% 11.2%;
 
-    --muted: 222 47% 15%;
-    --muted-foreground: 215 20% 65%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
 
-    --accent: 191 91% 50%;
-    --accent-foreground: 191 91% 5%;
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222 47% 11.2%;
 
-    --destructive: 0 84% 60%;
+    --destructive: 0 84.2% 60.2%;
     --destructive-foreground: 210 40% 98%;
 
-    --border: 217 32% 17%;
-    --input: 217 32% 17%;
-    --ring: 142 70% 50%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 222 47% 11.2%;
 
-    --radius: 0.5rem;
-
-    --surface-1: 222 47% 4%;
-    --surface-2: 222 47% 7%;
-    --surface-3: 222 47% 10%;
-    --on-surface: 210 40% 98%;
-    --on-surface-variant: 215 20% 65%;
-    
-    --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.4);
-    --shadow-md: 0 4px 12px -2px rgb(0 0 0 / 0.6);
-    --shadow-lg: 0 12px 32px -4px rgb(0 0 0 / 0.8);
-    
-    --gradient-tech: linear-gradient(135deg, hsl(142 70% 50%), hsl(191 91% 50%));
-    --gradient-surface: linear-gradient(180deg, hsl(var(--surface-1)), hsl(var(--surface-2)));
+    --radius: 0rem;
   }
 
-  /* Dark mode is default here basically */
   .dark {
-    --background: 222 47% 2%;
+    --background: 0 0% 0%; /* AMOLED Black */
     --foreground: 210 40% 98%;
+
+    --card: 0 0% 3%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 0 0% 0%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 210 40% 98%;
+    --primary-foreground: 222 47% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 212.7 26.8% 83.9%;
   }
 }
 
@@ -76,100 +91,20 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
-    background-image:
-      radial-gradient(circle at 2px 2px, hsl(var(--border) / 0.3) 1px, transparent 0);
-    background-size: 32px 32px;
-  }
-
-  .font-mono {
-    font-family: 'JetBrains Mono', monospace;
-  }
-
-  /* Apply Kalpurush to Bangla text */
-  .font-bangla {
-    font-family: 'Kalpurush', 'Inter', system-ui, sans-serif;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'GlobalSerif', 'Lora', serif;
   }
 }
 
-@layer components {
-  .section-title {
-    @apply text-xs font-mono font-bold uppercase tracking-[0.2em] text-primary mb-8 flex items-center gap-4;
-  }
-
-  .section-title::before {
-    content: "/* ";
-    @apply text-muted-foreground font-normal;
-  }
-
-  .section-title::after {
-    content: " */";
-    @apply text-muted-foreground font-normal;
-  }
-
-  .gradient-text {
-    background: var(--gradient-tech);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
-  }
-
-  .terminal-window {
-    @apply rounded-lg border border-border bg-card/80 backdrop-blur-md overflow-hidden shadow-2xl;
-  }
-
-  .terminal-header {
-    @apply flex items-center gap-1.5 px-4 py-3 border-b border-border bg-secondary/50;
-  }
-
-  .terminal-dot {
-    @apply w-3 h-3 rounded-full;
-  }
-
-  .code-block {
-    @apply font-mono text-sm leading-relaxed p-6 bg-surface-1 rounded-lg border border-border;
-  }
-
-  /* Timeline styles */
-  .timeline-line {
-    @apply absolute left-4 top-0 bottom-0 w-px bg-border;
-  }
-
-  .timeline-dot {
-    @apply absolute left-4 w-2 h-2 rounded-full bg-primary -translate-x-1/2 mt-2 shadow-[0_0_8px_hsl(var(--primary))];
-  }
+/* Custom classes for specific font handling if needed */
+.font-arabic {
+  font-family: 'Scheherazade New', serif;
 }
 
-/* Animations */
-@keyframes fade-in-up {
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
+.font-bangla {
+  font-family: 'Kalpurush', serif;
 }
 
-@keyframes typing {
-  from { width: 0 }
-  to { width: 100% }
-}
-
-@keyframes blink {
-  50% { border-color: transparent }
-}
-
-.animate-fade-in-up {
-  animation: fade-in-up 0.5s ease-out forwards;
-}
-
-.animate-float {
-  animation: float 6s ease-in-out infinite;
-}
-
-@keyframes float {
-  0%, 100% { transform: translateY(0); }
-  50% { transform: translateY(-10px); }
-}
-
-/* Initial state for animated elements */
-.animate-on-scroll {
-  opacity: 0;
+.blog-content p {
+  @apply mb-6 leading-relaxed text-lg;
 }

@@ -3,14 +3,9 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
-import Dictionary from "./pages/Dictionary";
-import AIChat from "./pages/AIChat";
-import Inspector from "./pages/Inspector";
-import Newsroom from "./pages/Newsroom";
-import PortAnalyzer from "./pages/PortAnalyzer";
-import Photocard from "./pages/Photocard";
-import Nikah from "./pages/Nikah";
+import Home from "./pages/Home";
+import BlogList from "./pages/BlogList";
+import BlogPost from "./pages/BlogPost";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,15 +17,16 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
-          <Route path="/D" element={<Dictionary />} />
-          <Route path="/ai" element={<AIChat />} />
-          <Route path="/Inspector" element={<Inspector />} />
-          <Route path="/news" element={<Newsroom />} />
-          <Route path="/port" element={<PortAnalyzer />} />
-          <Route path="/p" element={<Photocard />} />
-          <Route path="/nikah" element={<Nikah />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
+          <Route path="/" element={<Home />} />
+
+          {/* Hierarchical dynamic routes for blogging */}
+          <Route path="/:year" element={<BlogList />} />
+          <Route path="/:year/:month" element={<BlogList />} />
+          <Route path="/:year/:month/:day" element={<BlogList />} />
+          <Route path="/:year/:month/:day/:id" element={<BlogPost />} />
+
+          {/* Catch-all */}
+          <Route path="/404" element={<NotFound />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
