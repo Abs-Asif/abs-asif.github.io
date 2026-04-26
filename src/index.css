@@ -6,15 +6,11 @@
 
 /* Kalpurush font for Bangla text */
 @font-face {
-  font-family: 'GlobalSerif';
+  font-family: 'Kalpurush';
   src: url('/fonts/kalpurush.ttf') format('truetype');
-  unicode-range: U+0980-09FF; /* Bangla range */
-}
-
-@font-face {
-  font-family: 'GlobalSerif';
-  src: local('Scheherazade New'), url('https://fonts.gstatic.com/s/scheherazadenew/v18/V8mR-REno7Vcx9pP7mO7AIn_T_A.woff2') format('woff2');
-  unicode-range: U+0600-06FF, U+0750-077F, U+08A0-08FF, U+FB50-FDFF, U+FE70-FEFF; /* Arabic range */
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
 }
 
 @layer base {
@@ -92,19 +88,21 @@
 
   body {
     @apply bg-background text-foreground antialiased;
-    font-family: 'GlobalSerif', 'Lora', serif;
+    /* Lora handles English, then Kalpurush handles Bangla, then Scheherazade New handles Arabic */
+    font-family: 'Lora', 'Kalpurush', 'Scheherazade New', serif;
   }
 }
 
-/* Custom classes for specific font handling if needed */
-.font-arabic {
-  font-family: 'Scheherazade New', serif;
-}
-
-.font-bangla {
-  font-family: 'Kalpurush', serif;
+/* Ensure the mixed font stack is applied to blog content */
+.blog-content {
+  font-family: 'Lora', 'Kalpurush', 'Scheherazade New', serif;
 }
 
 .blog-content p {
   @apply mb-6 leading-relaxed text-lg;
+}
+
+/* Specifically target Arabic text to ensure Scheherazade New is used if fallback fails or for emphasis */
+[lang="ar"], .arabic, .font-arabic {
+  font-family: 'Scheherazade New', serif;
 }

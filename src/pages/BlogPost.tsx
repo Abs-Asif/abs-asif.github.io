@@ -20,7 +20,7 @@ const BlogPost = () => {
 
   return (
     <Layout>
-      <article className="max-w-2xl mx-auto">
+      <article className="max-w-3xl mx-auto">
         <header className="mb-10 text-center">
           <p className="text-sm text-muted-foreground mb-4 uppercase tracking-widest">
             {post.date} • By {post.author}
@@ -38,7 +38,7 @@ const BlogPost = () => {
         </header>
 
         <div
-          className="blog-content prose dark:prose-invert max-w-none"
+          className="blog-content prose dark:prose-invert max-w-none font-serif"
           dangerouslySetInnerHTML={{ __html: post.content }}
         />
 
