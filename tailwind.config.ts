@@ -19,6 +19,8 @@ export default {
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
+        arabic: ['Amiri', 'serif'],
+        bangla: ['Kalpurush', 'sans-serif'],
       },
       colors: {
         border: "hsl(var(--border))",
