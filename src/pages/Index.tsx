@@ -1,93 +1,118 @@
-import { MessageCircle, Facebook, Mail, ExternalLink, Globe, Smartphone, ChevronRight } from "lucide-react";
-import calligraphyImg from "@/assets/profile-photo.png";
+import { useState, useMemo } from "react";
+import { Search, X, ChevronRight, MessageCircle, Facebook, Mail } from "lucide-react";
+import calligraphyImg from "@/assets/calligraphy-header.png";
 import gramroktiLogo from "@/assets/gramrokti-logo.png";
 import greenhutLogo from "@/assets/greenhut-logo.png";
 
 const Index = () => {
+  const [searchQuery, setSearchQuery] = useState("");
+
   const islamicLinks = [
     {
-      title: "iHadis - Bangla Hadith Collection",
+      title: "Hadith Verification - الدرর السنية",
+      url: "https://www.hdith.com/",
+      summary: "রাসূলুল্লাহ (সা.)-এর হাদীসের বিশুদ্ধতা যাচাই করার জন্য সবচেয়ে দ্রুত এবং নির্ভরযোগ্য মাধ্যম।",
+      tags: ["hadith", "verify", "authenticity", "হাদীস", "যাচাই"]
+    },
+    {
+      title: "HadithBD - বৃহত্তম বাংলা হাদীস ডেটাবেজ",
+      url: "https://www.hadithbd.com/",
+      summary: "বাংলা হাদীস, কুরআন এবং বিভিন্ন ইসলামী বইয়ের একটি পূর্ণাঙ্গ অনলাইন প্ল্যাটফর্ম।",
+      tags: ["hadith", "quran", "database", "বাংলা", "হাদীস"]
+    },
+    {
+      title: "iHadis - বাংলা হাদীস কালেকশন",
       url: "https://ihadis.com/",
-      summary: "A modern, beautifully designed interface for reading and searching authentic Bangla Hadith collections.",
+      summary: "সহীহ হাদীস পড়ার এবং সার্চ করার জন্য একটি আধুনিক ও চমৎকার ইন্টারফেস।",
+      tags: ["hadith", "apps", "search", "হাদীস"]
     },
     {
       title: "HadithBN - হাদীস বিএন",
       url: "https://hadithbn.com/",
-      summary: "Extensive library of Hadith books with Bangla translation, including Shamela search and Ulumul Hadith.",
+      summary: "হাদীস গ্রন্থসমূহের বিশাল লাইব্রেরি, সাথে শামেলা সার্চ এবং উলূমুল হাদীস।",
+      tags: ["hadith", "library", "shamela", "হাদীস"]
     },
     {
-      title: "Hadeeth Encyclopedia - Translated Hadiths",
+      title: "Hadeeth Encyclopedia - অনুবাদকৃত হাদীস",
       url: "https://hadeethenc.com/",
-      summary: "Authentic Prophetic Hadiths with simplified explanations, translated into dozens of world languages.",
+      summary: "সহজ ব্যাখ্যাসহ নির্ভরযোগ্য হাদীসসমূহ, যা বিশ্বের বিভিন্ন ভাষায় অনুবাদকৃত।",
+      tags: ["hadith", "encyclopedia", "translations", "হাদীস"]
     },
     {
-      title: "IslamHouse - Bangla Islamic Library",
+      title: "IslamHouse - বাংলা ইসলামী লাইব্রেরি",
       url: "https://islamhouse.com/lite/index.php/?lang=bn",
-      summary: "A massive free repository of Islamic books, audios, and videos in Bangla and many other languages.",
+      summary: "বই, অডিও এবং ভিডিওর একটি বিশাল ভাণ্ডার, যা সম্পূর্ণ বিনামূল্যে পাওয়া যায়।",
+      tags: ["library", "books", "media", "লাইব্রেরি"]
     },
     {
-      title: "IslamQA - Authentic Scholarly Answers",
+      title: "IslamQA - নির্ভরযোগ্য ফতোয়া ও উত্তর",
       url: "https://islamqa.info/bn",
-      summary: "Reliable answers to religious questions based on Quran and Sunnah, available in Bangla.",
+      summary: "কুরআন ও সুন্নাহর আলোকে ধর্মীয় বিভিন্ন প্রশ্নের নির্ভরযোগ্য সমাধান।",
+      tags: ["fatwa", "qa", "scholarly", "ফতোয়া"]
     },
     {
-      title: "Usul.ai - AI-Powered Islamic Research",
+      title: "Usul.ai - এআই চালিত ইসলামী গবেষণা",
       url: "https://usul.ai/",
-      summary: "Next-generation research tool for Islamic texts, using AI to search and analyze over 15,000 classical works.",
+      summary: "ইসলামী টেক্সট গবেষণার আধুনিক টুল, যা ১৫,০০০-এর বেশি কিতাব সার্চ করতে পারে।",
+      tags: ["ai", "research", "books", "গবেষণা"]
     },
     {
-      title: "Dar PDFs - Authentic Islamic Book Treasury",
+      title: "Dar PDFs - বিশুদ্ধ ইসলামী বইয়ের ভাণ্ডার",
       url: "https://darpdfs.org",
-      summary: "A huge collection of authentic Islamic literature in PDF format across various languages and categories.",
+      summary: "বিভিন্ন ভাষায় নির্ভরযোগ্য ইসলামী সাহিত্যের পিডিএফ সংকলন।",
+      tags: ["pdf", "books", "authentic", "বই"]
     },
     {
-      title: "মাসিক আত-তাহরীক - Monthly At-Tahreek",
+      title: "মাসিক আত-তাহরীক - গবেষণা পত্রিকা",
       url: "https://at-tahreek.com/",
-      summary: "An extra-ordinary Islamic research journal from Bangladesh based on pure Tawheed and Saheeh Sunnah.",
+      summary: "বিশুদ্ধ তাওহীদ ও সহীহ সুন্নাহর আলোকে প্রকাশিত একটি অনন্য গবেষণা পত্রিকা।",
+      tags: ["journal", "research", "tahreek", "পত্রিকা"]
     },
     {
-      title: "মাসিক আল-ইতিছাম - Monthly Al-Itisam",
+      title: "মাসিক আল-ইতিছাম - ইসলামী ম্যাগাজিন",
       url: "https://al-itisam.com/",
-      summary: "A research-based Islamic magazine focusing on spreading the message of Quran and authentic Sunnah.",
+      summary: "কুরআন ও সহীহ সুন্নাহর দাওয়াত প্রচারের লক্ষ্যে একটি গবেষণাভিত্তিক ম্যাগাজিন।",
+      tags: ["magazine", "research", "itisam", "ম্যাগাজিন"]
     },
     {
-      title: "Wafilife - Leading Islamic Bookstore",
+      title: "Wafilife - ইসলামী অনলাইন বুকশপ",
       url: "https://www.wafilife.com/",
-      summary: "Premium online destination for authentic Islamic books and lifestyle products in Bangladesh.",
+      summary: "বাংলাদেশে নির্ভরযোগ্য ইসলামী বই এবং লাইফস্টাইল পণ্যের অন্যতম গন্তব্য।",
+      tags: ["books", "shop", "wafilife", "বই"]
     },
     {
-      title: "হয়তোবা - Hoytoba.com Articles",
+      title: "হয়তোবা - Hoytoba.com আর্টিকেল",
       url: "https://hoytoba.com/",
-      summary: "A unique collection of Islamic articles, series, and practical parenting advice for the modern Muslim.",
-    },
-    {
-      title: "الدرر السنية - Hadith Verification",
-      url: "https://www.hdith.com/",
-      summary: "The fastest and most reliable way to verify the authenticity of Prophetic Hadiths using the Dorar collection.",
-    },
-    {
-      title: "HadithBD - Largest Bangla Hadith Database",
-      url: "https://www.hadithbd.com/",
-      summary: "Comprehensive online platform for Bangla Hadith, Quran, and diverse Islamic books with search functionality.",
-    },
+      summary: "ইসলামী প্রবন্ধ, সিরিজ এবং আধুনিক প্যারেন্টিং টিপসের একটি অনন্য সংগ্রহ।",
+      tags: ["articles", "parenting", "blog", "আর্টিকেল"]
+    }
   ];
 
   const projects = [
     {
+      title: "NikahGuard (Nikah.com.bd)",
+      url: "https://nikah.com.bd",
+      logo: greenhutLogo,
+    },
+    {
       title: "গ্রামরক্তি (GramRokti)",
-      subtitle: "Android Application for Blood Donation",
       url: "https://Gramrokti.vercel.app",
-      icon: Smartphone,
       logo: gramroktiLogo,
     },
     {
       title: "Greenhutbd Inventory",
-      subtitle: "Business Inventory Management System",
       url: "https://Inventory.greenhutbd.com",
-      icon: Globe,
       logo: greenhutLogo,
     },
   ];
+
+  const filteredLinks = useMemo(() => {
+    return islamicLinks.filter(link =>
+      link.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      link.summary.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      link.tags.some(tag => tag.toLowerCase().includes(searchQuery.toLowerCase()))
+    );
+  }, [searchQuery]);
 
   const getFavicon = (url: string) => {
     const domain = new URL(url).hostname;
@@ -95,49 +120,71 @@ const Index = () => {
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex flex-col items-center px-4 py-8 sm:py-12">
-      {/* Background Decorative Elements */}
-      <div className="fixed inset-0 pointer-events-none overflow-hidden -z-10">
-        <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] rounded-full bg-primary/5 blur-[120px]" />
-        <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] rounded-full bg-accent/5 blur-[120px]" />
-      </div>
-
+    <div className="min-h-screen flex flex-col items-center px-4 py-8 sm:py-12">
       {/* Calligraphy Header */}
       <div className="w-full max-w-2xl flex justify-center mb-12">
         <img
           src={calligraphyImg}
-          alt="Calligraphy"
-          className="max-w-[280px] sm:max-w-[350px] h-auto"
+          alt="Islamic Calligraphy"
+          className="max-w-[300px] sm:max-w-[400px] h-auto drop-shadow-xl"
         />
       </div>
 
-      {/* Islamic Links (Search Result Style) */}
-      <div className="w-full max-w-2xl space-y-10 mb-16">
-        {islamicLinks.map((link, index) => (
-          <div key={link.url} className="animate-fade-in-up" style={{ animationDelay: `${index * 50}ms` }}>
-            <a href={link.url} target="_blank" rel="noopener noreferrer" className="group block">
-              <div className="flex items-center gap-3 mb-1">
-                <div className="w-7 h-7 rounded-full bg-secondary/50 flex items-center justify-center p-1 overflow-hidden border border-border/50">
-                  <img src={getFavicon(link.url)} alt="" className="w-full h-full object-contain" />
-                </div>
-                <div className="text-xs text-muted-foreground truncate opacity-80 group-hover:text-accent transition-colors">
-                  {new URL(link.url).hostname}
-                </div>
-              </div>
-              <h3 className="text-xl font-medium text-accent group-hover:underline mb-1 transition-all">
-                {link.title}
-              </h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                {link.summary}
-              </p>
-            </a>
-          </div>
-        ))}
+      {/* Search Bar */}
+      <div className="w-full max-w-2xl mb-12 relative group">
+        <div className="absolute left-6 top-1/2 -translate-y-1/2 text-muted-foreground group-focus-within:text-primary transition-colors">
+          <Search size={20} />
+        </div>
+        <input
+          type="text"
+          placeholder="সার্চ করুন..."
+          className="search-input pl-14 pr-14"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+        {searchQuery && (
+          <button
+            onClick={() => setSearchQuery("")}
+            className="absolute right-6 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-destructive transition-colors flex items-center gap-1 text-xs font-medium"
+          >
+            <span>মুছুন</span>
+            <X size={16} />
+          </button>
+        )}
       </div>
 
-      {/* Projects Section */}
-      <div className="w-full max-w-md space-y-4 mb-16 pt-8 border-t border-border/30">
-        <h2 className="text-center text-xs font-mono text-muted-foreground uppercase tracking-[0.3em] mb-6">Development Projects</h2>
+      {/* Islamic Links */}
+      <div className="w-full max-w-2xl space-y-10 mb-20">
+        {filteredLinks.length > 0 ? (
+          filteredLinks.map((link, index) => (
+            <div key={link.url} className="animate-fade-in-up" style={{ animationDelay: `${index * 30}ms` }}>
+              <a href={link.url} target="_blank" rel="noopener noreferrer" className="group block">
+                <div className="flex items-center gap-3 mb-1">
+                  <div className="w-6 h-6 rounded-full bg-white/50 flex items-center justify-center p-1 overflow-hidden border border-border/30">
+                    <img src={getFavicon(link.url)} alt="" className="w-full h-full object-contain" />
+                  </div>
+                  <div className="text-[10px] text-muted-foreground truncate uppercase tracking-widest group-hover:text-primary transition-colors">
+                    {new URL(link.url).hostname}
+                  </div>
+                </div>
+                <h3 className="text-xl font-bold text-primary group-hover:underline mb-1 transition-all">
+                  {link.title}
+                </h3>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  {link.summary}
+                </p>
+              </a>
+            </div>
+          ))
+        ) : (
+          <div className="text-center py-12 text-muted-foreground animate-fade-in-up">
+            দুঃখিত, কোনো ফলাফল পাওয়া যায়নি।
+          </div>
+        )}
+      </div>
+
+      {/* Projects Section (Minimized - Exactly 3 projects) */}
+      <div className="w-full max-w-md space-y-3 mb-16 pt-8 border-t border-border/20">
         {projects.map((project, index) => (
           <a
             key={project.title}
@@ -145,58 +192,48 @@ const Index = () => {
             target="_blank"
             rel="noopener noreferrer"
             className="islamic-button animate-fade-in-up"
-            style={{ animationDelay: `${(islamicLinks.length + index) * 50}ms` }}
+            style={{ animationDelay: `${(filteredLinks.length + index) * 30}ms` }}
           >
-            <div className="flex items-center gap-4">
-              <div className="w-10 h-10 rounded-xl bg-surface-1 border border-border/50 flex items-center justify-center overflow-hidden shrink-0">
-                <img src={project.logo} alt="" className="w-6 h-6 object-contain grayscale group-hover:grayscale-0 transition-all" />
+            <div className="flex items-center gap-3">
+              <div className="w-8 h-8 rounded-lg bg-white/50 border border-border/30 flex items-center justify-center overflow-hidden shrink-0">
+                <img src={project.logo} alt="" className="w-5 h-5 object-contain" />
               </div>
-              <div className="text-left">
-                <h3 className={`font-bold text-xs ${project.title.includes("গ্রামরক্তি") ? "font-bangla" : ""}`}>
-                  {project.title}
-                </h3>
-                <p className="text-[9px] text-muted-foreground font-medium uppercase tracking-wider">
-                  {project.subtitle}
-                </p>
-              </div>
+              <h3 className="font-bold text-xs">
+                {project.title}
+              </h3>
             </div>
-            <ChevronRight size={14} className="text-muted-foreground group-hover:text-accent transition-colors" />
+            <ChevronRight size={14} className="text-muted-foreground group-hover:text-primary transition-colors" />
           </a>
         ))}
       </div>
 
-      {/* Footer Social Icons */}
-      <footer className="mt-auto flex flex-col items-center gap-6 py-8 w-full border-t border-border/20">
-        <div className="flex justify-center gap-4">
-          <a
-            href="https://wa.me/8801538310838"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-10 h-10 rounded-full bg-secondary/50 border border-border/50 flex items-center justify-center text-muted-foreground hover:text-green-500 hover:border-green-500/50 transition-all"
-            aria-label="WhatsApp"
-          >
-            <MessageCircle size={18} />
-          </a>
-          <a
-            href="https://www.facebook.com/abdullahbariasif"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="w-10 h-10 rounded-full bg-secondary/50 border border-border/50 flex items-center justify-center text-muted-foreground hover:text-blue-500 hover:border-blue-500/50 transition-all"
-            aria-label="Facebook"
-          >
-            <Facebook size={18} />
-          </a>
-          <a
-            href="mailto:abdullah.bari.2028@gmail.com"
-            className="w-10 h-10 rounded-full bg-secondary/50 border border-border/50 flex items-center justify-center text-muted-foreground hover:text-accent hover:border-accent/50 transition-all"
-            aria-label="Email"
-          >
-            <Mail size={18} />
-          </a>
-        </div>
-        <p className="text-[10px] font-mono text-muted-foreground uppercase tracking-[0.2em]">
-          © {new Date().getFullYear()} • Fi Sabilillah
-        </p>
+      {/* Social Footer */}
+      <footer className="mt-auto py-8 w-full border-t border-border/10 flex justify-center gap-6">
+        <a
+          href="https://wa.me/8801538310838"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-10 h-10 rounded-full bg-white/50 border border-border/30 flex items-center justify-center text-muted-foreground hover:text-green-600 hover:border-green-300 transition-all shadow-sm"
+          aria-label="WhatsApp"
+        >
+          <MessageCircle size={18} />
+        </a>
+        <a
+          href="https://www.facebook.com/abdullahbariasif"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-10 h-10 rounded-full bg-white/50 border border-border/30 flex items-center justify-center text-muted-foreground hover:text-blue-600 hover:border-blue-300 transition-all shadow-sm"
+          aria-label="Facebook"
+        >
+          <Facebook size={18} />
+        </a>
+        <a
+          href="mailto:abdullah.bari.2028@gmail.com"
+          className="w-10 h-10 rounded-full bg-white/50 border border-border/30 flex items-center justify-center text-muted-foreground hover:text-primary hover:border-primary/30 transition-all shadow-sm"
+          aria-label="Email"
+        >
+          <Mail size={18} />
+        </a>
       </footer>
     </div>
   );
