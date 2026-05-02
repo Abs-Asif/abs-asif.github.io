@@ -1,14 +1,16 @@
 User-agent: *
 Allow: /
-Disallow: /admin
 Disallow: /admin/
 
-Sitemap: https://nikahguard.pages.dev/sitemap.xml
-
+# Optimization for Search Engines
 User-agent: Googlebot
 Allow: /
-Crawl-delay: 1
 
 User-agent: Bingbot
 Allow: /
-Crawl-delay: 2
+
+# Host
+Host: https://abdullah.ami.bd
+
+# Sitemap
+Sitemap: https://abdullah.ami.bd/sitemap.xml
