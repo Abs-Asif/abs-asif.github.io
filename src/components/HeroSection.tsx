@@ -3,7 +3,7 @@ import profileTransparent from "@/assets/profile-transparent.png";
 export const HeroSection = () => {
   return (
     <section className="pt-20 pb-10 flex flex-col items-center justify-center text-center px-4 relative">
-      <div className="w-48 h-48 mb-8 animate-fade-in-up opacity-0" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+      <div className="w-64 h-64 mb-8 animate-fade-in-up opacity-0" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
         <img
           src={profileTransparent}
           alt="Md. Abdullah Bari"
@@ -15,9 +15,6 @@ export const HeroSection = () => {
         <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 tracking-tight">
           Md. Abdullah Bari
         </h1>
-        <p className="text-lg text-muted-foreground font-medium">
-          Software & Medical Student
-        </p>
       </div>
     </section>
   );
