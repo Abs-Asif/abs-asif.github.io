@@ -3,13 +3,6 @@ import { Mail, Phone, MessageCircle } from "lucide-react";
 
 const contactLinks = [
   {
-    icon: Mail,
-    label: "Email Me",
-    value: "contact@abdullah.ami.bd",
-    href: "mailto:contact@abdullah.ami.bd",
-    style: "m3-tonal",
-  },
-  {
     icon: Phone,
     label: "Primary Contact",
     value: "01738745285",
@@ -32,6 +25,14 @@ const contactLinks = [
   },
 ];
 
+const emailLink = {
+  icon: Mail,
+  label: "Email Me",
+  value: "contact@abdullah.ami.bd",
+  href: "mailto:contact@abdullah.ami.bd",
+  style: "m3-tonal",
+};
+
 const FacebookIcon = ({ size = 20 }: { size?: number }) => (
   <svg
     xmlns="http://www.w3.org/2000/svg"
@@ -50,39 +51,28 @@ export const ContactSection = () => {
   return (
     <section id="contact" className="pb-24 px-4">
       <div className="max-w-md mx-auto space-y-4">
-        {contactLinks.map((link, index) => {
-          const isEmail = link.icon === Mail;
-          const displayValue = (isEmail && !emailRevealed) ? "Click to reveal address" : link.value;
-
-          return (
-            <div
-              key={link.value}
-              className="animate-fade-in-up opacity-0"
-              style={{ animationDelay: `${(index + 3) * 100}ms`, animationFillMode: 'forwards' }}
+        {contactLinks.map((link, index) => (
+          <div
+            key={link.value}
+            className="animate-fade-in-up opacity-0"
+            style={{ animationDelay: `${(index + 3) * 100}ms`, animationFillMode: 'forwards' }}
+          >
+            <a
+              href={link.href}
+              className={`linktree-button ${link.style}`}
             >
-              <a
-                href={isEmail && !emailRevealed ? "#" : link.href}
-                onClick={(e) => {
-                  if (isEmail && !emailRevealed) {
-                    e.preventDefault();
-                    setEmailRevealed(true);
-                  }
-                }}
-                className={`linktree-button ${link.style}`}
-              >
-                <link.icon size={20} />
-                <div className="flex flex-col items-start">
-                  <span className="text-[10px] uppercase tracking-wider opacity-70 leading-none">{link.label}</span>
-                  <span className="text-sm font-semibold">{displayValue}</span>
-                </div>
-              </a>
-            </div>
-          );
-        })}
+              <link.icon size={20} />
+              <div className="flex flex-col items-start">
+                <span className="text-[10px] uppercase tracking-wider opacity-70 leading-none">{link.label}</span>
+                <span className="text-sm font-semibold">{link.value}</span>
+              </div>
+            </a>
+          </div>
+        ))}
 
         <div
           className="animate-fade-in-up opacity-0"
-          style={{ animationDelay: "700ms", animationFillMode: 'forwards' }}
+          style={{ animationDelay: "600ms", animationFillMode: 'forwards' }}
         >
           <a
             href="https://www.facebook.com/abdullahbariasif"
@@ -94,6 +84,30 @@ export const ContactSection = () => {
             <div className="flex flex-col items-start">
               <span className="text-[10px] uppercase tracking-wider opacity-70 leading-none">Facebook</span>
               <span className="text-sm font-semibold">Personal Profile</span>
+            </div>
+          </a>
+        </div>
+
+        <div
+          className="animate-fade-in-up opacity-0"
+          style={{ animationDelay: "700ms", animationFillMode: 'forwards' }}
+        >
+          <a
+            href={!emailRevealed ? "#" : emailLink.href}
+            onClick={(e) => {
+              if (!emailRevealed) {
+                e.preventDefault();
+                setEmailRevealed(true);
+              }
+            }}
+            className={`linktree-button ${emailLink.style}`}
+          >
+            <emailLink.icon size={20} />
+            <div className="flex flex-col items-start">
+              <span className="text-[10px] uppercase tracking-wider opacity-70 leading-none">{emailLink.label}</span>
+              <span className="text-sm font-semibold">
+                {!emailRevealed ? "Click to reveal address" : emailLink.value}
+              </span>
             </div>
           </a>
         </div>

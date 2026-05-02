@@ -2,8 +2,8 @@ import profileTransparent from "@/assets/profile-transparent.png";
 
 export const HeroSection = () => {
   return (
-    <section className="pt-20 pb-10 flex flex-col items-center justify-center text-center px-4 relative">
-      <div className="w-64 h-64 mb-8 animate-fade-in-up opacity-0" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+    <section className="pt-10 pb-5 flex flex-col items-center justify-center text-center px-4 relative">
+      <div className="w-64 h-64 mb-4 animate-fade-in-up opacity-0" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
         <img
           src={profileTransparent}
           alt="Md. Abdullah Bari"
