@@ -1,3 +1,5 @@
+import LZString from "lz-string";
+
 const ENCRYPTION_KEY = "identity-info-secure-key-2025";
 
 /**
@@ -45,6 +47,35 @@ export const decrypt = (base64: string): string => {
     return decoder.decode(decrypted);
   } catch (error) {
     console.error("Decryption failed:", error);
+    return "";
+  }
+};
+
+/**
+ * Compresses and encrypts text for URL usage.
+ * Uses lz-string for compression to keep URLs short.
+ */
+export const compressAndEncryptForUrl = (text: string): string => {
+  if (!text) return "";
+  // First compress
+  const compressed = LZString.compressToEncodedURIComponent(text);
+  // Then obfuscate with XOR
+  return encrypt(compressed);
+};
+
+/**
+ * Decrypts and decompresses text from URL.
+ */
+export const decryptAndDecompressFromUrl = (hash: string): string => {
+  if (!hash) return "";
+  try {
+    // First reverse XOR/Base64
+    const decrypted = decrypt(hash);
+    if (!decrypted) return "";
+    // Then decompress
+    return LZString.decompressFromEncodedURIComponent(decrypted) || "";
+  } catch (error) {
+    console.error("Failed to decrypt and decompress", error);
     return "";
   }
 };
