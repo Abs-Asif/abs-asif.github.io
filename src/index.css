@@ -145,6 +145,61 @@
   .font-serif {
     font-family: 'EB Garamond', serif;
   }
+
+  .font-mixed {
+    font-family: 'EB Garamond', 'Kalpurush', 'Scheherazade New', serif;
+  }
+
+  .tiptap .ProseMirror {
+    @apply outline-none min-h-[70vh] break-words;
+    unicode-bidi: plaintext;
+    text-align: justify;
+    text-justify: inter-word;
+  }
+
+  .tiptap .ProseMirror p.is-editor-empty:first-child::before {
+    content: attr(data-placeholder);
+    float: left;
+    color: #adb5bd;
+    pointer-events: none;
+    height: 0;
+  }
+
+  .tiptap .ProseMirror pre {
+    @apply bg-slate-900 text-slate-100 p-6 rounded-2xl overflow-x-auto mb-8 text-sm font-mono shadow-inner border border-slate-800;
+  }
+
+  .tiptap .ProseMirror code {
+    @apply bg-slate-100 text-pink-600 px-1.5 py-0.5 rounded text-sm font-mono;
+  }
+
+  .tiptap .ProseMirror pre code {
+    @apply bg-transparent text-inherit p-0 rounded-none text-sm;
+  }
+
+  .tiptap .ProseMirror img {
+    @apply max-w-full h-auto rounded-2xl mx-auto my-8 shadow-md;
+  }
+
+  .tiptap .ProseMirror ul {
+    @apply list-disc pl-6 mb-6 space-y-2;
+  }
+
+  .tiptap .ProseMirror ol {
+    @apply list-decimal pl-6 mb-6 space-y-2;
+  }
+
+  .tiptap .ProseMirror h1 {
+    @apply text-4xl font-bold mb-8 text-slate-900 font-serif;
+  }
+
+  .tiptap .ProseMirror h2 {
+    @apply text-3xl font-bold mb-6 text-slate-900 font-serif;
+  }
+
+  .tiptap .ProseMirror h3 {
+    @apply text-2xl font-bold mb-4 text-slate-900 font-serif;
+  }
 }
 
 @layer components {
