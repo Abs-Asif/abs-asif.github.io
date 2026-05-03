@@ -137,6 +137,14 @@
   .font-bangla {
     font-family: 'Kalpurush', 'Inter', system-ui, sans-serif;
   }
+
+  .font-arabic {
+    font-family: 'Scheherazade New', serif;
+  }
+
+  .font-serif {
+    font-family: 'EB Garamond', serif;
+  }
 }
 
 @layer components {
