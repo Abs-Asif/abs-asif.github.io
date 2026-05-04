@@ -99,13 +99,20 @@ const LetterRaw = () => {
                       <div className="flex-1 pt-2">
                         <div className="flex items-center gap-2 text-slate-400 mb-1">
                           <span className="text-[10px] uppercase tracking-widest font-bold">
-                            {index === steps.length - 1 ? "Final Content" : "Next Level"}
+                            {index === steps.length - 1 ? "Final Content" : "Next Level Code"}
                           </span>
                           <ArrowRight size={12} />
                         </div>
-                        <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 truncate text-xs text-slate-500 font-mono">
-                          {step.decrypted.substring(0, 100)}...
-                        </div>
+                        {step.level !== 1 && (
+                          <div className="bg-slate-50 p-3 rounded-xl border border-slate-100 text-xs text-slate-500 font-mono break-all whitespace-pre-wrap">
+                            {step.decrypted}
+                          </div>
+                        )}
+                        {step.level === 1 && (
+                          <div className="text-[10px] text-slate-300 italic">
+                            Content hidden for final step
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}
