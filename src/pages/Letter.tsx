@@ -5,7 +5,7 @@ import { Markdown } from "tiptap-markdown";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
 import TextAlign from "@tiptap/extension-text-align";
-import { compressAndEncryptForUrl, decryptAndDecompressFromUrl } from "@/lib/encryption";
+import { multiLayerCompressAndEncrypt, multiLayerDecryptAndDecompress } from "@/lib/encryption";
 
 const Letter = () => {
   const isInitialMount = useRef(true);
@@ -40,7 +40,7 @@ const Letter = () => {
     ],
     editorProps: {
       attributes: {
-        class: "font-mixed prose-lg md:prose-xl max-w-none focus:outline-none min-h-[70vh]",
+        class: "font-mixed prose-xl md:prose-2xl max-w-none focus:outline-none min-h-[70vh]",
         dir: "auto",
       },
     },
@@ -52,7 +52,7 @@ const Letter = () => {
 
   const updateUrl = (markdown: string) => {
     if (markdown.trim()) {
-      const encrypted = compressAndEncryptForUrl(markdown);
+      const encrypted = multiLayerCompressAndEncrypt(markdown);
       const encoded = encodeURIComponent(encrypted);
       const newUrl = `${window.location.pathname}?${encoded}`;
       window.history.replaceState(null, "", newUrl);
@@ -69,7 +69,7 @@ const Letter = () => {
       if (hash) {
         try {
           const decoded = decodeURIComponent(hash);
-          const decrypted = decryptAndDecompressFromUrl(decoded);
+          const decrypted = multiLayerDecryptAndDecompress(decoded);
           if (decrypted) {
             editor.commands.setContent(decrypted);
           }
@@ -82,8 +82,8 @@ const Letter = () => {
   }, [editor]);
 
   return (
-    <div className="min-h-screen bg-white p-8 md:p-16 lg:p-24 flex flex-col items-center">
-      <div className="w-full max-w-4xl tiptap">
+    <div className="min-h-screen bg-white p-10 md:p-20 lg:p-32 flex flex-col items-center">
+      <div className="w-full max-w-5xl tiptap">
         <EditorContent editor={editor} />
       </div>
 
