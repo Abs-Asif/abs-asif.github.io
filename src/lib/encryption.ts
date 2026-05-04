@@ -77,17 +77,20 @@ export const multiLayerCompressAndEncrypt = (text: string): string => {
 
   if (current.length > 100) {
     // Try to move to higher levels if it helps or if we need to move to at least level 2
-    for (let nextLevel = 2; nextLevel <= 5; nextLevel++) {
+    // Limit to 999 levels as requested
+    for (let nextLevel = 2; nextLevel <= 999; nextLevel++) {
       const nextData = compressAndEncryptForUrl(current);
       const nextCurrent = nextLevel.toString().padStart(3, '0') + nextData;
 
-      // Move to level 2 anyway if level 1 was > 100,
-      // otherwise only move if it's shorter.
+      // Move to level 2 anyway if level 1 was > 100 (per requirement),
+      // otherwise only move if it's shorter to ensure we are actually making progress.
       if (nextLevel === 2 || nextCurrent.length < current.length) {
         current = nextCurrent;
         level = nextLevel;
+        // If we reached the target length, we can stop
         if (current.length <= 100) break;
       } else {
+        // If it starts getting longer, stop and keep the shortest version
         break;
       }
     }
@@ -110,8 +113,8 @@ export const multiLayerDecryptAndDecompress = (hash: string): string => {
   }
 
   let currentHash = hash;
-  // Safety limit to prevent infinite loops
-  for (let i = 0; i < 10; i++) {
+  // Safety limit to prevent infinite loops - increased to 1000 to support up to 999 levels
+  for (let i = 0; i < 1000; i++) {
     const levelStr = currentHash.substring(0, 3);
     const level = parseInt(levelStr);
     const data = currentHash.substring(3);
@@ -160,7 +163,8 @@ export const getMultiLayerDecryptionSteps = (hash: string): { level: number; dat
     return steps;
   }
 
-  for (let i = 0; i < 10; i++) {
+  // Increased to 1000 to support up to 999 levels
+  for (let i = 0; i < 1000; i++) {
     const levelStr = currentHash.substring(0, 3);
     const level = parseInt(levelStr);
     const data = currentHash.substring(3);
