@@ -121,6 +121,49 @@ export const multiLayerDecryptAndDecompress = (hash: string): string => {
 };
 
 /**
+ * Returns the steps of decryption for inspection.
+ */
+export const getMultiLayerDecryptionSteps = (hash: string): { level: number; data: string; decrypted: string }[] => {
+  const steps: { level: number; data: string; decrypted: string }[] = [];
+  if (!hash) return steps;
+
+  // Normalize hash: if it's a full URL, extract the query part
+  let currentHash = hash;
+  if (hash.includes('?')) {
+    currentHash = decodeURIComponent(hash.split('?')[1]);
+  }
+
+  const prefixMatch = currentHash.match(/^\d{3}/);
+  if (!prefixMatch) {
+    const decrypted = decryptAndDecompressFromUrl(currentHash);
+    if (decrypted) {
+      steps.push({ level: 0, data: currentHash, decrypted });
+    }
+    return steps;
+  }
+
+  while (true) {
+    const levelStr = currentHash.substring(0, 3);
+    const level = parseInt(levelStr);
+    const data = currentHash.substring(3);
+
+    if (isNaN(level)) break;
+
+    const decrypted = decryptAndDecompressFromUrl(data);
+    if (!decrypted) break;
+
+    steps.push({ level, data, decrypted });
+
+    if (level === 1) break;
+
+    currentHash = decrypted;
+    if (!currentHash.match(/^\d{3}/)) break;
+  }
+
+  return steps;
+};
+
+/**
  * Compresses and encrypts text for URL usage.
  * Uses lz-string for compression to keep URLs short.
  */

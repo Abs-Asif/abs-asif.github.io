@@ -3,7 +3,8 @@ import { describe, it, expect } from 'vitest';
 import {
   multiLayerCompressAndEncrypt,
   multiLayerDecryptAndDecompress,
-  compressAndEncryptForUrl
+  compressAndEncryptForUrl,
+  getMultiLayerDecryptionSteps
 } from '../lib/encryption';
 
 describe('Multi-layer Encryption', () => {
@@ -45,5 +46,25 @@ describe('Multi-layer Encryption', () => {
 
     const decrypted = multiLayerDecryptAndDecompress(level2Data);
     expect(decrypted).toBe(text);
+  });
+
+  it('should return decryption steps for inspection', () => {
+    const text = "Inspect Me";
+    const encrypted = multiLayerCompressAndEncrypt(text);
+    const steps = getMultiLayerDecryptionSteps(encrypted);
+
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps[steps.length - 1].decrypted).toBe(text);
+    expect(steps[0].level).toBeGreaterThanOrEqual(1);
+  });
+
+  it('should handle full URL in getMultiLayerDecryptionSteps', () => {
+    const text = "URL Test";
+    const encrypted = multiLayerCompressAndEncrypt(text);
+    const fullUrl = `https://abdullah.ami.bd/letter?${encodeURIComponent(encrypted)}`;
+
+    const steps = getMultiLayerDecryptionSteps(fullUrl);
+    expect(steps.length).toBeGreaterThanOrEqual(1);
+    expect(steps[steps.length - 1].decrypted).toBe(text);
   });
 });
