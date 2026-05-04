@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
+Allow: /tools
 Disallow: /admin/
 Disallow: /letter
 
