@@ -52,6 +52,75 @@ export const decrypt = (base64: string): string => {
 };
 
 /**
+ * Multi-layer encryption that attempts to reduce URL length by recursively
+ * compressing and encrypting if the length exceeds 100 characters.
+ * Prefixes with a 3-digit level indicator (001, 002, ...).
+ */
+export const multiLayerCompressAndEncrypt = (text: string): string => {
+  if (!text) return "";
+
+  let level = 1;
+  let data = compressAndEncryptForUrl(text);
+  let current = "001" + data;
+
+  while (current.length > 100 && level < 999) {
+    const nextData = compressAndEncryptForUrl(current);
+    const nextLevel = level + 1;
+    const nextPrefix = nextLevel.toString().padStart(3, '0');
+    const nextCurrent = nextPrefix + nextData;
+
+    if (nextCurrent.length < current.length) {
+      current = nextCurrent;
+      level = nextLevel;
+    } else {
+      break;
+    }
+  }
+
+  return current;
+};
+
+/**
+ * Multi-layer decryption that recursively decrypts based on the 3-digit prefix.
+ */
+export const multiLayerDecryptAndDecompress = (hash: string): string => {
+  if (!hash) return "";
+
+  // Check if it has the 3-digit prefix
+  const prefixMatch = hash.match(/^\d{3}/);
+  if (!prefixMatch) {
+    // Fallback for legacy URLs without prefix
+    return decryptAndDecompressFromUrl(hash);
+  }
+
+  let currentHash = hash;
+  while (true) {
+    const levelStr = currentHash.substring(0, 3);
+    const level = parseInt(levelStr);
+    const data = currentHash.substring(3);
+
+    if (isNaN(level)) {
+       return decryptAndDecompressFromUrl(currentHash);
+    }
+
+    const decrypted = decryptAndDecompressFromUrl(data);
+
+    if (!decrypted) return "";
+
+    if (level === 1) {
+      return decrypted;
+    }
+
+    currentHash = decrypted;
+    // Safety check: decrypted content of level > 1 MUST have a prefix
+    if (!currentHash.match(/^\d{3}/)) {
+      console.error("Multi-layer decryption failed: expected prefix not found in level", level);
+      return "";
+    }
+  }
+};
+
+/**
  * Compresses and encrypts text for URL usage.
  * Uses lz-string for compression to keep URLs short.
  */
