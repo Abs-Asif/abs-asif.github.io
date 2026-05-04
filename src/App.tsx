@@ -7,6 +7,9 @@ import Index from "./pages/Index";
 import Info from "./pages/Info";
 import Letter from "./pages/Letter";
 import LetterRaw from "./pages/LetterRaw";
+import Tools from "./pages/Tools";
+import AgeCalculator from "./pages/AgeCalculator";
+import Calendar from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +25,9 @@ const App = () => (
           <Route path="/INFO" element={<Info />} />
           <Route path="/letter" element={<Letter />} />
           <Route path="/letter/raw" element={<LetterRaw />} />
+          <Route path="/tools" element={<Tools />} />
+          <Route path="/tools/age-cal" element={<AgeCalculator />} />
+          <Route path="/tools/calender" element={<Calendar />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
