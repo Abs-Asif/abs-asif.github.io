@@ -1,6 +1,6 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, ChevronLeft, ChevronRight, Calendar as CalendarIcon, RotateCcw, Clock } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Calendar as CalendarIcon, RotateCcw, Clock, Loader2 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 import { toBanglaNumber } from "@/lib/bangla-utils";
 import {
@@ -27,20 +27,12 @@ interface Holiday {
   bangla: string;
 }
 
-const HOLIDAYS: Holiday[] = [
-  // 2024
-  { date: '2024-12-16', name: 'Victory Day', bangla: 'বিজয় দিবস' },
-  { date: '2024-12-25', name: 'Christmas Day', bangla: 'বড় দিন' },
-  // 2025
+const RELIGIOUS_HOLIDAYS_2025: Holiday[] = [
   { date: '2025-02-14', name: 'Shab-e-Barat', bangla: 'শবে বরাত' },
-  { date: '2025-02-21', name: 'Martyrs\' Day', bangla: 'শহীদ দিবস' },
-  { date: '2025-03-26', name: 'Independence Day', bangla: 'স্বাধীনতা দিবস' },
   { date: '2025-03-27', name: 'Lailatul Qadr', bangla: 'লাইলাতুল কদর' },
   { date: '2025-03-31', name: 'Eid-ul-Fitr', bangla: 'ঈদুল ফিতর' },
   { date: '2025-04-01', name: 'Eid-ul-Fitr', bangla: 'ঈদুল ফিতর' },
   { date: '2025-04-02', name: 'Eid-ul-Fitr', bangla: 'ঈদুল ফিতর' },
-  { date: '2025-04-14', name: 'Bengali New Year', bangla: 'পহেলা বৈশাখ' },
-  { date: '2025-05-01', name: 'May Day', bangla: 'মে দিবস' },
   { date: '2025-05-14', name: 'Buddha Purnima', bangla: 'বুদ্ধ পূর্ণিমা' },
   { date: '2025-06-07', name: 'Eid-ul-Adha', bangla: 'ঈদুল আযহা' },
   { date: '2025-06-08', name: 'Eid-ul-Adha', bangla: 'ঈদুল আযহা' },
@@ -50,23 +42,21 @@ const HOLIDAYS: Holiday[] = [
   { date: '2025-09-05', name: 'Eid-e-Miladunnabi', bangla: 'ঈদে মিলাদুন্নবী' },
   { date: '2025-10-01', name: 'Durga Puja', bangla: 'দুর্গাপূজা' },
   { date: '2025-10-02', name: 'Durga Puja', bangla: 'দুর্গাপূজা' },
-  { date: '2025-12-16', name: 'Victory Day', bangla: 'বিজয় দিবস' },
-  { date: '2025-12-25', name: 'Christmas Day', bangla: 'বড় দিন' },
 ];
 
 const BENGALI_MONTHS = [
-  { name: "Boishakh", bangla: "বৈশাখ", startMonth: 3, startDate: 14, days: 31 }, // April 14
-  { name: "Jyaistha", bangla: "জ্যৈষ্ঠ", startMonth: 4, startDate: 15, days: 31 }, // May 15
-  { name: "Ashadha", bangla: "আষাঢ়", startMonth: 5, startDate: 15, days: 31 }, // June 15
-  { name: "Shraban", bangla: "শ্রাবণ", startMonth: 6, startDate: 16, days: 31 }, // July 16
-  { name: "Bhadra", bangla: "ভাদ্র", startMonth: 7, startDate: 16, days: 31 }, // August 16
-  { name: "Ashwin", bangla: "আশ্বিন", startMonth: 8, startDate: 16, days: 31 }, // September 16
-  { name: "Kartik", bangla: "কার্তিক", startMonth: 9, startDate: 17, days: 30 }, // October 17
-  { name: "Agrahayan", bangla: "অগ্রহায়ণ", startMonth: 10, startDate: 16, days: 30 }, // November 16
-  { name: "Poush", bangla: "পৌষ", startMonth: 11, startDate: 16, days: 30 }, // December 16
-  { name: "Magh", bangla: "মাঘ", startMonth: 0, startDate: 15, days: 30 }, // January 15
-  { name: "Falgun", bangla: "ফাল্গুন", startMonth: 1, startDate: 14, days: 29 }, // February 14
-  { name: "Chaitra", bangla: "চৈত্র", startMonth: 2, startDate: 15, days: 30 }, // March 15
+  { name: "Boishakh", bangla: "বৈশাখ", startMonth: 3, startDate: 14, days: 31 },
+  { name: "Jyaistha", bangla: "জ্যৈষ্ঠ", startMonth: 4, startDate: 15, days: 31 },
+  { name: "Ashadha", bangla: "আষাঢ়", startMonth: 5, startDate: 15, days: 31 },
+  { name: "Shraban", bangla: "শ্রাবণ", startMonth: 6, startDate: 16, days: 31 },
+  { name: "Bhadra", bangla: "ভাদ্র", startMonth: 7, startDate: 16, days: 31 },
+  { name: "Ashwin", bangla: "আশ্বিন", startMonth: 8, startDate: 16, days: 31 },
+  { name: "Kartik", bangla: "কার্তিক", startMonth: 9, startDate: 17, days: 30 },
+  { name: "Agrahayan", bangla: "অগ্রহায়ণ", startMonth: 10, startDate: 16, days: 30 },
+  { name: "Poush", bangla: "পৌষ", startMonth: 11, startDate: 16, days: 30 },
+  { name: "Magh", bangla: "মাঘ", startMonth: 0, startDate: 15, days: 30 },
+  { name: "Falgun", bangla: "ফাল্গুন", startMonth: 1, startDate: 14, days: 29 },
+  { name: "Chaitra", bangla: "চৈত্র", startMonth: 2, startDate: 15, days: 30 },
 ];
 
 const Calendar = () => {
@@ -75,8 +65,47 @@ const Calendar = () => {
   const [isJumping, setIsJumping] = useState(false);
   const [jumpMonth, setJumpMonth] = useState(new Date().getMonth());
   const [jumpYear, setJumpYear] = useState(new Date().getFullYear());
+  const [holidays, setHolidays] = useState<Holiday[]>([]);
+  const [loadingHolidays, setLoadingHolidays] = useState(true);
 
   const today = new Date();
+
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      setLoadingHolidays(true);
+      try {
+        const year = viewDate.getFullYear();
+        const response = await fetch(`https://date.nager.at/api/v3/PublicHolidays/${year}/BD`);
+        if (!response.ok) throw new Error("Failed to fetch holidays");
+        const data = await response.json();
+        const apiHolidays = data.map((h: any) => ({
+          date: h.date,
+          name: h.name,
+          bangla: h.localName
+        }));
+
+        // Merge with religious holidays if it's 2025, or just keep unique dates
+        const combined = [...apiHolidays];
+        if (year === 2025) {
+          RELIGIOUS_HOLIDAYS_2025.forEach(rh => {
+            if (!combined.some(h => h.date === rh.date)) {
+              combined.push(rh);
+            }
+          });
+        }
+        setHolidays(combined.sort((a, b) => a.date.localeCompare(b.date)));
+      } catch (error) {
+        console.error("Holiday fetch error:", error);
+        if (viewDate.getFullYear() === 2025) {
+          setHolidays(RELIGIOUS_HOLIDAYS_2025);
+        }
+      } finally {
+        setLoadingHolidays(false);
+      }
+    };
+
+    fetchHolidays();
+  }, [viewDate.getFullYear()]);
 
   const getCalendarData = () => {
     if (mode === 'gregorian') {
@@ -92,28 +121,6 @@ const Calendar = () => {
         isCurrent: isSameMonth(viewDate, today)
       };
     } else if (mode === 'bengali') {
-      // Find which Bengali month viewDate falls into
-      // Or just use the Bengali month index we are targeting
-      // For navigation, it's better to store currentBengaliMonth and Year
-      // But let's derive it from viewDate for simplicity
-
-      let bengaliMonthIdx = -1;
-      const year = viewDate.getFullYear();
-
-      for (let i = 0; i < 12; i++) {
-        const m = BENGALI_MONTHS[i];
-        const monthStart = new Date(year, m.startMonth, m.startDate);
-        // If we are before the first month of the cycle (Boishakh) in this Gregorian year
-        // We might be in Magh, Falgun, Chaitra of the previous BS year
-        if (isSameMonth(viewDate, monthStart) || (viewDate >= monthStart && viewDate < addMonths(monthStart, 1))) {
-           // This is not quite right because Bengali months cross Gregorian months
-           // Let's use a simpler approach: viewDate IS the anchor for the month
-        }
-      }
-
-      // Re-evaluating: Let's find the start of the Bengali month containing viewDate
-      let anchor = new Date(viewDate.getFullYear(), viewDate.getMonth(), viewDate.getDate());
-      // Check if viewDate is after or on the start date of the Bengali month in this Gregorian month
       const currentMonthInfo = BENGALI_MONTHS.find(m => m.startMonth === viewDate.getMonth());
       let start: Date;
       let monthInfo;
@@ -122,7 +129,6 @@ const Calendar = () => {
         start = new Date(viewDate.getFullYear(), currentMonthInfo.startMonth, currentMonthInfo.startDate);
         monthInfo = currentMonthInfo;
       } else {
-        // It's the previous Bengali month
         const prevIdx = (BENGALI_MONTHS.findIndex(m => m.startMonth === viewDate.getMonth()) - 1 + 12) % 12;
         monthInfo = BENGALI_MONTHS[prevIdx];
         let prevYear = viewDate.getFullYear();
@@ -150,7 +156,6 @@ const Calendar = () => {
         isCurrent: today >= start && today <= end
       };
     } else {
-      // Hijri
       const parts = new Intl.DateTimeFormat('en-u-ca-islamic-tbla-nu-latn', {
         day: 'numeric',
         month: 'numeric',
@@ -182,12 +187,11 @@ const Calendar = () => {
         title: `${hijriMonth} ${hijriYear}`,
         days,
         isCurrent: today >= start && today <= end,
-        hijri: true
       };
     }
   };
 
-  const { title, days, isCurrent, hijri } = getCalendarData();
+  const { title, days, isCurrent } = getCalendarData();
 
   const handlePrev = () => setViewDate(subMonths(viewDate, 1));
   const handleNext = () => setViewDate(addMonths(viewDate, 1));
@@ -199,42 +203,30 @@ const Calendar = () => {
   };
 
   const holidayList = useMemo(() => {
-    return HOLIDAYS
+    return holidays
       .map(h => ({ ...h, dateObj: parseISO(h.date) }))
       .filter(h => h.dateObj >= today || isSameDay(h.dateObj, today))
       .sort((a, b) => a.dateObj.getTime() - b.dateObj.getTime())
       .slice(0, 5);
-  }, [today]);
+  }, [holidays, today]);
 
   const getHoliday = (date: Date) => {
     const dStr = format(date, 'yyyy-MM-dd');
-    return HOLIDAYS.find(h => h.date === dStr);
+    return holidays.find(h => h.date === dStr);
   };
 
   const formatDayNumber = (date: Date) => {
     if (mode === 'bengali') {
-      // We need the Bengali date number
-      // Since it's fixed relative to Gregorian in Bangladesh
       const currentMonthInfo = BENGALI_MONTHS.find(m => m.startMonth === date.getMonth());
       let bDay;
       if (currentMonthInfo && date.getDate() >= currentMonthInfo.startDate) {
         bDay = date.getDate() - currentMonthInfo.startDate + 1;
       } else {
         const prevIdx = (BENGALI_MONTHS.findIndex(m => m.startMonth === date.getMonth()) - 1 + 12) % 12;
-        const prevMonthInfo = BENGALI_MONTHS[prevIdx];
-        // This is complex because we need to know the length of the previous month
-        // Let's just use the fact that we know the start date
-        // A better way: find the start of the Bengali month for this date
-        let start;
-        if (currentMonthInfo && date.getDate() >= currentMonthInfo.startDate) {
-          start = new Date(date.getFullYear(), currentMonthInfo.startMonth, currentMonthInfo.startDate);
-        } else {
-          const prevIdx = (BENGALI_MONTHS.findIndex(m => m.startMonth === date.getMonth()) - 1 + 12) % 12;
-          const pm = BENGALI_MONTHS[prevIdx];
-          let py = date.getFullYear();
-          if (date.getMonth() < pm.startMonth) py--;
-          start = new Date(py, pm.startMonth, pm.startDate);
-        }
+        const pm = BENGALI_MONTHS[prevIdx];
+        let py = date.getFullYear();
+        if (date.getMonth() < pm.startMonth) py--;
+        const start = new Date(py, pm.startMonth, pm.startDate);
         bDay = Math.floor((date.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
       }
       return toBanglaNumber(bDay);
@@ -274,6 +266,12 @@ const Calendar = () => {
         </div>
 
         <div className="bg-m3-primary-container/20 rounded-[2.5rem] p-6 shadow-sm border border-m3-primary/10 animate-fade-in-up relative overflow-hidden" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+          {loadingHolidays && (
+            <div className="absolute top-4 right-4 animate-spin opacity-40">
+              <Loader2 size={16} />
+            </div>
+          )}
+
           <div className="flex items-center justify-between mb-6">
             <button onClick={handlePrev} className="p-2 hover:bg-m3-primary/10 rounded-full transition-colors">
               <ChevronLeft size={24} />
@@ -300,7 +298,7 @@ const Calendar = () => {
             {days.map((day, idx) => {
               const holiday = getHoliday(day);
               const isTodayDay = isToday(day);
-              const isCurrentMonth = mode === 'gregorian' ? isSameMonth(day, viewDate) : true; // Simplified for others
+              const isCurrentMonth = mode === 'gregorian' ? isSameMonth(day, viewDate) : true;
 
               return (
                 <div
@@ -386,7 +384,7 @@ const Calendar = () => {
           <div className="pt-4">
             <h3 className="text-sm font-bold opacity-60 uppercase tracking-widest mb-4 ml-2">Upcoming Holidays</h3>
             <div className="space-y-3">
-              {holidayList.map((h, i) => {
+              {holidayList.length > 0 ? holidayList.map((h, i) => {
                 const daysLeft = differenceInDays(h.dateObj, today);
                 return (
                   <div key={i} className="bg-m3-tertiary-container/30 p-4 rounded-3xl flex items-center gap-4 border border-m3-tertiary/10">
@@ -405,7 +403,9 @@ const Calendar = () => {
                     </div>
                   </div>
                 );
-              })}
+              }) : (
+                <p className="text-center text-sm opacity-40 py-8">No upcoming holidays found.</p>
+              )}
             </div>
           </div>
         </div>
