@@ -28,6 +28,14 @@ const Tools = () => {
       style: "m3-tertiary-tonal",
       description: "Find parts of speech, definitions, and examples for any word."
     },
+    {
+      name: "POS Advanced",
+      banglaName: "পার্টস অফ স্পিচ অ্যাডভান্সড",
+      path: "/tools/parts-of-speech-advanced",
+      icon: Type,
+      style: "m3-tonal",
+      description: "Real-time sentence analyzer with visual parts of speech mapping."
+    },
   ];
 
   return (

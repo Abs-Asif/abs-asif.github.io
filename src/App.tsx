@@ -11,6 +11,7 @@ import Tools from "./pages/Tools";
 import AgeCalculator from "./pages/AgeCalculator";
 import Calendar from "./pages/Calendar";
 import PartsOfSpeech from "./pages/PartsOfSpeech";
+import PartsOfSpeechAdvanced from "./pages/PartsOfSpeechAdvanced";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
           <Route path="/tools/age-cal" element={<AgeCalculator />} />
           <Route path="/tools/calender" element={<Calendar />} />
           <Route path="/tools/parts-of-speech" element={<PartsOfSpeech />} />
+          <Route path="/tools/parts-of-speech-advanced" element={<PartsOfSpeechAdvanced />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
