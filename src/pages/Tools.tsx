@@ -36,6 +36,14 @@ const Tools = () => {
       style: "m3-tonal",
       description: "Real-time sentence analyzer with visual parts of speech mapping."
     },
+    {
+      name: "Word Finder",
+      banglaName: "ওয়ার্ড ফাইন্ডার",
+      path: "/tools/word-finder",
+      icon: Type,
+      style: "m3-secondary-tonal",
+      description: "Discover all possible valid words by adding prefixes and suffixes."
+    },
   ];
 
   return (
