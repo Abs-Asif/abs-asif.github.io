@@ -13,6 +13,18 @@ import Calendar from "./pages/Calendar";
 import PartsOfSpeech from "./pages/PartsOfSpeech";
 import PartsOfSpeechAdvanced from "./pages/PartsOfSpeechAdvanced";
 import WordFinder from "./pages/WordFinder";
+import SynonymFinder from "./pages/SynonymFinder";
+import VocabularyBuilder from "./pages/VocabularyBuilder";
+import QRCodeGenerator from "./pages/QRCodeGenerator";
+import CurrencyConverter from "./pages/CurrencyConverter";
+import WeatherTool from "./pages/WeatherTool";
+import JokeGenerator from "./pages/JokeGenerator";
+import QuoteGenerator from "./pages/QuoteGenerator";
+import GitHubViewer from "./pages/GitHubViewer";
+import FactGenerator from "./pages/FactGenerator";
+import CryptoTracker from "./pages/CryptoTracker";
+import PasswordGenerator from "./pages/PasswordGenerator";
+import UnitConverter from "./pages/UnitConverter";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -34,6 +46,18 @@ const App = () => (
           <Route path="/tools/parts-of-speech" element={<PartsOfSpeech />} />
           <Route path="/tools/parts-of-speech-advanced" element={<PartsOfSpeechAdvanced />} />
           <Route path="/tools/word-finder" element={<WordFinder />} />
+          <Route path="/tools/synonym-finder" element={<SynonymFinder />} />
+          <Route path="/tools/vocab-builder" element={<VocabularyBuilder />} />
+          <Route path="/tools/qr-gen" element={<QRCodeGenerator />} />
+          <Route path="/tools/currency-conv" element={<CurrencyConverter />} />
+          <Route path="/tools/weather" element={<WeatherTool />} />
+          <Route path="/tools/jokes" element={<JokeGenerator />} />
+          <Route path="/tools/quotes" element={<QuoteGenerator />} />
+          <Route path="/tools/github" element={<GitHubViewer />} />
+          <Route path="/tools/facts" element={<FactGenerator />} />
+          <Route path="/tools/crypto" element={<CryptoTracker />} />
+          <Route path="/tools/password-gen" element={<PasswordGenerator />} />
+          <Route path="/tools/unit-conv" element={<UnitConverter />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

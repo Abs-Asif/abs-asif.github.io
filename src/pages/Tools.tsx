@@ -1,5 +1,10 @@
 import { Link } from "react-router-dom";
-import { ArrowLeft, Calendar, Clock, Type } from "lucide-react";
+import {
+  ArrowLeft, Calendar, Clock, Type, Search,
+  BookOpen, QrCode, ArrowRightLeft, Cloud,
+  Laugh, Quote, Github, Lightbulb, Coins,
+  Shield, Ruler
+} from "lucide-react";
 import { Footer } from "@/components/Footer";
 
 const Tools = () => {
@@ -27,6 +32,102 @@ const Tools = () => {
       icon: Type,
       style: "m3-tertiary-tonal",
       description: "Find parts of speech, definitions, and examples for any word."
+    },
+    {
+      name: "Synonym Finder",
+      banglaName: "সিনোনিম ফাইন্ডার",
+      path: "/tools/synonym-finder",
+      icon: Search,
+      style: "m3-tonal",
+      description: "Quickly find synonyms and antonyms for any English word."
+    },
+    {
+      name: "Vocabulary Builder",
+      banglaName: "ভোকাবুলারি বিল্ডার",
+      path: "/tools/vocab-builder",
+      icon: BookOpen,
+      style: "m3-secondary-tonal",
+      description: "Learn new English words with definitions and pronunciation."
+    },
+    {
+      name: "QR Code Generator",
+      banglaName: "কিউআর কোড জেনারেটর",
+      path: "/tools/qr-gen",
+      icon: QrCode,
+      style: "m3-tertiary-tonal",
+      description: "Create custom QR codes for any text or website link instantly."
+    },
+    {
+      name: "Currency Converter",
+      banglaName: "কারেন্সি কনভার্টার",
+      path: "/tools/currency-conv",
+      icon: ArrowRightLeft,
+      style: "m3-tonal",
+      description: "Convert between global currencies with real-time exchange rates."
+    },
+    {
+      name: "Weather Tool",
+      banglaName: "আবহাওয়া টুল",
+      path: "/tools/weather",
+      icon: Cloud,
+      style: "m3-secondary-tonal",
+      description: "Get real-time weather updates and forecasts for your city."
+    },
+    {
+      name: "Joke Generator",
+      banglaName: "জোক জেনারেটর",
+      path: "/tools/jokes",
+      icon: Laugh,
+      style: "m3-tertiary-tonal",
+      description: "Get a random joke to lighten up your day and have a laugh."
+    },
+    {
+      name: "Quote Generator",
+      banglaName: "উক্তি জেনারেটর",
+      path: "/tools/quotes",
+      icon: Quote,
+      style: "m3-tonal",
+      description: "Daily dose of inspiration with famous quotes from great minds."
+    },
+    {
+      name: "GitHub Viewer",
+      banglaName: "গিটহাব ভিউয়ার",
+      path: "/tools/github",
+      icon: Github,
+      style: "m3-secondary-tonal",
+      description: "Look up any GitHub user profile and see their public statistics."
+    },
+    {
+      name: "Fact Generator",
+      banglaName: "ফ্যাক্ট জেনারেটর",
+      path: "/tools/facts",
+      icon: Lightbulb,
+      style: "m3-tertiary-tonal",
+      description: "Discover interesting and random facts you probably didn't know."
+    },
+    {
+      name: "Crypto Tracker",
+      banglaName: "ক্রিপ্টো ট্র্যাকার",
+      path: "/tools/crypto",
+      icon: Coins,
+      style: "m3-tonal",
+      description: "Track live prices and 24h changes for top cryptocurrencies."
+    },
+    {
+      name: "Password Gen",
+      banglaName: "পাসওয়ার্ড জেন",
+      path: "/tools/password-gen",
+      icon: Shield,
+      style: "m3-secondary-tonal",
+      description: "Generate highly secure and random passwords for your accounts."
+    },
+    {
+      name: "Unit Converter",
+      banglaName: "ইউনিট কনভার্টার",
+      path: "/tools/unit-conv",
+      icon: Ruler,
+      style: "m3-tertiary-tonal",
+      description: "Universal converter for length, weight, and temperature units."
     },
     {
       name: "POS Advanced",
@@ -68,7 +169,7 @@ const Tools = () => {
             <div
               key={tool.path}
               className="animate-fade-in-up opacity-0"
-              style={{ animationDelay: `${(index + 1) * 100}ms`, animationFillMode: 'forwards' }}
+              style={{ animationDelay: `${(index + 1) * 50}ms`, animationFillMode: 'forwards' }}
             >
               <Link
                 to={tool.path}
