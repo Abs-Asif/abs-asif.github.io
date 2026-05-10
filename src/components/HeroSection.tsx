@@ -1,36 +1,4 @@
-import { useState, useEffect } from "react";
-import { intervalToDuration } from "date-fns";
-import { toBanglaNumber } from "@/lib/bangla-utils";
 import profileTransparent from "@/assets/profile-transparent.png";
-
-const RealtimeAge = () => {
-  const [age, setAge] = useState<{ years?: number; months?: number; days?: number }>({});
-
-  useEffect(() => {
-    const calculate = () => {
-      const birthDate = new Date(2023, 1, 18); // 18 Feb 2023
-      const now = new Date();
-      const duration = intervalToDuration({ start: birthDate, end: now });
-      setAge({
-        years: duration.years,
-        months: duration.months,
-        days: duration.days,
-      });
-    };
-
-    calculate();
-    const timer = setInterval(calculate, 60000); // Update every minute
-    return () => clearInterval(timer);
-  }, []);
-
-  if (age.years === undefined) return null;
-
-  return (
-    <div className="text-xl font-bangla text-muted-foreground animate-fade-in-up opacity-0" style={{ animationDelay: "300ms", animationFillMode: "forwards" }}>
-      {toBanglaNumber(age.years)} বছর, {toBanglaNumber(age.months || 0)} মাস, {toBanglaNumber(age.days || 0)}
-    </div>
-  );
-};
 
 export const HeroSection = () => {
   return (
@@ -47,7 +15,6 @@ export const HeroSection = () => {
         <h1 className="text-4xl sm:text-5xl font-bold text-foreground mb-4 tracking-tight">
           Md. Abdullah Bari
         </h1>
-        <RealtimeAge />
       </div>
     </section>
   );
