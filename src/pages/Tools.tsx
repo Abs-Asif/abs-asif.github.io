@@ -145,6 +145,14 @@ const Tools = () => {
       style: "m3-secondary-tonal",
       description: "Discover all possible valid words by adding prefixes and suffixes."
     },
+    {
+      name: "NEWSOrigin",
+      banglaName: "নিউজ অরিজিন",
+      path: "/tools/newsorigin",
+      icon: Search,
+      style: "m3-tonal",
+      description: "Free CORS proxy for news articles and metadata extraction."
+    },
   ];
 
   return (
