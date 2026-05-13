@@ -146,6 +146,14 @@ const Tools = () => {
       description: "Discover all possible valid words by adding prefixes and suffixes."
     },
     {
+      name: "Coder",
+      banglaName: "কোডার",
+      path: "/tools/coder",
+      icon: Code,
+      style: "m3-secondary-tonal",
+      description: "Binary, HTML, CSS & JS coding environment with AI assistant."
+    },
+    {
       name: "NEWSOrigin",
       banglaName: "নিউজ অরিজিন",
       path: "/tools/newsorigin",
