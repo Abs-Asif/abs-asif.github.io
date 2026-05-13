@@ -100,7 +100,7 @@ const PartsOfSpeechAdvanced = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-mixed">
-      <main className="flex-grow container max-w-4xl mx-auto px-4 py-8 md:py-12">
+      <main className="flex-grow container max-w-4xl mx-auto px-4 py-8 md:py-6">
         <div className="mb-8 flex items-center justify-between animate-fade-in-up">
           <div className="flex items-center gap-4">
             <Link

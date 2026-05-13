@@ -42,6 +42,7 @@ const Coder = () => {
 
   const updatePreview = () => {
     const combinedCode = `
+      <!DOCTYPE html>
       <html>
         <head>
           <style>${css}</style>
@@ -53,12 +54,7 @@ const Coder = () => {
       </html>
     `;
     if (iframeRef.current) {
-      const doc = iframeRef.current.contentDocument;
-      if (doc) {
-        doc.open();
-        doc.write(combinedCode);
-        doc.close();
-      }
+      iframeRef.current.srcdoc = combinedCode;
     }
   };
 
@@ -92,7 +88,7 @@ const Coder = () => {
           messages: [
             {
               role: "system",
-              content: "You are an expert web developer. Your task is to check the provided HTML, CSS, and JS code for errors and improvements. If there are errors, fix them. If the code is correct, complement it with useful additions. Return the result in a strict JSON format: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\"}. Only return the JSON, nothing else."
+          content: "You are an expert web developer. Your task is to check the provided HTML, CSS, and JS code for errors and improvements. If there are errors, fix them. If the code is correct, complement it with useful additions. Return the result in a strict JSON format: {\"html\": \"...\", \"css\": \"...\", \"js\": \"...\", \"explanation\": \"...\"}. The 'explanation' should be a concise summary of what you changed or improved. Only return the JSON, nothing else."
             },
             {
               role: "user",
@@ -114,6 +110,12 @@ const Coder = () => {
         if (parsed.html) setHtml(parsed.html);
         if (parsed.css) setCss(parsed.css);
         if (parsed.js) setJs(parsed.js);
+
+        if (parsed.explanation) {
+          toast.info(parsed.explanation, {
+            duration: Infinity,
+          });
+        }
         toast.success("Code updated by AI Assistant!");
       } else {
         throw new Error("Invalid response format");
@@ -152,8 +154,8 @@ const Coder = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-mixed">
-      <main className="flex-grow container max-w-6xl mx-auto px-4 py-8 md:py-12">
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in-up">
+      <main className="flex-grow container max-w-6xl mx-auto px-4 py-4 md:py-8">
+        <div className="mb-6 flex flex-col md:flex-row md:items-center justify-between gap-4 animate-fade-in-up">
           <div className="flex items-center gap-4">
             <Link
               to="/tools"
@@ -178,9 +180,9 @@ const Coder = () => {
           </button>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 h-[600px]">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 min-h-[500px] lg:h-[600px]">
           {/* Editor Side */}
-          <div className="flex flex-col bg-card border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="flex flex-col bg-card border border-border rounded-[2rem] overflow-hidden shadow-sm h-[400px] lg:h-full">
             <div className="flex items-center gap-1 p-2 bg-muted/50 border-b border-border overflow-x-auto no-scrollbar">
               {(["html", "css", "js", "binary"] as const).map((tab) => (
                 <button
@@ -217,7 +219,7 @@ const Coder = () => {
           </div>
 
           {/* Preview Side */}
-          <div className="flex flex-col bg-white border border-border rounded-[2rem] overflow-hidden shadow-sm">
+          <div className="flex flex-col bg-white border border-border rounded-[2rem] overflow-hidden shadow-sm h-[400px] lg:h-full">
             <div className="flex items-center justify-between px-6 py-3 bg-zinc-50 border-b border-border">
               <span className="text-xs font-bold text-zinc-400 uppercase tracking-widest flex items-center gap-2">
                 <Play size={12} /> Live Preview

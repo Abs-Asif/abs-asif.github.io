@@ -45,8 +45,8 @@ const PartsOfSpeech = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-mixed">
-      <main className="flex-grow container max-w-2xl mx-auto px-6 py-12">
-        <div className="mb-12 flex items-center gap-6 animate-fade-in-up">
+      <main className="flex-grow container max-w-4xl mx-auto px-6 py-6">
+        <div className="mb-8 flex items-center gap-6 animate-fade-in-up">
           <Link
             to="/tools"
             className="p-3 rounded-2xl hover:bg-secondary transition-all active:scale-95 bg-secondary/30"
@@ -60,7 +60,7 @@ const PartsOfSpeech = () => {
           </div>
         </div>
 
-        <form onSubmit={searchWord} className="mb-12 animate-fade-in-up" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
+        <form onSubmit={searchWord} className="mb-8 animate-fade-in-up" style={{ animationDelay: "100ms", animationFillMode: "forwards" }}>
           <div className="relative group">
             <input
               type="text"

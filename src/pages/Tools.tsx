@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, Clock, Type, Search,
   BookOpen, QrCode, ArrowRightLeft, Cloud,
   Laugh, Quote, Github, Lightbulb, Coins,
-  Shield, Ruler
+  Shield, Ruler, Code
 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 
