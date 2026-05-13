@@ -125,8 +125,8 @@ const WordFinder = () => {
 
   return (
     <div className="min-h-screen bg-background flex flex-col font-mixed">
-      <main className="flex-grow container max-w-2xl mx-auto px-6 py-12">
-        <div className="mb-12 flex items-center gap-6 animate-fade-in-up">
+      <main className="flex-grow container max-w-4xl mx-auto px-6 py-6">
+        <div className="mb-8 flex items-center gap-6 animate-fade-in-up">
           <Link
             to="/tools"
             className="p-3 rounded-2xl hover:bg-secondary transition-all active:scale-95 bg-secondary/30"
@@ -206,7 +206,7 @@ const WordFinder = () => {
           )}
 
           {!isSearching && results.length === 0 && inputWord && (
-            <div className="text-center py-12 opacity-40 animate-fade-in-up">
+            <div className="text-center py-6 opacity-40 animate-fade-in-up">
               <AlertCircle size={48} className="mx-auto mb-4" />
               <p className="font-bold">No valid derived words found yet.</p>
             </div>
