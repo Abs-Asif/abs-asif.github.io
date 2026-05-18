@@ -3,7 +3,7 @@ import {
   ArrowLeft, Calendar, Clock, Type, Search,
   BookOpen, QrCode, ArrowRightLeft, Cloud,
   Laugh, Quote, Github, Lightbulb, Coins,
-  Shield, Ruler, Code
+  Shield, Ruler, Code, Sparkles
 } from "lucide-react";
 import { Footer } from "@/components/Footer";
 
@@ -152,6 +152,14 @@ const Tools = () => {
       icon: Code,
       style: "m3-secondary-tonal",
       description: "Binary, HTML, CSS & JS coding environment with AI assistant."
+    },
+    {
+      name: "News Highlighter",
+      banglaName: "নিউজ হাইলাইটার",
+      path: "/tools/news-highlighter",
+      icon: Sparkles,
+      style: "m3-tertiary-tonal",
+      description: "Analyze and highlight news titles using AI."
     },
     {
       name: "NEWSOrigin",

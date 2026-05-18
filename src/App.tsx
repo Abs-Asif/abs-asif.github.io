@@ -26,6 +26,7 @@ import CryptoTracker from "./pages/CryptoTracker";
 import PasswordGenerator from "./pages/PasswordGenerator";
 import UnitConverter from "./pages/UnitConverter";
 import Coder from "./pages/Coder";
+import NewsHighlighter from "./pages/NewsHighlighter";
 import NewsOriginIndex from "./pages/newsorigin/Index";
 import NewsOriginV2 from "./pages/newsorigin/V2";
 import NewsOriginJSON from "./pages/newsorigin/JSON";
@@ -64,6 +65,7 @@ const App = () => (
           <Route path="/tools/password-gen" element={<PasswordGenerator />} />
           <Route path="/tools/unit-conv" element={<UnitConverter />} />
           <Route path="/tools/coder" element={<Coder />} />
+          <Route path="/tools/news-highlighter" element={<NewsHighlighter />} />
           <Route path="/tools/newsorigin" element={<NewsOriginIndex />} />
           <Route path="/tools/newsorigin/v2" element={<NewsOriginV2 />} />
           <Route path="/tools/newsorigin/json" element={<NewsOriginJSON />} />
