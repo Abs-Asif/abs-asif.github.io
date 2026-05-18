@@ -4,7 +4,6 @@ import { ArrowLeft, ClipboardPaste, Sparkles, Trash2, History, ChevronDown, Chev
 import { Footer } from "@/components/Footer";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import ReactMarkdown from "react-markdown";
 
 interface HighlightResult {
   type: "quote" | "text";
@@ -68,11 +67,12 @@ const NewsHighlighter = () => {
           messages: [
             {
               role: "system",
-              content: `You are a news analyzer. Your task is to analyze a news title and determine if it's a quote or regular text.
+              content: `You are a news analyzer for both English and Bangla. Your task is to analyze a news title and determine if it's a quote or regular text.
 
               Rules:
-              1. A quote typically starts with "Person said/told" or ends with ": Person Name/Position".
+              1. A quote can be identified by patterns like "Person: Statement", "Statement - Person", "Person said...", or if the context strongly implies a direct statement/opinion. Robustly identify quotes even without explicit quotation marks.
               2. STRICTLY DO NOT ALTER THE NEWS/QUOTE CONTENT.
+              3. For Bangla text, be extremely careful not to split words or conjunct characters (juktakkhor).
 
               If it's a quote:
               - Return JSON: {"type": "quote", "text": "The actual quote content", "person": "The person who said it"}
@@ -81,7 +81,8 @@ const NewsHighlighter = () => {
 
               If it's regular text:
               - Return JSON: {"type": "text", "highlightedText": "Text with *word* for highlighting"}
-              - Find word(s) to highlight by adding * on front and back of that word.
+              - Highlight full words or multi-word phrases that, when read together in sequence, form a "clickbait" summary of the news.
+              - NEVER highlight individual letters or parts of a word. Ensure * markers are always outside the word boundaries.
               - The "highlightedText" must be identical to the input except for the added * markers.
 
               Always return ONLY the JSON.`
@@ -194,14 +195,17 @@ const NewsHighlighter = () => {
                   </div>
                 </div>
               ) : (
-                <div className="text-2xl md:text-3xl font-medium leading-relaxed prose prose-xl max-w-none text-foreground/90">
-                  <ReactMarkdown
-                    components={{
-                      em: ({node, ...props}) => <span className="font-bold text-red-600" {...props} />
-                    }}
-                  >
-                    {result.highlightedText}
-                  </ReactMarkdown>
+                <div className="text-2xl md:text-3xl font-medium leading-relaxed max-w-none text-foreground/90">
+                  {result.highlightedText?.split(/(\*.*?\*)/g).map((part, i) => {
+                    if (part.startsWith('*') && part.endsWith('*')) {
+                      return (
+                        <span key={i} className="font-bold text-red-600">
+                          {part.slice(1, -1)}
+                        </span>
+                      );
+                    }
+                    return <span key={i}>{part}</span>;
+                  })}
                 </div>
               )}
             </div>
