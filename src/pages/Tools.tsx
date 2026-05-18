@@ -162,6 +162,14 @@ const Tools = () => {
       description: "Analyze and highlight news titles using AI."
     },
     {
+      name: "Banglish Conv",
+      banglaName: "বাংলিশ কনভার্টার",
+      path: "/tools/banglish-conv",
+      icon: Type,
+      style: "m3-tonal",
+      description: "Intelligently convert Banglish text into proper Bangla script using AI."
+    },
+    {
       name: "NEWSOrigin",
       banglaName: "নিউজ অরিজিন",
       path: "/tools/newsorigin",
