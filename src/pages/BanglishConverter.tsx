@@ -49,7 +49,7 @@ const BanglishConverter = () => {
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          model: "hf.co/unsloth/Qwen3-Coder-30B-A3B-Instruct-GGUF:Q4_K_M",
+          model: "qwen3.6:27b",
           messages: [
             {
               role: "system",
