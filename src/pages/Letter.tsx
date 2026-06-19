@@ -86,11 +86,6 @@ const Letter = () => {
       <div className="w-full max-w-5xl tiptap">
         <EditorContent editor={editor} />
       </div>
-
-      {/* Floating status */}
-      <div className="fixed bottom-8 right-8 text-[10px] uppercase tracking-widest text-slate-300 pointer-events-none opacity-50">
-        Changes are saved in the URL
-      </div>
     </div>
   );
 };
