@@ -104,15 +104,9 @@ const Book = () => {
       ">${bodyHtml}</div>
     `;
 
-    // Append off-screen so html2pdf can render it
-    container.style.position = "absolute";
-    container.style.left = "0";
-    container.style.top = "0";
     container.style.width = "170mm";
-    container.style.opacity = "0";
-    container.style.pointerEvents = "none";
-    container.style.zIndex = "-9999";
-    document.body.appendChild(container);
+    container.style.minHeight = "297mm";
+    container.style.display = "block";
 
     try {
       await html2pdf()
@@ -128,12 +122,12 @@ const Book = () => {
             windowHeight: container.scrollHeight,
           },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"], before: ".book-body" },
+          pagebreak: { mode: ["css", "legacy"] },
         } as any)
         .from(container)
         .save();
     } finally {
-      document.body.removeChild(container);
+      container.remove();
       setGenerating(false);
     }
   };
