@@ -122,7 +122,7 @@ const Book = () => {
             windowHeight: container.scrollHeight,
           },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"], before: ".book-body" },
+          pagebreak: { mode: ["css", "legacy"] },
         } as any)
         .from(container)
         .save();
