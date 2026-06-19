@@ -45,7 +45,7 @@ const Letter = () => {
       },
     },
     onUpdate: ({ editor }) => {
-      const markdown = editor.storage.markdown.getMarkdown();
+      const markdown = (editor.storage as any).markdown.getMarkdown();
       updateUrl(markdown);
     },
   });
