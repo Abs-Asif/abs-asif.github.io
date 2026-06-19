@@ -120,7 +120,7 @@ const Book = () => {
           html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"], before: ".book-body" },
-        })
+        } as any)
         .from(container)
         .save();
     } finally {
