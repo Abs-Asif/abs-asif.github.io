@@ -104,22 +104,11 @@ const Book = () => {
       ">${bodyHtml}</div>
     `;
 
-    // Keep the printable DOM fully visible to the renderer. html2canvas captures
-    // opacity/negative z-index literally, which caused blank PDFs before.
-    container.style.position = "absolute";
-    container.style.left = "0";
-    container.style.top = "0";
     container.style.width = "170mm";
     container.style.minHeight = "297mm";
-    container.style.opacity = "1";
-    container.style.visibility = "visible";
-    container.style.pointerEvents = "none";
-    container.style.zIndex = "2147483647";
-    document.body.appendChild(container);
+    container.style.display = "block";
 
     try {
-      await new Promise((resolve) => requestAnimationFrame(resolve));
-
       await html2pdf()
         .set({
           margin: [20, 20, 20, 20], // mm
@@ -138,7 +127,7 @@ const Book = () => {
         .from(container)
         .save();
     } finally {
-      document.body.removeChild(container);
+      container.remove();
       setGenerating(false);
     }
   };
