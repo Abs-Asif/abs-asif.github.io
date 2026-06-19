@@ -105,10 +105,13 @@ const Book = () => {
     `;
 
     // Append off-screen so html2pdf can render it
-    container.style.position = "fixed";
-    container.style.left = "-10000px";
+    container.style.position = "absolute";
+    container.style.left = "0";
     container.style.top = "0";
     container.style.width = "170mm";
+    container.style.opacity = "0";
+    container.style.pointerEvents = "none";
+    container.style.zIndex = "-9999";
     document.body.appendChild(container);
 
     try {
@@ -117,7 +120,13 @@ const Book = () => {
           margin: [20, 20, 20, 20], // mm
           filename: `${safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book"}.pdf`,
           image: { type: "jpeg", quality: 0.98 },
-          html2canvas: { scale: 2, useCORS: true, backgroundColor: "#ffffff" },
+          html2canvas: {
+            scale: 2,
+            useCORS: true,
+            backgroundColor: "#ffffff",
+            windowWidth: container.scrollWidth,
+            windowHeight: container.scrollHeight,
+          },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"], before: ".book-body" },
         } as any)
