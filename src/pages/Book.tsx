@@ -78,6 +78,9 @@ const Book = () => {
     container.style.width = "170mm";
     container.style.minHeight = "297mm";
     container.style.display = "block";
+    container.style.position = "absolute";
+    container.style.left = "-10000px";
+    container.style.top = "0";
     document.body.appendChild(container);
 
     // Wait for web fonts (Kalpurush, Scheherazade, EB Garamond) so html2canvas captures them properly
