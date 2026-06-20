@@ -1,10 +1,6 @@
 import React, { useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Markdown } from "tiptap-markdown";
-import Image from "@tiptap/extension-image";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
+import { buildEditorExtensions } from "@/lib/editor-extensions";
 import { Printer, Loader2 } from "lucide-react";
 import html2pdf from "html2pdf.js";
 
@@ -15,34 +11,7 @@ const Book = () => {
   const contentRef = useRef<HTMLDivElement>(null);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: {
-          HTMLAttributes: {
-            class:
-              "rounded-2xl bg-slate-900 text-slate-100 p-6 font-mono text-sm shadow-inner border border-slate-800",
-          },
-        },
-      }),
-      Markdown.configure({
-        html: false,
-        tightLists: true,
-        tightListClass: "tight",
-      }),
-      Image.configure({
-        HTMLAttributes: {
-          class: "max-w-full h-auto rounded-2xl mx-auto my-8 shadow-md",
-        },
-      }),
-      Placeholder.configure({
-        placeholder: "Start writing your book here...",
-      }),
-      TextAlign.configure({
-        types: ["heading", "paragraph"],
-        alignments: ["left", "center", "right", "justify"],
-        defaultAlignment: "justify",
-      }),
-    ],
+    extensions: buildEditorExtensions("Start writing your book here..."),
     editorProps: {
       attributes: {
         class:
@@ -62,7 +31,9 @@ const Book = () => {
 
     // Build a hidden printable container
     const container = document.createElement("div");
-    container.style.fontFamily = "'Inter', system-ui, sans-serif";
+    container.className = "font-mixed";
+    container.style.fontFamily =
+      "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
     container.style.color = "#0f172a";
     container.style.background = "#ffffff";
     container.innerHTML = `
@@ -78,10 +49,10 @@ const Book = () => {
         box-sizing: border-box;
       ">
         <h1 style="
-          font-size: 48pt;
+          font-size: 32pt;
           font-weight: 400;
           line-height: 1.15;
-          margin: 0 0 32pt 0;
+          margin: 0 0 24pt 0;
           letter-spacing: -0.01em;
           word-wrap: break-word;
           max-width: 100%;
@@ -89,7 +60,7 @@ const Book = () => {
         ${
           safeAuthor
             ? `<p style="
-                font-size: 14pt;
+                font-size: 13pt;
                 font-weight: 400;
                 margin: 0;
                 color: #334155;
@@ -97,7 +68,7 @@ const Book = () => {
             : ""
         }
       </div>
-      <div class="book-body tiptap prose" style="
+      <div class="book-body tiptap" style="
         font-size: 12pt;
         line-height: 1.7;
         text-align: justify;
@@ -107,6 +78,14 @@ const Book = () => {
     container.style.width = "170mm";
     container.style.minHeight = "297mm";
     container.style.display = "block";
+    document.body.appendChild(container);
+
+    // Wait for web fonts (Kalpurush, Scheherazade, EB Garamond) so html2canvas captures them properly
+    try {
+      if ((document as any).fonts?.ready) {
+        await (document as any).fonts.ready;
+      }
+    } catch {}
 
     try {
       await html2pdf()
@@ -118,8 +97,6 @@ const Book = () => {
             scale: 2,
             useCORS: true,
             backgroundColor: "#ffffff",
-            windowWidth: container.scrollWidth,
-            windowHeight: container.scrollHeight,
           },
           jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
           pagebreak: { mode: ["css", "legacy"] },

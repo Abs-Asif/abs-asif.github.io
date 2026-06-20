@@ -1,43 +1,13 @@
 import React, { useEffect, useRef } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
-import StarterKit from "@tiptap/starter-kit";
-import { Markdown } from "tiptap-markdown";
-import Image from "@tiptap/extension-image";
-import Placeholder from "@tiptap/extension-placeholder";
-import TextAlign from "@tiptap/extension-text-align";
+import { buildEditorExtensions } from "@/lib/editor-extensions";
 import { multiLayerCompressAndEncrypt, multiLayerDecryptAndDecompress } from "@/lib/encryption";
 
 const Letter = () => {
   const isInitialMount = useRef(true);
 
   const editor = useEditor({
-    extensions: [
-      StarterKit.configure({
-        codeBlock: {
-          HTMLAttributes: {
-            class: "rounded-2xl bg-slate-900 text-slate-100 p-6 font-mono text-sm shadow-inner border border-slate-800",
-          },
-        },
-      }),
-      Markdown.configure({
-        html: false,
-        tightLists: true,
-        tightListClass: "tight",
-      }),
-      Image.configure({
-        HTMLAttributes: {
-          class: "max-w-full h-auto rounded-2xl mx-auto my-8 shadow-md",
-        },
-      }),
-      Placeholder.configure({
-        placeholder: "Write your letter here...",
-      }),
-      TextAlign.configure({
-        types: ["heading", "paragraph"],
-        alignments: ["left", "center", "right", "justify"],
-        defaultAlignment: "justify",
-      }),
-    ],
+    extensions: buildEditorExtensions("Write your letter here..."),
     editorProps: {
       attributes: {
         class: "font-mixed prose-xl md:prose-2xl max-w-none focus:outline-none min-h-[70vh]",
