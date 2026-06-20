@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Scheherazade+New:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -139,7 +139,7 @@
   }
 
   .font-arabic {
-    font-family: 'Scheherazade New', serif;
+    font-family: 'Scheherazade New', 'Noto Naskh Arabic', serif;
   }
 
   .font-serif {
@@ -147,7 +147,7 @@
   }
 
   .font-mixed {
-    font-family: 'EB Garamond', 'Kalpurush', 'Scheherazade New', serif;
+    font-family: 'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif;
   }
 
   .tiptap .ProseMirror {
@@ -199,6 +199,43 @@
 
   .tiptap .ProseMirror h3 {
     @apply text-2xl font-bold mb-4 text-slate-900 font-serif;
+  }
+
+  /* Blockquote — boxed callout */
+  .tiptap .ProseMirror blockquote {
+    @apply border-l-4 border-slate-300 bg-slate-50 rounded-r-xl px-6 py-3 my-6 italic text-slate-700;
+  }
+
+  /* Tables */
+  .tiptap .ProseMirror table {
+    @apply w-full border-collapse my-6 text-base;
+    table-layout: fixed;
+  }
+  .tiptap .ProseMirror th,
+  .tiptap .ProseMirror td {
+    @apply border border-slate-300 px-3 py-2 align-top;
+  }
+  .tiptap .ProseMirror th {
+    @apply bg-slate-100 font-semibold text-left;
+  }
+
+  /* Task lists */
+  .tiptap .ProseMirror ul[data-type="taskList"] {
+    @apply list-none pl-0 space-y-2;
+  }
+  .tiptap .ProseMirror ul[data-type="taskList"] li {
+    @apply flex gap-2 items-start;
+  }
+  .tiptap .ProseMirror ul[data-type="taskList"] li > label {
+    @apply mt-1.5;
+  }
+  .tiptap .ProseMirror ul[data-type="taskList"] li > div {
+    @apply flex-1;
+  }
+
+  /* Horizontal rule */
+  .tiptap .ProseMirror hr {
+    @apply my-8 border-0 border-t border-slate-300;
   }
 }
 
