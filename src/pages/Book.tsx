@@ -2,7 +2,8 @@ import React, { useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { buildEditorExtensions } from "@/lib/editor-extensions";
 import { Printer, Loader2 } from "lucide-react";
-import html2pdf from "html2pdf.js";
+import { jsPDF } from "jspdf";
+import html2canvas from "html2canvas";
 
 const Book = () => {
   const [title, setTitle] = useState("");
@@ -29,80 +30,180 @@ const Book = () => {
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
 
-    // Build a hidden printable container
+    // A5 page dimensions (mm)
+    const PAGE_W = 148;
+    const PAGE_H = 210;
+    const MARGIN = 14;
+    const CONTENT_W = PAGE_W - MARGIN * 2; // 120mm
+    const CONTENT_H = PAGE_H - MARGIN * 2; // 182mm
+    const SECTION_GAP = 2; // mm between body sections
+
+    // Build offscreen container. We keep it on-screen-but-invisible so html2canvas captures correctly.
     const container = document.createElement("div");
-    container.className = "font-mixed";
+    container.style.position = "fixed";
+    container.style.top = "0";
+    container.style.left = "0";
+    container.style.opacity = "0";
+    container.style.pointerEvents = "none";
+    container.style.zIndex = "-1";
+    container.style.background = "#ffffff";
+    container.style.color = "#0f172a";
     container.style.fontFamily =
       "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
-    container.style.color = "#0f172a";
-    container.style.background = "#ffffff";
-    container.innerHTML = `
-      <div class="book-cover" style="
-        page-break-after: always;
-        break-after: page;
-        height: 247mm;
-        padding: 25mm 20mm;
-        display: flex;
-        flex-direction: column;
-        align-items: center;
-        text-align: center;
+    // Use a CSS pixel width that matches CONTENT_W mm at the browser's standard 96dpi.
+    // 1mm = 3.7795275591 px. We use a larger base so text isn't squeezed; we'll scale via scaleFactor.
+    const PX_PER_MM = 3.7795275591;
+    const widthPx = Math.round(CONTENT_W * PX_PER_MM);
+    container.style.width = `${widthPx}px`;
+    container.className = "font-mixed";
+
+    // Cover section
+    const coverHtml = `
+      <div data-pdf-section data-pdf-cover style="
+        width: 100%;
         box-sizing: border-box;
+        padding-top: 8mm;
+        text-align: center;
       ">
         <h1 style="
-          font-size: 32pt;
+          font-size: 26pt;
           font-weight: 400;
-          line-height: 1.15;
-          margin: 0 0 24pt 0;
-          letter-spacing: -0.01em;
+          line-height: 1.2;
+          margin: 0 0 14mm 0;
+          letter-spacing: -0.005em;
           word-wrap: break-word;
-          max-width: 100%;
+          overflow-wrap: break-word;
+          white-space: normal;
         ">${escapeHtml(safeTitle)}</h1>
         ${
           safeAuthor
             ? `<p style="
-                font-size: 13pt;
+                font-size: 12pt;
                 font-weight: 400;
+                line-height: 1.4;
                 margin: 0;
                 color: #334155;
+                word-wrap: break-word;
+                overflow-wrap: break-word;
               ">${escapeHtml(safeAuthor)}</p>`
             : ""
         }
       </div>
-      <div class="book-body tiptap" style="
-        font-size: 12pt;
-        line-height: 1.7;
-        text-align: justify;
-      ">${bodyHtml}</div>
     `;
 
-    container.style.width = "170mm";
-    container.style.minHeight = "297mm";
-    container.style.display = "block";
+    // Body wrapper — natural typography
+    const bodyWrap = document.createElement("div");
+    bodyWrap.className = "tiptap";
+    bodyWrap.setAttribute("data-pdf-body", "");
+    bodyWrap.style.fontSize = "11pt";
+    bodyWrap.style.lineHeight = "1.65";
+    bodyWrap.style.textAlign = "left";
+    bodyWrap.innerHTML = bodyHtml;
+
+    container.innerHTML = coverHtml;
+    container.appendChild(bodyWrap);
     document.body.appendChild(container);
 
-    // Wait for web fonts (Kalpurush, Scheherazade, EB Garamond) so html2canvas captures them properly
+    // Wait for fonts to be ready so captured text uses the right faces.
     try {
       if ((document as any).fonts?.ready) {
         await (document as any).fonts.ready;
       }
     } catch {}
+    // Tiny tick to allow layout flush
+    await new Promise((r) => setTimeout(r, 50));
 
     try {
-      await html2pdf()
-        .set({
-          margin: [20, 20, 20, 20], // mm
-          filename: `${safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book"}.pdf`,
-          image: { type: "jpeg", quality: 0.98 },
-          html2canvas: {
-            scale: 2,
-            useCORS: true,
-            backgroundColor: "#ffffff",
-          },
-          jsPDF: { unit: "mm", format: "a4", orientation: "portrait" },
-          pagebreak: { mode: ["css", "legacy"] },
-        } as any)
-        .from(container)
-        .save();
+      const pdf = new jsPDF({
+        orientation: "portrait",
+        unit: "mm",
+        format: "a5",
+        compress: true,
+      });
+
+      const renderScale = 3; // sharp output
+
+      const captureElement = async (el: HTMLElement) => {
+        // Temporarily add vertical padding so html2canvas doesn't clip
+        // ascenders/descenders of the first/last line.
+        const prevPadTop = el.style.paddingTop;
+        const prevPadBot = el.style.paddingBottom;
+        el.style.paddingTop = "6px";
+        el.style.paddingBottom = "8px";
+        const canvas = await html2canvas(el, {
+          scale: renderScale,
+          useCORS: true,
+          backgroundColor: "#ffffff",
+          logging: false,
+          windowWidth: widthPx,
+        });
+        el.style.paddingTop = prevPadTop;
+        el.style.paddingBottom = prevPadBot;
+        const elWidthPx = canvas.width / renderScale;
+        const elHeightPx = canvas.height / renderScale;
+        const mmPerPx = CONTENT_W / elWidthPx;
+        const heightMM = elHeightPx * mmPerPx;
+        return { dataUrl: canvas.toDataURL("image/jpeg", 0.95), heightMM };
+      };
+
+      // --- Cover page ---
+      const coverEl = container.querySelector(
+        "[data-pdf-cover]"
+      ) as HTMLElement;
+      const cover = await captureElement(coverEl);
+      pdf.addImage(
+        cover.dataUrl,
+        "JPEG",
+        MARGIN,
+        MARGIN,
+        CONTENT_W,
+        Math.min(cover.heightMM, CONTENT_H)
+      );
+
+      // --- Body: always start on a new page ---
+      const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
+      if (bodyChildren.length > 0) {
+        pdf.addPage();
+        let currentY = MARGIN;
+
+        for (const child of bodyChildren) {
+          // Skip empty paragraphs that have no text and no images
+          const isEmpty =
+            !child.textContent?.trim() &&
+            child.querySelectorAll("img").length === 0;
+          if (isEmpty) {
+            currentY += 4; // small blank-line spacing
+            continue;
+          }
+
+          const section = await captureElement(child);
+          let { dataUrl, heightMM } = section;
+
+          // If a single section is taller than a full page, scale it down proportionally
+          // to fit on one page (prevents arbitrary clipping of long blocks).
+          let drawW = CONTENT_W;
+          let drawH = heightMM;
+          if (drawH > CONTENT_H) {
+            const ratio = CONTENT_H / drawH;
+            drawH = CONTENT_H;
+            drawW = CONTENT_W * ratio;
+          }
+
+          const remaining = PAGE_H - MARGIN - currentY;
+          if (drawH > remaining && currentY > MARGIN) {
+            pdf.addPage();
+            currentY = MARGIN;
+          }
+
+          const xOffset = MARGIN + (CONTENT_W - drawW) / 2;
+          pdf.addImage(dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
+          currentY += drawH + SECTION_GAP;
+        }
+      }
+
+      const filename =
+        safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
+      pdf.save(`${filename}.pdf`);
     } finally {
       container.remove();
       setGenerating(false);
