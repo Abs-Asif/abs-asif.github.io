@@ -124,6 +124,12 @@ const Book = () => {
       const renderScale = 3; // sharp output
 
       const captureElement = async (el: HTMLElement) => {
+        // Temporarily add vertical padding so html2canvas doesn't clip
+        // ascenders/descenders of the first/last line.
+        const prevPadTop = el.style.paddingTop;
+        const prevPadBot = el.style.paddingBottom;
+        el.style.paddingTop = "6px";
+        el.style.paddingBottom = "8px";
         const canvas = await html2canvas(el, {
           scale: renderScale,
           useCORS: true,
@@ -131,6 +137,8 @@ const Book = () => {
           logging: false,
           windowWidth: widthPx,
         });
+        el.style.paddingTop = prevPadTop;
+        el.style.paddingBottom = prevPadBot;
         const elWidthPx = canvas.width / renderScale;
         const elHeightPx = canvas.height / renderScale;
         const mmPerPx = CONTENT_W / elWidthPx;
