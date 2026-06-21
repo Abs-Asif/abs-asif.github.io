@@ -4,6 +4,7 @@ import { buildEditorExtensions } from "@/lib/editor-extensions";
 import { Printer, Loader2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
+import { marked } from "marked";
 
 const Book = () => {
   const [title, setTitle] = useState("");
@@ -26,7 +27,14 @@ const Book = () => {
     if (!editor) return;
     setGenerating(true);
 
-    const bodyHtml = editor.getHTML();
+    // Prefer the markdown serialization so GFM features (tables, lists,
+    // blockquotes, etc.) are rendered correctly even when typed directly
+    // instead of pasted.
+    const md: string =
+      (editor.storage as any)?.markdown?.getMarkdown?.() ?? "";
+    const bodyHtml = md
+      ? (marked.parse(md, { async: false, gfm: true, breaks: true }) as string)
+      : editor.getHTML();
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
 
