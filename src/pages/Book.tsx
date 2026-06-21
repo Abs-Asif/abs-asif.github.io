@@ -295,12 +295,23 @@ const Book = () => {
             className="w-full font-mixed text-4xl md:text-5xl font-medium tracking-tight bg-transparent border-none focus:outline-none placeholder:text-slate-300"
             dir="auto"
           />
-          <input
-            type="text"
+          <textarea
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Author"
-            className="w-full font-mixed text-lg md:text-xl text-slate-600 bg-transparent border-none focus:outline-none placeholder:text-slate-300"
+            placeholder="Author (press Enter for a new line)"
+            rows={1}
+            ref={(el) => {
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = el.scrollHeight + "px";
+              }
+            }}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = el.scrollHeight + "px";
+            }}
+            className="w-full font-mixed text-lg md:text-xl text-slate-600 bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none overflow-hidden leading-snug"
             dir="auto"
           />
         </div>
