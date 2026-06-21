@@ -57,6 +57,75 @@ const Book = () => {
     container.style.width = `${widthPx}px`;
     container.className = "font-mixed";
 
+    // Inject styles so markdown-rendered elements (tables, lists, quotes,
+    // headings, code) look natural in the captured PDF.
+    const styleEl = document.createElement("style");
+    styleEl.textContent = `
+      [data-pdf-body] { color: #0f172a; }
+      [data-pdf-body] p { margin: 0 0 0.75em 0; }
+      [data-pdf-body] h1 { font-size: 20pt; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.25; }
+      [data-pdf-body] h2 { font-size: 16pt; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.3; }
+      [data-pdf-body] h3 { font-size: 13pt; font-weight: 600; margin: 0.9em 0 0.4em; line-height: 1.35; }
+      [data-pdf-body] h4, [data-pdf-body] h5, [data-pdf-body] h6 { font-size: 12pt; font-weight: 600; margin: 0.8em 0 0.4em; }
+      [data-pdf-body] ul, [data-pdf-body] ol { margin: 0 0 0.75em 0; padding-left: 1.6em; }
+      [data-pdf-body] li { margin: 0.15em 0; }
+      [data-pdf-body] li > p { margin: 0; }
+      [data-pdf-body] ul { list-style: disc outside; }
+      [data-pdf-body] ol { list-style: decimal outside; }
+      [data-pdf-body] blockquote {
+        margin: 0.5em 0 1em;
+        padding: 0.2em 1em;
+        border-left: 3px solid #94a3b8;
+        color: #334155;
+        font-style: italic;
+      }
+      [data-pdf-body] hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.2em 0; }
+      [data-pdf-body] code {
+        background: #f1f5f9;
+        padding: 0.05em 0.35em;
+        border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.9em;
+      }
+      [data-pdf-body] pre {
+        background: #0f172a;
+        color: #f1f5f9;
+        padding: 0.9em 1em;
+        border-radius: 8px;
+        overflow: hidden;
+        white-space: pre-wrap;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 9.5pt;
+        line-height: 1.5;
+        margin: 0 0 1em 0;
+      }
+      [data-pdf-body] pre code { background: transparent; padding: 0; color: inherit; }
+      [data-pdf-body] a { color: #1d4ed8; text-decoration: underline; }
+      [data-pdf-body] strong { font-weight: 700; }
+      [data-pdf-body] em { font-style: italic; }
+      [data-pdf-body] table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0.5em 0 1em;
+        table-layout: fixed;
+        word-wrap: break-word;
+      }
+      [data-pdf-body] th, [data-pdf-body] td {
+        border: 1px solid #94a3b8;
+        padding: 6px 8px;
+        vertical-align: top;
+        text-align: left;
+        font-size: 10.5pt;
+        line-height: 1.45;
+      }
+      [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
+      [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
+      [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
+      [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
+      [data-pdf-body] ul[data-type="taskList"] li > label { margin-top: 0.1em; }
+    `;
+    container.appendChild(styleEl);
+
     // Cover section
     const coverHtml = `
       <div data-pdf-section data-pdf-cover style="
@@ -77,7 +146,7 @@ const Book = () => {
         ">${escapeHtml(safeTitle)}</h1>
         ${
           safeAuthor
-            ? `<p style="
+            ? `<div style="
                 font-size: 12pt;
                 font-weight: 400;
                 line-height: 1.4;
@@ -85,7 +154,8 @@ const Book = () => {
                 color: #334155;
                 word-wrap: break-word;
                 overflow-wrap: break-word;
-              ">${escapeHtml(safeAuthor)}</p>`
+                white-space: pre-wrap;
+              ">${escapeHtml(safeAuthor)}</div>`
             : ""
         }
       </div>
@@ -100,7 +170,9 @@ const Book = () => {
     bodyWrap.style.textAlign = "left";
     bodyWrap.innerHTML = bodyHtml;
 
-    container.innerHTML = coverHtml;
+    const coverWrap = document.createElement("div");
+    coverWrap.innerHTML = coverHtml;
+    container.appendChild(coverWrap);
     container.appendChild(bodyWrap);
     document.body.appendChild(container);
 
