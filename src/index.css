@@ -297,11 +297,49 @@
 .pdf-preview h4 { font-size: 1.25rem; }
 .pdf-preview h5 { font-size: 1.1rem; }
 .pdf-preview h6 { font-size: 1rem; }
-.pdf-preview ul, .pdf-preview ol { margin: 0 0 0.85em 0; padding-left: 1.7em; }
-.pdf-preview ul { list-style: disc outside; }
-.pdf-preview ol { list-style: decimal outside; }
-.pdf-preview li { margin: 0.2em 0; line-height: 1.7; }
+.pdf-preview ul, .pdf-preview ol {
+  margin: 0 0 0.85em 0;
+  padding-left: 0;
+  list-style: none;
+}
+.pdf-preview ol { counter-reset: pp-ol; }
+.pdf-preview ul > li,
+.pdf-preview ol > li {
+  position: relative;
+  padding-left: 1.6em;
+  margin: 0.2em 0;
+  line-height: 1.7;
+}
+.pdf-preview ul > li::before {
+  content: "•";
+  position: absolute;
+  left: 0.5em;
+  top: 0;
+  line-height: 1.7;
+}
+.pdf-preview ol > li { counter-increment: pp-ol; }
+.pdf-preview ol > li::before {
+  content: counter(pp-ol) ".";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.3em;
+  text-align: right;
+  line-height: 1.7;
+}
+.pdf-preview ol.numeral-ol > li { padding-left: 2.2em; }
+.pdf-preview ol.numeral-ol > li::before { content: none; }
+.pdf-preview ol.numeral-ol .num-marker {
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 1.9em;
+  text-align: right;
+  padding-right: 0.3em;
+  line-height: 1.7;
+}
 .pdf-preview li > p { margin: 0; }
+.pdf-preview [dir="rtl"] { text-align: right !important; }
 .pdf-preview blockquote {
   margin: 0.5em 0 1em;
   padding: 0.3em 1em;
@@ -341,10 +379,30 @@
 }
 .pdf-preview th, .pdf-preview td {
   border: 1px solid #94a3b8;
-  padding: 8px 10px;
+  padding: 5px 8px;
   vertical-align: top;
   text-align: left;
-  line-height: 1.55;
+  line-height: 1.45;
 }
 .pdf-preview th { background: #f1f5f9; font-weight: 600; }
 .pdf-preview img { max-width: 100%; height: auto; display: block; margin: 0.6em auto; }
+
+/* highlight.js token colors (atom-one-dark) for both preview and PDF */
+.pdf-preview .hljs-keyword,
+.pdf-preview .hljs-selector-tag,
+.pdf-preview .hljs-built_in { color: #c678dd; }
+.pdf-preview .hljs-string,
+.pdf-preview .hljs-attr { color: #98c379; }
+.pdf-preview .hljs-number,
+.pdf-preview .hljs-literal { color: #d19a66; }
+.pdf-preview .hljs-comment,
+.pdf-preview .hljs-quote { color: #5c6370; font-style: italic; }
+.pdf-preview .hljs-function,
+.pdf-preview .hljs-title { color: #61afef; }
+.pdf-preview .hljs-variable,
+.pdf-preview .hljs-name,
+.pdf-preview .hljs-tag { color: #e06c75; }
+.pdf-preview .hljs-type,
+.pdf-preview .hljs-class .hljs-title { color: #e5c07b; }
+.pdf-preview .hljs-meta,
+.pdf-preview .hljs-symbol { color: #56b6c2; }
