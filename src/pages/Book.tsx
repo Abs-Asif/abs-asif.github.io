@@ -397,13 +397,39 @@ const Book = () => {
 
       const renderScale = 3; // sharp output
 
-      const captureElement = async (el: HTMLElement) => {
-        // Temporarily add vertical padding so html2canvas doesn't clip
-        // ascenders/descenders of the first/last line.
+      type LinkRect = { x: number; y: number; w: number; h: number; href: string };
+      type CaptureResult = {
+        dataUrl: string;
+        heightMM: number;
+        elWidthPx: number;
+        elHeightPx: number;
+        links: LinkRect[];
+      };
+
+      const captureElement = async (el: HTMLElement): Promise<CaptureResult> => {
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
         el.style.paddingTop = "6px";
         el.style.paddingBottom = "8px";
+
+        // Capture link rects in CSS pixels relative to the element box.
+        const baseRect = el.getBoundingClientRect();
+        const links: LinkRect[] = [];
+        el.querySelectorAll("a[href]").forEach((a) => {
+          const href = (a as HTMLAnchorElement).href;
+          if (!href) return;
+          const rects = (a as HTMLAnchorElement).getClientRects();
+          for (const r of Array.from(rects)) {
+            links.push({
+              x: r.left - baseRect.left,
+              y: r.top - baseRect.top,
+              w: r.width,
+              h: r.height,
+              href,
+            });
+          }
+        });
+
         const canvas = await html2canvas(el, {
           scale: renderScale,
           useCORS: true,
@@ -417,7 +443,33 @@ const Book = () => {
         const elHeightPx = canvas.height / renderScale;
         const mmPerPx = CONTENT_W / elWidthPx;
         const heightMM = elHeightPx * mmPerPx;
-        return { dataUrl: canvas.toDataURL("image/jpeg", 0.95), heightMM };
+        return {
+          dataUrl: canvas.toDataURL("image/jpeg", 0.95),
+          heightMM,
+          elWidthPx,
+          elHeightPx,
+          links,
+        };
+      };
+
+      const addLinkAnnotations = (
+        section: CaptureResult,
+        xOffsetMM: number,
+        yOffsetMM: number,
+        drawW: number,
+        drawH: number
+      ) => {
+        const sx = drawW / section.elWidthPx;
+        const sy = drawH / section.elHeightPx;
+        for (const lk of section.links) {
+          pdf.link(
+            xOffsetMM + lk.x * sx,
+            yOffsetMM + lk.y * sy,
+            lk.w * sx,
+            lk.h * sy,
+            { url: lk.href }
+          );
+        }
       };
 
       // --- Cover page ---
@@ -425,32 +477,53 @@ const Book = () => {
         "[data-pdf-cover]"
       ) as HTMLElement;
       const cover = await captureElement(coverEl);
-      pdf.addImage(
-        cover.dataUrl,
-        "JPEG",
-        MARGIN,
-        MARGIN,
-        CONTENT_W,
-        Math.min(cover.heightMM, CONTENT_H)
-      );
+      const coverDrawH = Math.min(cover.heightMM, CONTENT_H);
+      pdf.addImage(cover.dataUrl, "JPEG", MARGIN, MARGIN, CONTENT_W, coverDrawH);
+      addLinkAnnotations(cover, MARGIN, MARGIN, CONTENT_W, coverDrawH);
 
       // --- Body: always start on a new page ---
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
       const numeralScript = detectScript(safeTitle);
       let bodyPageNum = 0;
-      const stampPageNumber = () => {
+
+      // Render the page number as a tiny canvas so Bangla / Arabic glyphs use
+      // the correct font (jsPDF's built-in helvetica can't render them).
+      const stampPageNumber = async () => {
         bodyPageNum += 1;
         const label = toNumerals(bodyPageNum, numeralScript);
-        pdf.setFont("helvetica", "normal");
-        pdf.setFontSize(9);
-        pdf.setTextColor(120);
-        // Top-right, outside content margin but not touching edge
-        pdf.text(label, PAGE_W - 6, 8, { align: "right" });
-        pdf.setTextColor(0);
+        const numDiv = document.createElement("div");
+        numDiv.style.position = "fixed";
+        numDiv.style.left = "-9999px";
+        numDiv.style.top = "0";
+        numDiv.style.padding = "2px 4px";
+        numDiv.style.background = "#ffffff";
+        numDiv.style.color = "#666";
+        numDiv.style.fontSize = "11pt";
+        numDiv.style.lineHeight = "1";
+        numDiv.style.fontFamily =
+          "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
+        numDiv.textContent = label;
+        document.body.appendChild(numDiv);
+        try {
+          const c = await html2canvas(numDiv, {
+            scale: 3,
+            backgroundColor: "#ffffff",
+            logging: false,
+          });
+          const wMM = (c.width / 3) * (25.4 / 96);
+          const hMM = (c.height / 3) * (25.4 / 96);
+          // Top-right, just inside the page edge, well above the content margin
+          const x = PAGE_W - 5 - wMM;
+          const y = 5;
+          pdf.addImage(c.toDataURL("image/png"), "PNG", x, y, wMM, hMM);
+        } finally {
+          numDiv.remove();
+        }
       };
+
       if (bodyChildren.length > 0) {
         pdf.addPage();
-        stampPageNumber();
+        await stampPageNumber();
         let currentY = MARGIN;
 
         for (const child of bodyChildren) {
@@ -479,12 +552,13 @@ const Book = () => {
           const remaining = PAGE_H - MARGIN - currentY;
           if (drawH > remaining && currentY > MARGIN) {
             pdf.addPage();
-            stampPageNumber();
+            await stampPageNumber();
             currentY = MARGIN;
           }
 
           const xOffset = MARGIN + (CONTENT_W - drawW) / 2;
           pdf.addImage(dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
+          addLinkAnnotations(section, xOffset, currentY, drawW, drawH);
           currentY += drawH + SECTION_GAP;
         }
       }
