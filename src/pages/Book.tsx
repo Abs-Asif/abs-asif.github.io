@@ -1,40 +1,66 @@
-import React, { useRef, useState } from "react";
-import { useEditor, EditorContent } from "@tiptap/react";
-import { buildEditorExtensions } from "@/lib/editor-extensions";
-import { Printer, Loader2 } from "lucide-react";
+import React, { useMemo, useRef, useState } from "react";
+import { Printer, Loader2, Eye, Pencil } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
 
+type NumeralScript = "bn" | "ar" | "en";
+
+function detectScript(text: string): NumeralScript {
+  for (const ch of text) {
+    if (/\s/.test(ch)) continue;
+    const code = ch.codePointAt(0)!;
+    if (code >= 0x0980 && code <= 0x09ff) return "bn";
+    if (
+      (code >= 0x0600 && code <= 0x06ff) ||
+      (code >= 0x0750 && code <= 0x077f) ||
+      (code >= 0xfb50 && code <= 0xfdff) ||
+      (code >= 0xfe70 && code <= 0xfeff)
+    )
+      return "ar";
+    return "en";
+  }
+  return "en";
+}
+
+function toNumerals(n: number, script: NumeralScript): string {
+  const s = String(n);
+  if (script === "en") return s;
+  const map =
+    script === "bn"
+      ? ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"]
+      : ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
+  return s
+    .split("")
+    .map((d) => (/\d/.test(d) ? map[+d] : d))
+    .join("");
+}
+
 const Book = () => {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
+  const [content, setContent] = useState("");
+  const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const contentRef = useRef<HTMLDivElement>(null);
 
-  const editor = useEditor({
-    extensions: buildEditorExtensions("Start writing your book here..."),
-    editorProps: {
-      attributes: {
-        class:
-          "font-mixed prose-xl md:prose-2xl max-w-none focus:outline-none min-h-[70vh]",
-        dir: "auto",
-      },
-    },
-  });
+  const previewHtml = useMemo(
+    () =>
+      marked.parse(content || "", {
+        async: false,
+        gfm: true,
+        breaks: true,
+      }) as string,
+    [content]
+  );
 
   const handleDownloadPDF = async () => {
-    if (!editor) return;
     setGenerating(true);
 
-    // Prefer the markdown serialization so GFM features (tables, lists,
-    // blockquotes, etc.) are rendered correctly even when typed directly
-    // instead of pasted.
-    const md: string =
-      (editor.storage as any)?.markdown?.getMarkdown?.() ?? "";
-    const bodyHtml = md
-      ? (marked.parse(md, { async: false, gfm: true, breaks: true }) as string)
-      : editor.getHTML();
+    const bodyHtml = marked.parse(content || "", {
+      async: false,
+      gfm: true,
+      breaks: true,
+    }) as string;
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
 
@@ -58,6 +84,7 @@ const Book = () => {
     container.style.color = "#0f172a";
     container.style.fontFamily =
       "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
+    container.style.fontFeatureSettings = "normal";
     // Use a CSS pixel width that matches CONTENT_W mm at the browser's standard 96dpi.
     // 1mm = 3.7795275591 px. We use a larger base so text isn't squeezed; we'll scale via scaleFactor.
     const PX_PER_MM = 3.7795275591;
@@ -69,14 +96,33 @@ const Book = () => {
     // headings, code) look natural in the captured PDF.
     const styleEl = document.createElement("style");
     styleEl.textContent = `
-      [data-pdf-body] { color: #0f172a; }
+      [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
       [data-pdf-body] p { margin: 0 0 0.75em 0; }
-      [data-pdf-body] h1 { font-size: 20pt; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.25; }
-      [data-pdf-body] h2 { font-size: 16pt; font-weight: 600; margin: 1em 0 0.5em; line-height: 1.3; }
-      [data-pdf-body] h3 { font-size: 13pt; font-weight: 600; margin: 0.9em 0 0.4em; line-height: 1.35; }
-      [data-pdf-body] h4, [data-pdf-body] h5, [data-pdf-body] h6 { font-size: 12pt; font-weight: 600; margin: 0.8em 0 0.4em; }
+      [data-pdf-body] h1,
+      [data-pdf-body] h2,
+      [data-pdf-body] h3,
+      [data-pdf-body] h4,
+      [data-pdf-body] h5,
+      [data-pdf-body] h6 {
+        font-family: inherit;
+        font-weight: 400;
+        text-align: center;
+        margin: 1em 0 0.5em;
+        line-height: 1.3;
+      }
+      [data-pdf-body] h1 { font-size: 22pt; }
+      [data-pdf-body] h2 { font-size: 18pt; }
+      [data-pdf-body] h3 { font-size: 15pt; }
+      [data-pdf-body] h4 { font-size: 13pt; }
+      [data-pdf-body] h5 { font-size: 12pt; }
+      [data-pdf-body] h6 { font-size: 11.5pt; }
       [data-pdf-body] ul, [data-pdf-body] ol { margin: 0 0 0.75em 0; padding-left: 1.6em; }
-      [data-pdf-body] li { margin: 0.15em 0; }
+      [data-pdf-body] li {
+        margin: 0.15em 0;
+        line-height: 1.65;
+        padding-left: 0.15em;
+      }
+      [data-pdf-body] li::marker { font-size: 1em; line-height: 1.65; }
       [data-pdf-body] li > p { margin: 0; }
       [data-pdf-body] ul { list-style: disc outside; }
       [data-pdf-body] ol { list-style: decimal outside; }
@@ -120,11 +166,11 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 6px 8px;
+        padding: 7px 9px 9px;
         vertical-align: top;
         text-align: left;
         font-size: 10.5pt;
-        line-height: 1.45;
+        line-height: 1.55;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
@@ -147,9 +193,11 @@ const Book = () => {
           font-weight: 400;
           line-height: 1.2;
           margin: 0 0 14mm 0;
-          letter-spacing: -0.005em;
-          word-wrap: break-word;
+          letter-spacing: normal;
+          word-break: keep-all;
           overflow-wrap: break-word;
+          font-feature-settings: normal;
+          font-variant-ligatures: normal;
           white-space: normal;
         ">${escapeHtml(safeTitle)}</h1>
         ${
@@ -242,8 +290,21 @@ const Book = () => {
 
       // --- Body: always start on a new page ---
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
+      const numeralScript = detectScript(safeTitle);
+      let bodyPageNum = 0;
+      const stampPageNumber = () => {
+        bodyPageNum += 1;
+        const label = toNumerals(bodyPageNum, numeralScript);
+        pdf.setFont("helvetica", "normal");
+        pdf.setFontSize(9);
+        pdf.setTextColor(120);
+        // Top-right, outside content margin but not touching edge
+        pdf.text(label, PAGE_W - 6, 8, { align: "right" });
+        pdf.setTextColor(0);
+      };
       if (bodyChildren.length > 0) {
         pdf.addPage();
+        stampPageNumber();
         let currentY = MARGIN;
 
         for (const child of bodyChildren) {
@@ -272,6 +333,7 @@ const Book = () => {
           const remaining = PAGE_H - MARGIN - currentY;
           if (drawH > remaining && currentY > MARGIN) {
             pdf.addPage();
+            stampPageNumber();
             currentY = MARGIN;
           }
 
@@ -291,16 +353,27 @@ const Book = () => {
   };
 
   return (
-    <div className="min-h-screen bg-white p-10 md:p-20 lg:p-32 flex flex-col items-center">
+    <div className="min-h-screen bg-white px-6 pt-10 md:px-20 md:pt-20 lg:px-32 lg:pt-24 pb-40 flex flex-col items-center">
       <div className="w-full max-w-5xl space-y-10">
         {/* Title + Author */}
         <div className="space-y-4 border-b border-slate-100 pb-10">
-          <input
-            type="text"
+          <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="Book title"
-            className="w-full font-mixed text-4xl md:text-5xl font-medium tracking-tight bg-transparent border-none focus:outline-none placeholder:text-slate-300"
+            rows={1}
+            ref={(el) => {
+              if (el) {
+                el.style.height = "auto";
+                el.style.height = el.scrollHeight + "px";
+              }
+            }}
+            onInput={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "auto";
+              el.style.height = el.scrollHeight + "px";
+            }}
+            className="w-full font-mixed text-4xl md:text-5xl font-medium tracking-tight bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none overflow-hidden leading-tight"
             dir="auto"
           />
           <textarea
@@ -324,13 +397,37 @@ const Book = () => {
           />
         </div>
 
-        {/* Editor */}
-        <div className="tiptap" ref={contentRef}>
-          <EditorContent editor={editor} />
-        </div>
+        {/* Editor / Preview */}
+        {preview ? (
+          <div
+            className="font-mixed prose-xl md:prose-2xl max-w-none pdf-preview"
+            dir="auto"
+            dangerouslySetInnerHTML={{ __html: previewHtml }}
+          />
+        ) : (
+          <textarea
+            value={content}
+            onChange={(e) => setContent(e.target.value)}
+            placeholder="Start writing your book here... (Markdown supported)"
+            dir="auto"
+            className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
+            style={{ whiteSpace: "pre-wrap" }}
+          />
+        )}
       </div>
 
-      {/* Floating print button */}
+      {/* Floating buttons */}
+      <button
+        onClick={() => setPreview((p) => !p)}
+        className="fixed bottom-8 right-44 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+        title={preview ? "Back to editor" : "Preview with markdown"}
+      >
+        {preview ? <Pencil size={18} /> : <Eye size={18} />}
+        <span className="text-sm font-medium">
+          {preview ? "Edit" : "Preview"}
+        </span>
+      </button>
+
       <button
         onClick={handleDownloadPDF}
         disabled={generating}
