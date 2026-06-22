@@ -3,6 +3,24 @@ import { Printer, Loader2, Eye, Pencil } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
+import { markedHighlight } from "marked-highlight";
+import hljs from "highlight.js";
+import "highlight.js/styles/atom-one-dark.css";
+
+// Configure marked once: GFM, line breaks, and highlight.js for code fences.
+marked.use(
+  markedHighlight({
+    langPrefix: "hljs language-",
+    highlight(code, lang) {
+      const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
+      try {
+        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
+      } catch {
+        return code;
+      }
+    },
+  })
+);
 
 type NumeralScript = "bn" | "ar" | "en";
 
@@ -36,6 +54,86 @@ function toNumerals(n: number, script: NumeralScript): string {
     .join("");
 }
 
+/* ---------- Arabic-only block detection ---------- */
+function isArabicOnly(text: string): boolean {
+  const stripped = text.replace(/\s+/g, "").replace(/[\p{P}\p{S}\d]/gu, "");
+  if (!stripped) return false;
+  for (const ch of stripped) {
+    const c = ch.codePointAt(0)!;
+    const inArabic =
+      (c >= 0x0600 && c <= 0x06ff) ||
+      (c >= 0x0750 && c <= 0x077f) ||
+      (c >= 0xfb50 && c <= 0xfdff) ||
+      (c >= 0xfe70 && c <= 0xfeff);
+    if (!inArabic) return false;
+  }
+  return true;
+}
+
+function applyArabicAlignment(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const doc = new DOMParser().parseFromString(
+    `<div id="__root">${html}</div>`,
+    "text/html"
+  );
+  const root = doc.getElementById("__root");
+  if (!root) return html;
+  root
+    .querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th")
+    .forEach((el) => {
+      const txt = el.textContent || "";
+      if (isArabicOnly(txt)) {
+        el.setAttribute("dir", "rtl");
+        (el as HTMLElement).style.textAlign = "right";
+      }
+    });
+  return root.innerHTML;
+}
+
+/* ---------- Bangla / Arabic numbered list preprocessing ---------- */
+// Marked doesn't recognise "১." or "٢." as ordered lists. We detect groups
+// of consecutive such lines and emit raw HTML <ol> with the original markers
+// preserved as <span class="num-marker">.
+function preprocessNumeralLists(md: string): string {
+  const lines = md.split("\n");
+  const re = /^(\s*)([০-৯]+|[٠-٩]+)([\.\)])\s+(.*)$/;
+  const out: string[] = [];
+  let i = 0;
+  while (i < lines.length) {
+    const m = lines[i].match(re);
+    if (m) {
+      const items: string[] = [];
+      while (i < lines.length) {
+        const mm = lines[i].match(re);
+        if (!mm) break;
+        items.push(
+          `<li><span class="num-marker">${escapeHtml(
+            mm[2] + mm[3]
+          )}</span><span class="num-body">${escapeHtml(mm[4])}</span></li>`
+        );
+        i++;
+      }
+      out.push("");
+      out.push(`<ol class="numeral-ol">${items.join("")}</ol>`);
+      out.push("");
+    } else {
+      out.push(lines[i]);
+      i++;
+    }
+  }
+  return out.join("\n");
+}
+
+function renderMarkdown(md: string): string {
+  const pre = preprocessNumeralLists(md || "");
+  const html = marked.parse(pre, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  return applyArabicAlignment(html);
+}
+
 const Book = () => {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
@@ -43,24 +141,12 @@ const Book = () => {
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const previewHtml = useMemo(
-    () =>
-      marked.parse(content || "", {
-        async: false,
-        gfm: true,
-        breaks: true,
-      }) as string,
-    [content]
-  );
+  const previewHtml = useMemo(() => renderMarkdown(content), [content]);
 
   const handleDownloadPDF = async () => {
     setGenerating(true);
 
-    const bodyHtml = marked.parse(content || "", {
-      async: false,
-      gfm: true,
-      breaks: true,
-    }) as string;
+    const bodyHtml = renderMarkdown(content);
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
 
@@ -116,16 +202,56 @@ const Book = () => {
       [data-pdf-body] h4 { font-size: 13pt; }
       [data-pdf-body] h5 { font-size: 12pt; }
       [data-pdf-body] h6 { font-size: 11.5pt; }
-      [data-pdf-body] ul, [data-pdf-body] ol { margin: 0 0 0.75em 0; padding-left: 1.6em; }
-      [data-pdf-body] li {
-        margin: 0.15em 0;
-        line-height: 1.65;
-        padding-left: 0.15em;
+      /* Manual list markers so html2canvas aligns dots with the text baseline */
+      [data-pdf-body] ul, [data-pdf-body] ol {
+        margin: 0 0 0.75em 0;
+        padding-left: 0;
+        list-style: none;
       }
-      [data-pdf-body] li::marker { font-size: 1em; line-height: 1.65; }
+      [data-pdf-body] ol { counter-reset: pdf-ol; }
+      [data-pdf-body] ul > li,
+      [data-pdf-body] ol > li {
+        position: relative;
+        padding-left: 1.4em;
+        margin: 0.1em 0;
+        line-height: 1.6;
+      }
+      [data-pdf-body] ul > li::before {
+        content: "•";
+        position: absolute;
+        left: 0.45em;
+        top: 0;
+        line-height: 1.6;
+        color: #0f172a;
+      }
+      [data-pdf-body] ol > li {
+        counter-increment: pdf-ol;
+      }
+      [data-pdf-body] ol > li::before {
+        content: counter(pdf-ol) ".";
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1.2em;
+        text-align: right;
+        line-height: 1.6;
+      }
       [data-pdf-body] li > p { margin: 0; }
-      [data-pdf-body] ul { list-style: disc outside; }
-      [data-pdf-body] ol { list-style: decimal outside; }
+      /* Numeral-aware OL (Bangla / Arabic) */
+      [data-pdf-body] ol.numeral-ol > li {
+        padding-left: 2em;
+        line-height: 1.6;
+      }
+      [data-pdf-body] ol.numeral-ol > li::before { content: none; }
+      [data-pdf-body] ol.numeral-ol .num-marker {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 1.7em;
+        text-align: right;
+        line-height: 1.6;
+        padding-right: 0.3em;
+      }
       [data-pdf-body] blockquote {
         margin: 0.5em 0 1em;
         padding: 0.2em 1em;
@@ -142,8 +268,8 @@ const Book = () => {
         font-size: 0.9em;
       }
       [data-pdf-body] pre {
-        background: #0f172a;
-        color: #f1f5f9;
+        background: #282c34;
+        color: #abb2bf;
         padding: 0.9em 1em;
         border-radius: 8px;
         overflow: hidden;
@@ -154,6 +280,25 @@ const Book = () => {
         margin: 0 0 1em 0;
       }
       [data-pdf-body] pre code { background: transparent; padding: 0; color: inherit; }
+      /* highlight.js (atom-one-dark) token colors */
+      [data-pdf-body] .hljs-keyword,
+      [data-pdf-body] .hljs-selector-tag,
+      [data-pdf-body] .hljs-built_in { color: #c678dd; }
+      [data-pdf-body] .hljs-string,
+      [data-pdf-body] .hljs-attr { color: #98c379; }
+      [data-pdf-body] .hljs-number,
+      [data-pdf-body] .hljs-literal { color: #d19a66; }
+      [data-pdf-body] .hljs-comment,
+      [data-pdf-body] .hljs-quote { color: #5c6370; font-style: italic; }
+      [data-pdf-body] .hljs-function,
+      [data-pdf-body] .hljs-title { color: #61afef; }
+      [data-pdf-body] .hljs-variable,
+      [data-pdf-body] .hljs-name,
+      [data-pdf-body] .hljs-tag { color: #e06c75; }
+      [data-pdf-body] .hljs-type,
+      [data-pdf-body] .hljs-class .hljs-title { color: #e5c07b; }
+      [data-pdf-body] .hljs-meta,
+      [data-pdf-body] .hljs-symbol { color: #56b6c2; }
       [data-pdf-body] a { color: #1d4ed8; text-decoration: underline; }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
@@ -166,17 +311,18 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 7px 9px 9px;
+        padding: 4px 7px;
         vertical-align: top;
         text-align: left;
-        font-size: 10.5pt;
-        line-height: 1.55;
+        font-size: 10pt;
+        line-height: 1.4;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
       [data-pdf-body] ul[data-type="taskList"] li > label { margin-top: 0.1em; }
+      [data-pdf-body] ul[data-type="taskList"] li::before { content: none; }
     `;
     container.appendChild(styleEl);
 
