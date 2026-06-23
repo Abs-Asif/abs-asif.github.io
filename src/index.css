@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Scheherazade+New:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Scheherazade+New:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -8,6 +8,15 @@
 @font-face {
   font-family: 'Kalpurush';
   src: url('/fonts/kalpurush.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* Times New Roman (user-supplied TTF served via CDN) */
+@font-face {
+  font-family: 'TimesNR';
+  src: url('/__l5e/assets-v1/3d77e4d6-02b3-4414-af59-d6f7b45e702d/times.ttf') format('truetype');
   font-weight: normal;
   font-style: normal;
   font-display: swap;
@@ -143,11 +152,11 @@
   }
 
   .font-serif {
-    font-family: 'Tinos', 'Times New Roman', Times, serif;
+    font-family: 'TimesNR', 'Times New Roman', Times, serif;
   }
 
   .font-mixed {
-    font-family: 'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif;
+    font-family: 'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif;
   }
 
   .tiptap .ProseMirror {
