@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from "react";
-import { Printer, Loader2, Eye, Pencil } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Download, Loader2, Eye, Pencil, HelpCircle } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
@@ -169,7 +170,7 @@ const Book = () => {
     container.style.background = "#ffffff";
     container.style.color = "#0f172a";
     container.style.fontFamily =
-      "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
+      "'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
     container.style.fontFeatureSettings = "normal";
     // Use a CSS pixel width that matches CONTENT_W mm at the browser's standard 96dpi.
     // 1mm = 3.7795275591 px. We use a larger base so text isn't squeezed; we'll scale via scaleFactor.
@@ -299,7 +300,11 @@ const Book = () => {
       [data-pdf-body] .hljs-class .hljs-title { color: #e5c07b; }
       [data-pdf-body] .hljs-meta,
       [data-pdf-body] .hljs-symbol { color: #56b6c2; }
-      [data-pdf-body] a { color: #1d4ed8; text-decoration: underline; }
+      [data-pdf-body] a {
+        color: #1d4ed8;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(29, 78, 216, 0.35);
+      }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
       [data-pdf-body] table {
@@ -333,6 +338,8 @@ const Book = () => {
         box-sizing: border-box;
         padding-top: 8mm;
         text-align: center;
+        position: relative;
+        min-height: ${CONTENT_H}mm;
       ">
         <h1 style="
           font-size: 26pt;
@@ -360,6 +367,17 @@ const Book = () => {
               ">${escapeHtml(safeAuthor)}</div>`
             : ""
         }
+        <div data-pdf-cover-footer style="
+          position: absolute;
+          left: 0;
+          right: 0;
+          bottom: 6mm;
+          text-align: center;
+          font-size: 9pt;
+          color: #475569;
+        ">
+          Made using <a href="https://abdullah.ami.bd/book" style="color:#1d4ed8;text-decoration:none;border-bottom:1px solid rgba(29,78,216,0.35);">abdullah.ami.bd/book</a>
+        </div>
       </div>
     `;
 
@@ -395,7 +413,7 @@ const Book = () => {
         compress: true,
       });
 
-      const renderScale = 3; // sharp output
+      const renderScale = 2; // sharp enough for A5, ~2x faster than 3
 
       type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
@@ -486,39 +504,54 @@ const Book = () => {
       const numeralScript = detectScript(safeTitle);
       let bodyPageNum = 0;
 
-      // Render the page number as a tiny canvas so Bangla / Arabic glyphs use
-      // the correct font (jsPDF's built-in helvetica can't render them).
-      const stampPageNumber = async () => {
-        bodyPageNum += 1;
-        const label = toNumerals(bodyPageNum, numeralScript);
+      // Pre-render page-number glyphs to canvas tiles once per number so the
+      // correct font (Kalpurush / Scheherazade / Tinos) is used. jsPDF's built-in
+      // fonts can't render Bangla / Arabic. We size them small (8pt) on output.
+      const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
+      const PAGE_NUM_PT = 8;
+      const renderNumberTile = async (n: number) => {
+        const cached = numberCache.get(n);
+        if (cached) return cached;
+        const label = toNumerals(n, numeralScript);
         const numDiv = document.createElement("div");
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "2px 4px";
+        numDiv.style.padding = "0";
+        numDiv.style.margin = "0";
         numDiv.style.background = "#ffffff";
-        numDiv.style.color = "#666";
-        numDiv.style.fontSize = "11pt";
+        numDiv.style.color = "#64748b";
+        numDiv.style.fontSize = `${PAGE_NUM_PT * 2}pt`; // render larger, downscale for crispness
         numDiv.style.lineHeight = "1";
         numDiv.style.fontFamily =
-          "'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif";
+          "'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
         numDiv.textContent = label;
         document.body.appendChild(numDiv);
         try {
           const c = await html2canvas(numDiv, {
-            scale: 3,
+            scale: 2,
             backgroundColor: "#ffffff",
             logging: false,
           });
-          const wMM = (c.width / 3) * (25.4 / 96);
-          const hMM = (c.height / 3) * (25.4 / 96);
-          // Top-right, just inside the page edge, well above the content margin
-          const x = PAGE_W - 5 - wMM;
-          const y = 5;
-          pdf.addImage(c.toDataURL("image/png"), "PNG", x, y, wMM, hMM);
+          // The div was rendered at 2× target pt; final mm should reflect target pt.
+          const targetHmm = (PAGE_NUM_PT * 25.4) / 72; // pt -> mm
+          const ratio = targetHmm / ((c.height / 2) * (25.4 / 96));
+          const wMM = (c.width / 2) * (25.4 / 96) * ratio;
+          const hMM = targetHmm;
+          const tile = { dataUrl: c.toDataURL("image/png"), wMM, hMM };
+          numberCache.set(n, tile);
+          return tile;
         } finally {
           numDiv.remove();
         }
+      };
+      const stampPageNumber = async () => {
+        bodyPageNum += 1;
+        const tile = await renderNumberTile(bodyPageNum);
+        // Top-right, outside the content margin but not touching edge
+        const x = PAGE_W - 6 - tile.wMM;
+        const y = 5;
+        pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
       };
 
       if (bodyChildren.length > 0) {
@@ -580,7 +613,7 @@ const Book = () => {
           <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Book title"
+            placeholder="বইয়ের শিরোনাম"
             rows={1}
             ref={(el) => {
               if (el) {
@@ -599,7 +632,7 @@ const Book = () => {
           <textarea
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Author (press Enter for a new line)"
+            placeholder="লেখকের নাম (নতুন লাইনের জন্য Enter চাপুন)"
             rows={1}
             ref={(el) => {
               if (el) {
@@ -628,7 +661,7 @@ const Book = () => {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Start writing your book here... (Markdown supported)"
+            placeholder="এখানে আপনার বই লেখা শুরু করুন... (Markdown সমর্থিত)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
             style={{ whiteSpace: "pre-wrap" }}
@@ -639,7 +672,7 @@ const Book = () => {
       {/* Floating buttons */}
       <button
         onClick={() => setPreview((p) => !p)}
-        className="fixed bottom-8 right-44 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+        className="fixed bottom-8 right-56 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
         title={preview ? "Back to editor" : "Preview with markdown"}
       >
         {preview ? <Pencil size={18} /> : <Eye size={18} />}
@@ -647,6 +680,15 @@ const Book = () => {
           {preview ? "Edit" : "Preview"}
         </span>
       </button>
+
+      <Link
+        to="/book/help"
+        className="fixed bottom-8 right-32 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+        title="Markdown guide (in Bangla)"
+      >
+        <HelpCircle size={18} />
+        <span className="text-sm font-medium">Help</span>
+      </Link>
 
       <button
         onClick={handleDownloadPDF}
@@ -661,8 +703,8 @@ const Book = () => {
           </>
         ) : (
           <>
-            <Printer size={18} />
-            <span className="text-sm font-medium">Print / PDF</span>
+            <Download size={18} />
+            <span className="text-sm font-medium">Download</span>
           </>
         )}
       </button>
