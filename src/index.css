@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=EB+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Scheherazade+New:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Tinos:ital,wght@0,400;0,700;1,400;1,700&family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;700&family=Scheherazade+New:wght@400;500;600;700&family=Noto+Naskh+Arabic:wght@400;500;600;700&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -143,11 +143,11 @@
   }
 
   .font-serif {
-    font-family: 'EB Garamond', serif;
+    font-family: 'Tinos', 'Times New Roman', Times, serif;
   }
 
   .font-mixed {
-    font-family: 'EB Garamond', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', serif;
+    font-family: 'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif;
   }
 
   .tiptap .ProseMirror {
@@ -367,7 +367,11 @@
   margin: 0 0 1em 0;
 }
 .pdf-preview pre code { background: transparent; padding: 0; color: inherit; }
-.pdf-preview a { color: #1d4ed8; text-decoration: underline; }
+.pdf-preview a {
+  color: #1d4ed8;
+  text-decoration: none;
+  border-bottom: 1px solid rgba(29, 78, 216, 0.3);
+}
 .pdf-preview strong { font-weight: 700; }
 .pdf-preview em { font-style: italic; }
 .pdf-preview table {
