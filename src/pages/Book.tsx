@@ -613,7 +613,7 @@ const Book = () => {
           <textarea
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="Book title"
+            placeholder="বইয়ের শিরোনাম"
             rows={1}
             ref={(el) => {
               if (el) {
@@ -632,7 +632,7 @@ const Book = () => {
           <textarea
             value={author}
             onChange={(e) => setAuthor(e.target.value)}
-            placeholder="Author (press Enter for a new line)"
+            placeholder="লেখকের নাম (নতুন লাইনের জন্য Enter চাপুন)"
             rows={1}
             ref={(el) => {
               if (el) {
@@ -661,7 +661,7 @@ const Book = () => {
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
-            placeholder="Start writing your book here... (Markdown supported)"
+            placeholder="এখানে আপনার বই লেখা শুরু করুন... (Markdown সমর্থিত)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
             style={{ whiteSpace: "pre-wrap" }}
