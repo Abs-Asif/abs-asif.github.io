@@ -675,45 +675,47 @@ const Book = () => {
         )}
       </div>
 
-      {/* Floating buttons */}
-      <button
-        onClick={() => setPreview((p) => !p)}
-        className="fixed bottom-8 right-56 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-        title={preview ? "Back to editor" : "Preview with markdown"}
-      >
-        {preview ? <Pencil size={18} /> : <Eye size={18} />}
-        <span className="text-sm font-medium">
-          {preview ? "Edit" : "Preview"}
-        </span>
-      </button>
+      {/* Floating action bar — responsive, no overlap on mobile */}
+      <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+        <button
+          onClick={() => setPreview((p) => !p)}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title={preview ? "Back to editor" : "Preview with markdown"}
+        >
+          {preview ? <Pencil size={18} /> : <Eye size={18} />}
+          <span className="text-sm font-medium hidden sm:inline">
+            {preview ? "Edit" : "Preview"}
+          </span>
+        </button>
 
-      <Link
-        to="/book/help"
-        className="fixed bottom-8 right-32 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-        title="Markdown guide (in Bangla)"
-      >
-        <HelpCircle size={18} />
-        <span className="text-sm font-medium">Help</span>
-      </Link>
+        <Link
+          to="/book/help"
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="Markdown guide (in Bangla)"
+        >
+          <HelpCircle size={18} />
+          <span className="text-sm font-medium hidden sm:inline">Help</span>
+        </Link>
 
-      <button
-        onClick={handleDownloadPDF}
-        disabled={generating}
-        className="fixed bottom-8 right-8 flex items-center gap-2 px-5 py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        title="Download as PDF"
-      >
-        {generating ? (
-          <>
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm font-medium">Generating...</span>
-          </>
-        ) : (
-          <>
-            <Download size={18} />
-            <span className="text-sm font-medium">Download</span>
-          </>
-        )}
-      </button>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={generating}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          title="Download as PDF"
+        >
+          {generating ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm font-medium hidden sm:inline">Generating...</span>
+            </>
+          ) : (
+            <>
+              <Download size={18} />
+              <span className="text-sm font-medium hidden sm:inline">Download</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 };
