@@ -170,7 +170,7 @@ const Book = () => {
     container.style.background = "#ffffff";
     container.style.color = "#0f172a";
     container.style.fontFamily =
-      "'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
+      "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
     container.style.fontFeatureSettings = "normal";
     // Use a CSS pixel width that matches CONTENT_W mm at the browser's standard 96dpi.
     // 1mm = 3.7795275591 px. We use a larger base so text isn't squeezed; we'll scale via scaleFactor.
@@ -505,10 +505,10 @@ const Book = () => {
       let bodyPageNum = 0;
 
       // Pre-render page-number glyphs to canvas tiles once per number so the
-      // correct font (Kalpurush / Scheherazade / Tinos) is used. jsPDF's built-in
-      // fonts can't render Bangla / Arabic. We size them small (8pt) on output.
+      // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
+      // fonts can't render Bangla / Arabic.
       const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
-      const PAGE_NUM_PT = 8;
+      const PAGE_NUM_PT = 11; // visible final size in PDF
       const renderNumberTile = async (n: number) => {
         const cached = numberCache.get(n);
         if (cached) return cached;
@@ -517,14 +517,16 @@ const Book = () => {
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "0";
+        numDiv.style.padding = "2px 4px";
         numDiv.style.margin = "0";
+        numDiv.style.display = "inline-block";
         numDiv.style.background = "#ffffff";
-        numDiv.style.color = "#64748b";
-        numDiv.style.fontSize = `${PAGE_NUM_PT * 2}pt`; // render larger, downscale for crispness
+        numDiv.style.color = "#475569";
+        numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`; // render large, downscale for crispness
         numDiv.style.lineHeight = "1";
+        numDiv.style.whiteSpace = "nowrap";
         numDiv.style.fontFamily =
-          "'Tinos', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
+          "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
         numDiv.textContent = label;
         document.body.appendChild(numDiv);
         try {
@@ -533,9 +535,10 @@ const Book = () => {
             backgroundColor: "#ffffff",
             logging: false,
           });
-          // The div was rendered at 2× target pt; final mm should reflect target pt.
-          const targetHmm = (PAGE_NUM_PT * 25.4) / 72; // pt -> mm
-          const ratio = targetHmm / ((c.height / 2) * (25.4 / 96));
+          // Canvas was rendered at PAGE_NUM_PT*3 with 2× scale. Downscale to PAGE_NUM_PT in mm.
+          const targetHmm = (PAGE_NUM_PT * 25.4) / 72;
+          const canvasHmm = (c.height / 2) * (25.4 / 96);
+          const ratio = targetHmm / canvasHmm;
           const wMM = (c.width / 2) * (25.4 / 96) * ratio;
           const hMM = targetHmm;
           const tile = { dataUrl: c.toDataURL("image/png"), wMM, hMM };
@@ -548,9 +551,12 @@ const Book = () => {
       const stampPageNumber = async () => {
         bodyPageNum += 1;
         const tile = await renderNumberTile(bodyPageNum);
-        // Top-right, outside the content margin but not touching edge
-        const x = PAGE_W - 6 - tile.wMM;
-        const y = 5;
+        // Real-book layout: odd pages on the right, even pages on the left.
+        // Place inside the top margin band (above content area) so nothing overlaps.
+        const y = 7; // mm from top edge — well above MARGIN (14mm) where content starts
+        const edgePad = 8; // mm from outer page edge
+        const isOdd = bodyPageNum % 2 === 1;
+        const x = isOdd ? PAGE_W - edgePad - tile.wMM : edgePad;
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
       };
 
@@ -669,45 +675,47 @@ const Book = () => {
         )}
       </div>
 
-      {/* Floating buttons */}
-      <button
-        onClick={() => setPreview((p) => !p)}
-        className="fixed bottom-8 right-56 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-        title={preview ? "Back to editor" : "Preview with markdown"}
-      >
-        {preview ? <Pencil size={18} /> : <Eye size={18} />}
-        <span className="text-sm font-medium">
-          {preview ? "Edit" : "Preview"}
-        </span>
-      </button>
+      {/* Floating action bar — responsive, no overlap on mobile */}
+      <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+        <button
+          onClick={() => setPreview((p) => !p)}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title={preview ? "Back to editor" : "Preview with markdown"}
+        >
+          {preview ? <Pencil size={18} /> : <Eye size={18} />}
+          <span className="text-sm font-medium hidden sm:inline">
+            {preview ? "Edit" : "Preview"}
+          </span>
+        </button>
 
-      <Link
-        to="/book/help"
-        className="fixed bottom-8 right-32 flex items-center gap-2 px-5 py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-        title="Markdown guide (in Bangla)"
-      >
-        <HelpCircle size={18} />
-        <span className="text-sm font-medium">Help</span>
-      </Link>
+        <Link
+          to="/book/help"
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="Markdown guide (in Bangla)"
+        >
+          <HelpCircle size={18} />
+          <span className="text-sm font-medium hidden sm:inline">Help</span>
+        </Link>
 
-      <button
-        onClick={handleDownloadPDF}
-        disabled={generating}
-        className="fixed bottom-8 right-8 flex items-center gap-2 px-5 py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-        title="Download as PDF"
-      >
-        {generating ? (
-          <>
-            <Loader2 size={18} className="animate-spin" />
-            <span className="text-sm font-medium">Generating...</span>
-          </>
-        ) : (
-          <>
-            <Download size={18} />
-            <span className="text-sm font-medium">Download</span>
-          </>
-        )}
-      </button>
+        <button
+          onClick={handleDownloadPDF}
+          disabled={generating}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
+          title="Download as PDF"
+        >
+          {generating ? (
+            <>
+              <Loader2 size={18} className="animate-spin" />
+              <span className="text-sm font-medium hidden sm:inline">Generating...</span>
+            </>
+          ) : (
+            <>
+              <Download size={18} />
+              <span className="text-sm font-medium hidden sm:inline">Download</span>
+            </>
+          )}
+        </button>
+      </div>
     </div>
   );
 };
