@@ -22,100 +22,174 @@ marked.use(
 
 type Section = {
   title: string;
-  desc: string;
+  desc: React.ReactNode;
   example: string;
 };
 
 const sections: Section[] = [
   {
-    title: "শিরোনাম (Headings)",
-    desc:
-      "লাইনের শুরুতে # চিহ্ন দিয়ে শিরোনাম বানান। যত বেশি # ব্যবহার করবেন, শিরোনাম তত ছোট হবে (h1 থেকে h6 পর্যন্ত)। প্রতিটি শিরোনাম PDF-এ স্বয়ংক্রিয়ভাবে কেন্দ্রে দেখাবে।",
-    example: `# প্রথম অধ্যায়\n## উপ-শিরোনাম\n### আরও ছোট শিরোনাম`,
+    title: "শিরোনাম",
+    desc: (
+      <>
+        লাইনের শুরুতে <code>#</code> বসিয়ে শিরোনাম লিখুন। যত বেশি{" "}
+        <code>#</code>, শিরোনাম তত ছোট। PDF-এ প্রতিটি শিরোনাম মাঝখানে বসবে।
+      </>
+    ),
+    example: `# অধ্যায় এক\n## একটি ছোট ভাগ\n### আরও ছোট ভাগ`,
   },
   {
-    title: "প্যারাগ্রাফ ও লাইন ভাঙা",
-    desc:
-      "নতুন প্যারাগ্রাফ শুরু করতে একটি ফাঁকা লাইন দিন। সাধারণ Enter চাপলে একই প্যারাগ্রাফের ভেতরে নতুন লাইন তৈরি হবে।",
-    example: `এটি প্রথম প্যারাগ্রাফ।\n\nএটি দ্বিতীয় প্যারাগ্রাফ — মাঝে একটি ফাঁকা লাইন আছে।`,
+    title: "নতুন প্যারাগ্রাফ",
+    desc: (
+      <>
+        নতুন প্যারাগ্রাফ চাইলে দুই লাইনের মাঝে একটা ফাঁকা লাইন রাখুন। শুধু
+        Enter চাপলে একই প্যারাগ্রাফের ভেতরেই লাইন ভাঙবে।
+      </>
+    ),
+    example: `প্রথম প্যারাগ্রাফ।\n\nদ্বিতীয় প্যারাগ্রাফ।`,
   },
   {
-    title: "মোটা (Bold), হেলানো (Italic) ও বাতিল লেখা",
-    desc:
-      "মোটা করতে দুটি তারকাচিহ্ন **এভাবে**, হেলানো করতে একটি *এভাবে*, এবং বাতিল লেখা দেখাতে দুটি টিল্ডা ~~এভাবে~~ ব্যবহার করুন।",
-    example: `এটি **মোটা লেখা**, এটি *হেলানো লেখা*, এবং এটি ~~বাতিল লেখা~~।`,
+    title: "মোটা, হেলানো ও কাটা লেখা",
+    desc: (
+      <>
+        মোটা — <code>**এভাবে**</code>, হেলানো — <code>*এভাবে*</code>, কাটা —{" "}
+        <code>~~এভাবে~~</code>। মাঝখানে কোনো স্পেস দেবেন না।
+      </>
+    ),
+    example: `এটি **মোটা**, এটি *হেলানো*, এটি ~~কাটা~~ লেখা।`,
   },
   {
-    title: "ইংরেজি বুলেট তালিকা",
-    desc: "প্রতিটি আইটেমের আগে - অথবা * চিহ্ন দিন। ভেতরে আরেকটি তালিকা চাইলে চার স্পেস (অথবা ট্যাব) দিয়ে ভেতরে ঢোকান।",
-    example: `- প্রথম পয়েন্ট\n- দ্বিতীয় পয়েন্ট\n    - ভেতরের পয়েন্ট\n    - আরেকটি ভেতরের পয়েন্ট\n- তৃতীয় পয়েন্ট`,
+    title: "বুলেট তালিকা",
+    desc: (
+      <>
+        প্রতিটি লাইনের শুরুতে <code>-</code> দিন। ভেতরে আরেকটা তালিকা চাইলে
+        চারটি স্পেস দিয়ে ভেতরে নিয়ে যান।
+      </>
+    ),
+    example: `- চা\n- কফি\n    - দুধ চা\n    - রং চা\n- পানি`,
   },
   {
-    title: "সংখ্যাযুক্ত তালিকা (১., ২., ৩.)",
-    desc:
-      "ইংরেজি 1., 2., 3. ছাড়াও বাংলা ১., ২., ৩. এবং আরবি ١., ٢., ٣. সংখ্যা ব্যবহার করতে পারেন। তালিকার প্রতিটি লাইন এভাবে লিখুন।",
-    example: `১. প্রথম কাজ\n২. দ্বিতীয় কাজ\n৩. তৃতীয় কাজ`,
+    title: "সংখ্যার তালিকা — বাংলা ও আরবিতেও",
+    desc: (
+      <>
+        শুধু <code>1.</code> না, <code>১.</code> বা <code>١.</code> দিয়েও
+        তালিকা বানানো যাবে। যেই সংখ্যায় শুরু করবেন, পুরো তালিকা সেই সংখ্যায়ই
+        চলবে।
+      </>
+    ),
+    example: `১. সকালে উঠা\n২. নাশতা করা\n৩. বের হওয়া`,
   },
   {
-    title: "উদ্ধৃতি (Blockquote)",
-    desc: "লাইনের শুরুতে > চিহ্ন বসান। একাধিক লাইনে চালিয়ে যেতে প্রতিটি লাইনের আগে > দিন।",
-    example: `> জ্ঞান এমন এক সম্পদ যা যত খরচ করা হয়, তত বাড়ে।\n> — অজানা`,
+    title: "উদ্ধৃতি",
+    desc: (
+      <>
+        লাইনের শুরুতে <code>&gt;</code> বসান। একাধিক লাইনের উদ্ধৃতি দিতে চাইলে
+        প্রতিটি লাইনের শুরুতেই <code>&gt;</code> লাগাবেন।
+      </>
+    ),
+    example: `> পড়ো, তোমার প্রভুর নামে যিনি সৃষ্টি করেছেন।`,
   },
   {
-    title: "লিঙ্ক (Link)",
-    desc:
-      "[দেখানো লেখা](সম্পূর্ণ ঠিকানা) এই গঠনে লিঙ্ক বানান। PDF-এ লিঙ্কগুলো ক্লিকযোগ্য থাকবে।",
-    example: `আমার পোর্টফোলিও দেখুন: [abdullah.ami.bd](https://abdullah.ami.bd)।`,
+    title: "লিঙ্ক",
+    desc: (
+      <>
+        গঠনটা সহজ — <code>[যা দেখাবে](ঠিকানা)</code>। PDF-এও এই লিঙ্কগুলো
+        ক্লিক করা যাবে।
+      </>
+    ),
+    example: `আমার সাইট: [abdullah.ami.bd](https://abdullah.ami.bd)`,
   },
   {
-    title: "ছবি (Image)",
-    desc:
-      "![বিকল্প লেখা](ছবির লিংক) এই গঠনে ছবি যোগ করুন। অনলাইন থেকে যেকোনো ছবির সরাসরি লিংক ব্যবহার করতে পারেন।",
-    example: `![একটি নমুনা ছবি](https://picsum.photos/400/200)`,
+    title: "ছবি",
+    desc: (
+      <>
+        লিঙ্কের মতোই, শুধু আগে একটা <code>!</code> বসান:{" "}
+        <code>![বিকল্প লেখা](ছবির ঠিকানা)</code>।
+      </>
+    ),
+    example: `![নমুনা ছবি](https://picsum.photos/400/200)`,
   },
   {
-    title: "টেবিল (Table)",
-    desc:
-      "প্রতিটি কলামকে | চিহ্ন দিয়ে আলাদা করুন। প্রথম লাইনে শিরোনাম, দ্বিতীয় লাইনে ড্যাশ (---) দিয়ে আলাদা করতে হবে।",
-    example: `| বিষয় | মান |\n|------|------|\n| ভাষা | বাংলা |\n| প্রকাশ | ২০২৬ |\n| পৃষ্ঠা | ২৫০ |`,
+    title: "টেবিল",
+    desc: (
+      <>
+        কলামগুলো <code>|</code> দিয়ে আলাদা করুন। প্রথম লাইনে শিরোনাম, পরের
+        লাইনে <code>---</code> দিয়ে আলাদা করতে হবে।
+      </>
+    ),
+    example: `| নাম | বয়স |\n|------|------|\n| রহিম | ২২ |\n| করিম | ২৫ |`,
   },
   {
-    title: "কোড (Inline ও Block)",
-    desc:
-      "ছোট কোডের জন্য একটি ব্যাকটিক \\` দিয়ে ঘিরে দিন। বড় কোড ব্লকের জন্য তিনটি ব্যাকটিক ``` ব্যবহার করুন এবং প্রথম লাইনে ভাষার নাম দিলে রঙিন syntax highlighting হবে।",
-    example: `\`console.log()\` একটি ফাংশন।\n\n\`\`\`js\nfunction hello(name) {\n  return "Hello, " + name;\n}\n\`\`\``,
+    title: "কোড",
+    desc: (
+      <>
+        একটামাত্র শব্দ কোড করতে চাইলে দুপাশে একটা করে ব্যাকটিক দিন। বড় কোড
+        ব্লকের জন্য তিনটা ব্যাকটিক দিয়ে শুরু-শেষ করুন; প্রথম লাইনে ভাষার নাম
+        লিখলে রং দিয়ে highlight হবে।
+      </>
+    ),
+    example: "`print()` একটি ফাংশন।\n\n```python\nprint(\"হ্যালো\")\n```",
   },
   {
-    title: "অনুভূমিক রেখা (Horizontal Rule)",
-    desc: "তিনটি ড্যাশ --- আলাদা একটি লাইনে লিখলে পৃষ্ঠাজুড়ে একটি লম্বা রেখা আসবে — অধ্যায়ের ভাগ করতে দারুণ কাজে দেয়।",
-    example: `প্রথম অংশ শেষ।\n\n---\n\nদ্বিতীয় অংশ শুরু।`,
+    title: "লম্বা রেখা",
+    desc: (
+      <>
+        একটা আলাদা লাইনে শুধু <code>---</code> লিখুন — পাতা জুড়ে একটা পাতলা
+        রেখা বসবে। অধ্যায় ভাগ করার জন্য বেশ কাজের।
+      </>
+    ),
+    example: `আগের অংশ শেষ।\n\n---\n\nনতুন অংশ শুরু।`,
   },
   {
-    title: "আরবি লাইনের জন্য বিশেষ ব্যবস্থা",
-    desc:
-      "যদি কোনো লাইন শুরু থেকে শেষ পর্যন্ত পুরোপুরি আরবি হয়, তবে সেটি স্বয়ংক্রিয়ভাবে ডান দিকে align হবে (RTL)। আপনাকে আলাদা কিছু করতে হবে না।",
-    example: `بسم الله الرحمن الرحيم\n\nالحمد لله رب العالمين`,
+    title: "পুরোপুরি আরবি লাইন",
+    desc: (
+      <>
+        কোনো লাইন যদি শুরু থেকে শেষ পর্যন্ত পুরোপুরি আরবি হয়, সেটা নিজে থেকেই
+        ডান দিক ঘেঁষে বসবে। আপনাকে আলাদা কিছু করতে হবে না।
+      </>
+    ),
+    example: `بسم الله الرحمن الرحيم`,
   },
   {
-    title: "পৃষ্ঠা নম্বর",
-    desc:
-      "প্রচ্ছদের পরের পাতা থেকে স্বয়ংক্রিয়ভাবে পৃষ্ঠা নম্বর বসে যাবে। শিরোনামের প্রথম অক্ষর বাংলা হলে ১, ২, ৩…; ইংরেজি হলে 1, 2, 3…; এবং আরবি হলে ١, ٢, ٣… ব্যবহার হবে।",
-    example: `# আমার বই\n(শিরোনাম বাংলায় → পৃষ্ঠা নম্বরও বাংলায় বসবে)`,
+    title: "পৃষ্ঠা নম্বর সম্পর্কে",
+    desc: (
+      <>
+        প্রচ্ছদের পরের পাতা থেকে নম্বর শুরু হবে। বিজোড় পাতা (১, ৩, ৫…) উপরে
+        ডানে, জোড় পাতা (২, ৪, ৬…) উপরে বাঁয়ে — আসল বইয়ের মতো। শিরোনামের প্রথম
+        অক্ষর কোন ভাষার, সেটা দেখে নম্বরও সেই ভাষার সংখ্যায় বসবে।
+      </>
+    ),
+    example: `# আমার বই\n(শিরোনাম বাংলা → পৃষ্ঠা নম্বরও বাংলায়)`,
   },
 ];
 
-const TRY_DEFAULT = `# আমার প্রথম বই\n\nএটি একটি **নমুনা প্যারাগ্রাফ**। এখানে *হেলানো লেখাও* আছে।\n\n## কাজের তালিকা\n\n১. বই শুরু করা\n২. লেখা চালিয়ে যাওয়া\n৩. PDF বানানো\n\n> পড়াশোনার কোনো বিকল্প নেই।\n\n| ভাষা | লিপি |\n|------|------|\n| বাংলা | ব্রাহ্মী |\n| আরবি | আরবি |\n\n\`\`\`js\nconsole.log("Hello, World!");\n\`\`\`\n\nএকটি লিঙ্ক: [abdullah.ami.bd](https://abdullah.ami.bd)\n`;
+const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
+  const [text, setText] = useState(initial);
+  const html = useMemo(
+    () => marked.parse(text, { async: false, gfm: true, breaks: true }) as string,
+    [text]
+  );
+  return (
+    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-0 border border-slate-200 rounded-xl overflow-hidden">
+      <textarea
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        spellCheck={false}
+        dir="auto"
+        className="w-full min-h-[140px] p-3 font-mono text-[13px] leading-relaxed bg-slate-50 focus:outline-none resize-y"
+      />
+      <div
+        className="font-mixed pdf-preview p-3 min-h-[140px] text-base overflow-auto bg-white border-t md:border-t-0 md:border-l border-slate-100"
+        dir="auto"
+        dangerouslySetInnerHTML={{ __html: html }}
+      />
+    </div>
+  );
+};
 
 const BookHelp = () => {
-  const [tryText, setTryText] = useState(TRY_DEFAULT);
-  const previewHtml = useMemo(
-    () => marked.parse(tryText, { async: false, gfm: true, breaks: true }) as string,
-    [tryText]
-  );
-
   return (
-    <div className="min-h-screen bg-white px-6 pt-10 md:px-20 md:pt-16 lg:px-32 pb-24">
-      <div className="w-full max-w-4xl mx-auto">
+    <div className="min-h-screen bg-white px-5 pt-8 md:px-16 md:pt-14 lg:px-28 pb-24">
+      <div className="w-full max-w-3xl mx-auto">
         <Link
           to="/book"
           className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 mb-8"
@@ -123,54 +197,29 @@ const BookHelp = () => {
           <ArrowLeft size={16} /> বইয়ের পাতায় ফিরে যান
         </Link>
 
-        <header className="mb-12 font-mixed">
-          <h1 className="text-4xl md:text-5xl font-semibold tracking-tight text-slate-900 leading-tight">
-            Markdown গাইড — বাংলায়
+        <header className="mb-10 font-mixed">
+          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 leading-tight">
+            লেখার গাইড
           </h1>
-          <p className="mt-4 text-lg text-slate-600 leading-relaxed">
-            <span className="font-medium">/book</span> পৃষ্ঠায় আপনি কীভাবে আপনার বইয়ের
-            লেখাকে সাজাবেন — শিরোনাম, তালিকা, টেবিল, ছবি, কোড, লিঙ্ক — সবকিছুর
-            সম্পূর্ণ নির্দেশিকা। প্রতিটি উদাহরণ সরাসরি কপি করে চেষ্টা করতে পারবেন।
+          <p className="mt-3 text-base md:text-lg text-slate-600 leading-relaxed">
+            বইয়ের পাতায় কীভাবে শিরোনাম, তালিকা, টেবিল, ছবি — এসব সাজাবেন,
+            সেটাই এখানে ছোট ছোট ভাগে বলা আছে। প্রতিটার নিচে একটা ছোট
+            এডিটরও আছে — সেখানে নিজে হাত দিয়ে দেখে নিতে পারবেন কেমন দেখায়।
           </p>
         </header>
 
         <section className="space-y-10 font-mixed">
           {sections.map((s, i) => (
             <article key={i} className="border-b border-slate-100 pb-8">
-              <h2 className="text-2xl font-semibold text-slate-900 mb-2">
+              <h2 className="text-xl md:text-2xl font-semibold text-slate-900 mb-2">
                 {i + 1}. {s.title}
               </h2>
-              <p className="text-base text-slate-700 leading-relaxed mb-4 whitespace-pre-wrap">
+              <p className="text-base text-slate-700 leading-relaxed">
                 {s.desc}
               </p>
-              <pre className="bg-slate-900 text-slate-100 rounded-xl p-4 overflow-x-auto text-sm leading-relaxed font-mono whitespace-pre-wrap">
-                {s.example}
-              </pre>
+              <MiniTry initial={s.example} />
             </article>
           ))}
-        </section>
-
-        <section className="mt-16 font-mixed">
-          <h2 className="text-3xl font-semibold text-slate-900 mb-3">
-            লাইভ এডিটর — এখানে চেষ্টা করুন
-          </h2>
-          <p className="text-base text-slate-600 mb-6">
-            বাঁ পাশে লিখুন, ডান পাশে সরাসরি ফলাফল দেখুন।
-          </p>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 border border-slate-200 rounded-2xl overflow-hidden">
-            <textarea
-              value={tryText}
-              onChange={(e) => setTryText(e.target.value)}
-              className="w-full min-h-[420px] p-5 font-mono text-sm leading-relaxed bg-slate-50 focus:outline-none resize-y"
-              dir="auto"
-              spellCheck={false}
-            />
-            <div
-              className="font-mixed pdf-preview p-5 min-h-[420px] overflow-auto bg-white border-l border-slate-100"
-              dir="auto"
-              dangerouslySetInnerHTML={{ __html: previewHtml }}
-            />
-          </div>
         </section>
       </div>
     </div>
