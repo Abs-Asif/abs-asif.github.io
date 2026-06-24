@@ -1,5 +1,4 @@
-import React, { useMemo, useRef, useState } from "react";
-import { Link } from "react-router-dom";
+import React, { useMemo, useState } from "react";
 import { Download, Loader2, Eye, Pencil, HelpCircle } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
