@@ -419,3 +419,45 @@
 .pdf-preview .hljs-class .hljs-title { color: #e5c07b; }
 .pdf-preview .hljs-meta,
 .pdf-preview .hljs-symbol { color: #56b6c2; }
+
+/* ---- Footnotes (preview) ---- */
+.pdf-preview .fn-ref {
+  font-size: 0.7em;
+  vertical-align: super;
+  line-height: 0;
+  color: #1d4ed8;
+  margin: 0 0.05em;
+  text-decoration: none;
+}
+.pdf-preview .fn-list {
+  margin-top: 2.5em;
+  padding-top: 0.9em;
+  position: relative;
+  font-size: 0.85em;
+  color: #334155;
+}
+.pdf-preview .fn-list::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 45%;
+  height: 1px;
+  background: #cbd5e1;
+}
+.pdf-preview .fn-item {
+  display: flex;
+  gap: 0.55em;
+  align-items: flex-start;
+  margin: 0.45em 0;
+  line-height: 1.55;
+}
+.pdf-preview .fn-item .fn-num {
+  font-weight: 600;
+  min-width: 1.6em;
+  text-align: right;
+  color: #1d4ed8;
+}
+.pdf-preview .fn-item .fn-body { flex: 1; }
+.pdf-preview .fn-item .fn-body > p:first-child { margin-top: 0; }
+.pdf-preview .fn-item .fn-body > p:last-child { margin-bottom: 0; }

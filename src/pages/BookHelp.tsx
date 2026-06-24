@@ -20,6 +20,79 @@ marked.use(
   })
 );
 
+/* Small footnote renderer (mirrors /book preview behavior). */
+function renderWithFootnotes(md: string): string {
+  const defs = new Map<string, string>();
+  const stripped = (md || "").replace(
+    /\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g,
+    (_m, id, body) => {
+      defs.set(String(id).trim(), String(body).trim());
+      return "";
+    }
+  );
+  const order: string[] = [];
+  const seen = new Set<string>();
+  stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (_m, id) => {
+    const t = String(id).trim();
+    if (defs.has(t) && !seen.has(t)) {
+      seen.add(t);
+      order.push(t);
+    }
+    return _m;
+  });
+  const bnDigits = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
+  const arDigits = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
+  const firstCh = (md || "").trim().codePointAt(0) ?? 0;
+  const script: "bn" | "ar" | "en" =
+    firstCh >= 0x0980 && firstCh <= 0x09ff
+      ? "bn"
+      : (firstCh >= 0x0600 && firstCh <= 0x06ff) ||
+        (firstCh >= 0xfb50 && firstCh <= 0xfdff)
+      ? "ar"
+      : "en";
+  const toNum = (n: number) =>
+    String(n)
+      .split("")
+      .map((d) =>
+        /\d/.test(d)
+          ? script === "bn"
+            ? bnDigits[+d]
+            : script === "ar"
+            ? arDigits[+d]
+            : d
+          : d
+      )
+      .join("");
+  const withMarkers = stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (raw, id) => {
+    const t = String(id).trim();
+    if (!defs.has(t)) return raw;
+    const n = parseInt(t, 10);
+    const label = !isNaN(n) ? toNum(n) : t;
+    return `<sup class="fn-ref">${label}</sup>`;
+  });
+  let html = marked.parse(withMarkers, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  if (order.length > 0) {
+    const items = order
+      .map((id) => {
+        const n = parseInt(id, 10);
+        const label = !isNaN(n) ? toNum(n) : id;
+        const body = marked.parse(defs.get(id) || "", {
+          async: false,
+          gfm: true,
+          breaks: true,
+        }) as string;
+        return `<div class="fn-item"><span class="fn-num">${label}.</span><div class="fn-body">${body}</div></div>`;
+      })
+      .join("");
+    html += `<div class="fn-list">${items}</div>`;
+  }
+  return html;
+}
+
 type Section = {
   title: string;
   desc: React.ReactNode;
@@ -160,12 +233,26 @@ const sections: Section[] = [
     ),
     example: `# আমার বই\n(শিরোনাম বাংলা → পৃষ্ঠা নম্বরও বাংলায়)`,
   },
+  {
+    title: "ফুটনোট",
+    desc: (
+      <>
+        মূল লেখায় যেখানে নম্বর বসাতে চান, সেখানে <code>[[1]]</code> লিখুন —
+        এটা ছোট করে উপরে <sup>১</sup> হয়ে বসবে। আর সেই নম্বরের ব্যাখ্যা
+        লিখতে যেকোনো জায়গায় <code>[[1==এখানে ব্যাখ্যা]]</code> দিন। প্রিভিউ ও
+        PDF-এ ব্যাখ্যাটা পাতার নিচে, একটা ছোট রেখার পরে আলাদা করে দেখানো হবে।
+        PDF-এ যেই পাতায় নম্বর আছে, ঠিক সেই পাতার নিচেই ফুটনোটটা বসবে।
+        ফুটনোটের ভেতরেও সাধারণ markdown (মোটা, হেলানো, লিঙ্ক) কাজ করবে।
+      </>
+    ),
+    example: `ইমাম শাফেয়ী রাহিমাহুল্লাহ একজন বড় ফকীহ ছিলেন। [[1]] তাঁর বই *আল-উম্ম* আজও পড়া হয়। [[2]]\n\n[[1==জন্ম ১৫০ হিজরী, মৃত্যু ২০৪ হিজরী।]]\n[[2==মূল আরবি গ্রন্থ, একাধিক খণ্ডে।]]`,
+  },
 ];
 
 const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
   const [text, setText] = useState(initial);
   const html = useMemo(
-    () => marked.parse(text, { async: false, gfm: true, breaks: true }) as string,
+    () => renderWithFootnotes(text),
     [text]
   );
   return (
