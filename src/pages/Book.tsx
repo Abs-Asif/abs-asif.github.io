@@ -912,14 +912,16 @@ const Book = () => {
           </span>
         </button>
 
-        <Link
-          to="/book/help"
+        <a
+          href="/book/help"
+          target="_blank"
+          rel="noopener noreferrer"
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-          title="Markdown guide (in Bangla)"
+          title="Markdown guide (in Bangla) — opens in a new tab"
         >
           <HelpCircle size={18} />
           <span className="text-sm font-medium hidden sm:inline">Help</span>
-        </Link>
+        </a>
 
         <button
           onClick={handleDownloadPDF}
