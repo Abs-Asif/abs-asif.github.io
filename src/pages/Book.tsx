@@ -546,7 +546,7 @@ const Book = () => {
         compress: true,
       });
 
-      const renderScale = 2; // sharp enough for A5, ~2x faster than 3
+      const renderScale = 3; // higher quality / sharper PDF
 
       type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
@@ -634,14 +634,13 @@ const Book = () => {
 
       // --- Body: always start on a new page ---
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
-      const numeralScript = detectScript(safeTitle);
       let bodyPageNum = 0;
 
       // Pre-render page-number glyphs to canvas tiles once per number so the
       // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
       // fonts can't render Bangla / Arabic.
       const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
-      const PAGE_NUM_PT = 11; // visible final size in PDF
+      const PAGE_NUM_PT = 10; // visible final size in PDF
       const renderNumberTile = async (n: number) => {
         const cached = numberCache.get(n);
         if (cached) return cached;
@@ -650,13 +649,13 @@ const Book = () => {
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "2px 4px";
+        numDiv.style.padding = "0";
         numDiv.style.margin = "0";
         numDiv.style.display = "inline-block";
         numDiv.style.background = "#ffffff";
         numDiv.style.color = "#475569";
         numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`; // render large, downscale for crispness
-        numDiv.style.lineHeight = "1";
+        numDiv.style.lineHeight = "1.35"; // room for descenders (e.g. Bangla ৭, ৯)
         numDiv.style.whiteSpace = "nowrap";
         numDiv.style.fontFamily =
           "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
@@ -668,12 +667,10 @@ const Book = () => {
             backgroundColor: "#ffffff",
             logging: false,
           });
-          // Canvas was rendered at PAGE_NUM_PT*3 with 2× scale. Downscale to PAGE_NUM_PT in mm.
-          const targetHmm = (PAGE_NUM_PT * 25.4) / 72;
-          const canvasHmm = (c.height / 2) * (25.4 / 96);
-          const ratio = targetHmm / canvasHmm;
-          const wMM = (c.width / 2) * (25.4 / 96) * ratio;
-          const hMM = targetHmm;
+          // Canvas was rendered at 3× the final pt size and 2× device scale.
+          // Convert back to mm by downscaling by 3 — preserves aspect, keeps full glyph (including descenders).
+          const wMM = (c.width / 2) * (25.4 / 96) / 3;
+          const hMM = (c.height / 2) * (25.4 / 96) / 3;
           const tile = { dataUrl: c.toDataURL("image/png"), wMM, hMM };
           numberCache.set(n, tile);
           return tile;
@@ -685,12 +682,89 @@ const Book = () => {
         bodyPageNum += 1;
         const tile = await renderNumberTile(bodyPageNum);
         // Real-book layout: odd pages on the right, even pages on the left.
-        // Place inside the top margin band (above content area) so nothing overlaps.
-        const y = 7; // mm from top edge — well above MARGIN (14mm) where content starts
+        // Place inside the top margin band, leaving room for the full glyph height.
+        const y = Math.max(4, MARGIN - tile.hMM - 1.5);
         const edgePad = 8; // mm from outer page edge
         const isOdd = bodyPageNum % 2 === 1;
         const x = isOdd ? PAGE_W - edgePad - tile.wMM : edgePad;
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
+      };
+
+      // ----- Pre-render footnote tiles for every referenced id -----
+      type FnTile = { id: string; cap: CaptureResult };
+      const fnTiles = new Map<string, FnTile>();
+      const allRefIds: string[] = (() => {
+        const seen = new Set<string>();
+        const order: string[] = [];
+        bodyWrap.querySelectorAll(".fn-ref").forEach((r) => {
+          const id = r.getAttribute("data-fn-id");
+          if (id && footnoteDefs.has(id) && !seen.has(id)) {
+            seen.add(id);
+            order.push(id);
+          }
+        });
+        return order;
+      })();
+
+      if (allRefIds.length > 0) {
+        const fnWrap = document.createElement("div");
+        fnWrap.setAttribute("data-pdf-body", "");
+        fnWrap.style.fontSize = "8.5pt";
+        fnWrap.style.lineHeight = "1.5";
+        container.appendChild(fnWrap);
+        for (const id of allRefIds) {
+          const n = parseInt(id, 10);
+          const label = !isNaN(n) ? toNumerals(n, numeralScript) : id;
+          const bodyHtml = renderFootnoteBodyHtml(footnoteDefs.get(id) || "");
+          const item = document.createElement("div");
+          item.className = "fn-item";
+          item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
+          fnWrap.appendChild(item);
+          const cap = await captureElement(item);
+          fnTiles.set(id, { id, cap });
+        }
+        fnWrap.remove();
+      }
+
+      // ----- Per-page footnote tracking -----
+      const DIV_GAP_TOP = 2.5; // mm above divider
+      const DIV_GAP_BOT = 1.8; // mm below divider
+      const FN_ITEM_GAP = 0.8; // mm between footnotes
+      let pageFnIds: string[] = [];
+      const pageFnHeight = () => {
+        if (pageFnIds.length === 0) return 0;
+        let h = DIV_GAP_TOP + DIV_GAP_BOT;
+        pageFnIds.forEach((id, i) => {
+          h += fnTiles.get(id)!.cap.heightMM;
+          if (i < pageFnIds.length - 1) h += FN_ITEM_GAP;
+        });
+        return h;
+      };
+      const flushFootnotes = () => {
+        if (pageFnIds.length === 0) return;
+        const total = pageFnHeight();
+        const startY = PAGE_H - MARGIN - total;
+        const dividerY = startY + DIV_GAP_TOP;
+        pdf.setDrawColor(170, 170, 170);
+        pdf.setLineWidth(0.25);
+        pdf.line(MARGIN, dividerY, MARGIN + CONTENT_W * 0.45, dividerY);
+        let y = dividerY + DIV_GAP_BOT;
+        for (const id of pageFnIds) {
+          const t = fnTiles.get(id)!.cap;
+          pdf.addImage(t.dataUrl, "JPEG", MARGIN, y, CONTENT_W, t.heightMM);
+          addLinkAnnotations(t, MARGIN, y, CONTENT_W, t.heightMM);
+          y += t.heightMM + FN_ITEM_GAP;
+        }
+        pageFnIds = [];
+      };
+
+      const idsInChild = (child: HTMLElement): string[] => {
+        const out: string[] = [];
+        child.querySelectorAll(".fn-ref").forEach((r) => {
+          const id = r.getAttribute("data-fn-id");
+          if (id && fnTiles.has(id) && !out.includes(id)) out.push(id);
+        });
+        return out;
       };
 
       if (bodyChildren.length > 0) {
@@ -699,40 +773,57 @@ const Book = () => {
         let currentY = MARGIN;
 
         for (const child of bodyChildren) {
-          // Skip empty paragraphs that have no text and no images
           const isEmpty =
             !child.textContent?.trim() &&
             child.querySelectorAll("img").length === 0;
           if (isEmpty) {
-            currentY += 4; // small blank-line spacing
+            currentY += 4;
             continue;
           }
 
           const section = await captureElement(child);
-          let { dataUrl, heightMM } = section;
-
-          // If a single section is taller than a full page, scale it down proportionally
-          // to fit on one page (prevents arbitrary clipping of long blocks).
           let drawW = CONTENT_W;
-          let drawH = heightMM;
+          let drawH = section.heightMM;
           if (drawH > CONTENT_H) {
             const ratio = CONTENT_H / drawH;
             drawH = CONTENT_H;
             drawW = CONTENT_W * ratio;
           }
 
-          const remaining = PAGE_H - MARGIN - currentY;
-          if (drawH > remaining && currentY > MARGIN) {
+          // Footnote ids introduced by this section (not already on the page).
+          const childIds = idsInChild(child);
+          const newIds = childIds.filter((id) => !pageFnIds.includes(id));
+
+          // Compute reserved bottom space if we accept this section + its new footnotes.
+          const tentativeIds = [...pageFnIds, ...newIds];
+          let tentativeReserved = 0;
+          if (tentativeIds.length > 0) {
+            tentativeReserved = DIV_GAP_TOP + DIV_GAP_BOT;
+            tentativeIds.forEach((id, i) => {
+              tentativeReserved += fnTiles.get(id)!.cap.heightMM;
+              if (i < tentativeIds.length - 1) tentativeReserved += FN_ITEM_GAP;
+            });
+          }
+          const availableBottom = PAGE_H - MARGIN - tentativeReserved;
+
+          if (currentY + drawH > availableBottom && currentY > MARGIN) {
+            // Doesn't fit: flush current page footnotes, start a new page.
+            flushFootnotes();
             pdf.addPage();
             await stampPageNumber();
             currentY = MARGIN;
           }
 
           const xOffset = MARGIN + (CONTENT_W - drawW) / 2;
-          pdf.addImage(dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
+          pdf.addImage(section.dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
           addLinkAnnotations(section, xOffset, currentY, drawW, drawH);
           currentY += drawH + SECTION_GAP;
+
+          // Commit new footnotes to this page.
+          for (const id of newIds) pageFnIds.push(id);
         }
+        // Final flush for the last page.
+        flushFootnotes();
       }
 
       const filename =
