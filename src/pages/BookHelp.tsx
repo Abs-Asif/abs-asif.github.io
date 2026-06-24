@@ -20,6 +20,79 @@ marked.use(
   })
 );
 
+/* Small footnote renderer (mirrors /book preview behavior). */
+function renderWithFootnotes(md: string): string {
+  const defs = new Map<string, string>();
+  const stripped = (md || "").replace(
+    /\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g,
+    (_m, id, body) => {
+      defs.set(String(id).trim(), String(body).trim());
+      return "";
+    }
+  );
+  const order: string[] = [];
+  const seen = new Set<string>();
+  stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (_m, id) => {
+    const t = String(id).trim();
+    if (defs.has(t) && !seen.has(t)) {
+      seen.add(t);
+      order.push(t);
+    }
+    return _m;
+  });
+  const bnDigits = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
+  const arDigits = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
+  const firstCh = (md || "").trim().codePointAt(0) ?? 0;
+  const script: "bn" | "ar" | "en" =
+    firstCh >= 0x0980 && firstCh <= 0x09ff
+      ? "bn"
+      : (firstCh >= 0x0600 && firstCh <= 0x06ff) ||
+        (firstCh >= 0xfb50 && firstCh <= 0xfdff)
+      ? "ar"
+      : "en";
+  const toNum = (n: number) =>
+    String(n)
+      .split("")
+      .map((d) =>
+        /\d/.test(d)
+          ? script === "bn"
+            ? bnDigits[+d]
+            : script === "ar"
+            ? arDigits[+d]
+            : d
+          : d
+      )
+      .join("");
+  const withMarkers = stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (raw, id) => {
+    const t = String(id).trim();
+    if (!defs.has(t)) return raw;
+    const n = parseInt(t, 10);
+    const label = !isNaN(n) ? toNum(n) : t;
+    return `<sup class="fn-ref">${label}</sup>`;
+  });
+  let html = marked.parse(withMarkers, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  if (order.length > 0) {
+    const items = order
+      .map((id) => {
+        const n = parseInt(id, 10);
+        const label = !isNaN(n) ? toNum(n) : id;
+        const body = marked.parse(defs.get(id) || "", {
+          async: false,
+          gfm: true,
+          breaks: true,
+        }) as string;
+        return `<div class="fn-item"><span class="fn-num">${label}.</span><div class="fn-body">${body}</div></div>`;
+      })
+      .join("");
+    html += `<div class="fn-list">${items}</div>`;
+  }
+  return html;
+}
+
 type Section = {
   title: string;
   desc: React.ReactNode;
@@ -179,7 +252,7 @@ const sections: Section[] = [
 const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
   const [text, setText] = useState(initial);
   const html = useMemo(
-    () => marked.parse(text, { async: false, gfm: true, breaks: true }) as string,
+    () => renderWithFootnotes(text),
     [text]
   );
   return (
