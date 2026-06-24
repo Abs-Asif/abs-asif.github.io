@@ -246,14 +246,21 @@ const Book = () => {
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
 
-  const previewHtml = useMemo(() => renderMarkdown(content), [content]);
+  const previewHtml = useMemo(
+    () => renderForPreview(content, detectScript(title || content)),
+    [content, title]
+  );
 
   const handleDownloadPDF = async () => {
     setGenerating(true);
 
-    const bodyHtml = renderMarkdown(content);
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
+    const numeralScript = detectScript(safeTitle || content);
+    const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(
+      content,
+      numeralScript
+    );
 
     // A5 page dimensions (mm)
     const PAGE_W = 148;
@@ -432,6 +439,28 @@ const Book = () => {
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
       [data-pdf-body] ul[data-type="taskList"] li > label { margin-top: 0.1em; }
       [data-pdf-body] ul[data-type="taskList"] li::before { content: none; }
+      [data-pdf-body] .fn-ref {
+        font-size: 0.7em;
+        vertical-align: super;
+        line-height: 0;
+        color: #1d4ed8;
+        margin: 0 0.05em;
+      }
+      [data-pdf-body] .fn-item {
+        display: flex;
+        gap: 0.55em;
+        align-items: flex-start;
+        margin: 0 0 1.2mm 0;
+        line-height: 1.5;
+      }
+      [data-pdf-body] .fn-item .fn-num {
+        font-weight: 600;
+        min-width: 1.6em;
+        text-align: right;
+        color: #1d4ed8;
+      }
+      [data-pdf-body] .fn-item .fn-body { flex: 1; }
+      [data-pdf-body] .fn-item .fn-body > p { margin: 0; }
     `;
     container.appendChild(styleEl);
 
