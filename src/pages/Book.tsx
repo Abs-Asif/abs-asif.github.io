@@ -135,6 +135,110 @@ function renderMarkdown(md: string): string {
   return applyArabicAlignment(html);
 }
 
+/* ---------- Footnotes ---------- */
+// Definition: [[id==footnote body]]   Marker: [[id]]
+function extractFootnoteDefs(md: string): {
+  md: string;
+  defs: Map<string, string>;
+} {
+  const defs = new Map<string, string>();
+  const stripped = (md || "").replace(
+    /\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g,
+    (_m, id, body) => {
+      defs.set(String(id).trim(), String(body).trim());
+      return "";
+    }
+  );
+  return { md: stripped, defs };
+}
+
+function escapeAttr(s: string) {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
+function injectFootnoteMarkers(
+  md: string,
+  script: NumeralScript,
+  validIds: Set<string>
+): string {
+  return md.replace(/\[\[([^\]\s=]+)\]\]/g, (raw, id) => {
+    const t = String(id).trim();
+    if (!validIds.has(t)) return raw;
+    const n = parseInt(t, 10);
+    const label = !isNaN(n) ? toNumerals(n, script) : t;
+    return `<sup class="fn-ref" data-fn-id="${escapeAttr(t)}">${label}</sup>`;
+  });
+}
+
+function collectFootnoteOrder(
+  md: string,
+  defs: Map<string, string>
+): string[] {
+  const order: string[] = [];
+  const seen = new Set<string>();
+  md.replace(/\[\[([^\]\s=]+)\]\]/g, (_m, id) => {
+    const t = String(id).trim();
+    if (defs.has(t) && !seen.has(t)) {
+      seen.add(t);
+      order.push(t);
+    }
+    return _m;
+  });
+  return order;
+}
+
+function renderFootnoteBodyHtml(text: string): string {
+  // Footnote body supports markdown but cannot itself contain footnote markers.
+  return marked.parse(text || "", {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+}
+
+function renderForPreview(md: string, script: NumeralScript): string {
+  const { md: stripped, defs } = extractFootnoteDefs(md);
+  const order = collectFootnoteOrder(stripped, defs);
+  const validIds = new Set(defs.keys());
+  const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
+  const pre = preprocessNumeralLists(withMarkers);
+  let html = marked.parse(pre, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  html = applyArabicAlignment(html);
+  if (order.length > 0) {
+    const items = order
+      .map((id) => {
+        const n = parseInt(id, 10);
+        const label = !isNaN(n) ? toNumerals(n, script) : id;
+        const body = renderFootnoteBodyHtml(defs.get(id) || "");
+        return `<div class="fn-item"><span class="fn-num">${label}.</span><div class="fn-body">${body}</div></div>`;
+      })
+      .join("");
+    html += `<div class="fn-list">${items}</div>`;
+  }
+  return html;
+}
+
+function renderForPdfBody(
+  md: string,
+  script: NumeralScript
+): { html: string; defs: Map<string, string> } {
+  const { md: stripped, defs } = extractFootnoteDefs(md);
+  const validIds = new Set(defs.keys());
+  const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
+  const pre = preprocessNumeralLists(withMarkers);
+  let html = marked.parse(pre, {
+    async: false,
+    gfm: true,
+    breaks: true,
+  }) as string;
+  html = applyArabicAlignment(html);
+  return { html, defs };
+}
+
 const Book = () => {
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
