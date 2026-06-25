@@ -815,6 +815,10 @@ const Book = () => {
         return out;
       };
 
+      type Chapter = { level: number; text: string; page: number };
+      const chapters: Chapter[] = [];
+      const coverPages = 1; // we'll insert index pages later before body
+
       if (bodyChildren.length > 0) {
         pdf.addPage();
         await stampPageNumber();
@@ -830,48 +834,234 @@ const Book = () => {
           }
 
           const section = await captureElement(child);
-          let drawW = CONTENT_W;
-          let drawH = section.heightMM;
-          if (drawH > CONTENT_H) {
-            const ratio = CONTENT_H / drawH;
-            drawH = CONTENT_H;
-            drawW = CONTENT_W * ratio;
+          const mmPerPx = CONTENT_W / section.elWidthPx;
+
+          // Record headings (H1/H2/H3) → chapter index entries.
+          const tag = (child.tagName || "").toUpperCase();
+          if (tag === "H1" || tag === "H2" || tag === "H3") {
+            // Page number where this heading STARTS — recorded after we
+            // decide whether to break to a new page below.
+            // We'll record after currentY adjustment.
           }
 
-          // Footnote ids introduced by this section (not already on the page).
+          // Footnotes referenced by this section (those not yet on the page).
           const childIds = idsInChild(child);
-          const newIds = childIds.filter((id) => !pageFnIds.includes(id));
 
-          // Compute reserved bottom space if we accept this section + its new footnotes.
-          const tentativeIds = [...pageFnIds, ...newIds];
-          let tentativeReserved = 0;
-          if (tentativeIds.length > 0) {
-            tentativeReserved = DIV_GAP_TOP + DIV_GAP_BOT;
-            tentativeIds.forEach((id, i) => {
-              tentativeReserved += fnTiles.get(id)!.cap.heightMM;
-              if (i < tentativeIds.length - 1) tentativeReserved += FN_ITEM_GAP;
+          const reservedFor = (ids: string[]): number => {
+            if (ids.length === 0) return 0;
+            let h = DIV_GAP_TOP + DIV_GAP_BOT;
+            ids.forEach((id, i) => {
+              h += fnTiles.get(id)!.cap.heightMM;
+              if (i < ids.length - 1) h += FN_ITEM_GAP;
             });
-          }
-          const availableBottom = PAGE_H - MARGIN - tentativeReserved;
+            return h;
+          };
 
-          if (currentY + drawH > availableBottom && currentY > MARGIN) {
-            // Doesn't fit: flush current page footnotes, start a new page.
+          // ---- Try to place the whole section on the current page ----
+          const tentativeIdsWhole = [
+            ...pageFnIds,
+            ...childIds.filter((id) => !pageFnIds.includes(id)),
+          ];
+          const wholeAvail =
+            PAGE_H - MARGIN - reservedFor(tentativeIdsWhole) - currentY;
+
+          if (section.heightMM <= wholeAvail) {
+            // Fits as-is on current page.
+            if (tag === "H1" || tag === "H2" || tag === "H3") {
+              chapters.push({
+                level: parseInt(tag.substring(1), 10),
+                text: (child.textContent || "").trim(),
+                page: bodyPageNum,
+              });
+            }
+            pdf.addImage(
+              section.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              section.heightMM
+            );
+            addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
+            currentY += section.heightMM + SECTION_GAP;
+            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            continue;
+          }
+
+          // ---- Doesn't fit whole. If it fits on a fresh page entirely, break. ----
+          const freshAvail = CONTENT_H - reservedFor(childIds);
+          if (section.heightMM <= freshAvail && currentY > MARGIN) {
             flushFootnotes();
             pdf.addPage();
             await stampPageNumber();
             currentY = MARGIN;
+            if (tag === "H1" || tag === "H2" || tag === "H3") {
+              chapters.push({
+                level: parseInt(tag.substring(1), 10),
+                text: (child.textContent || "").trim(),
+                page: bodyPageNum,
+              });
+            }
+            pdf.addImage(
+              section.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              section.heightMM
+            );
+            addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
+            currentY += section.heightMM + SECTION_GAP;
+            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            continue;
           }
 
-          const xOffset = MARGIN + (CONTENT_W - drawW) / 2;
-          pdf.addImage(section.dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
-          addLinkAnnotations(section, xOffset, currentY, drawW, drawH);
-          currentY += drawH + SECTION_GAP;
+          // ---- Section is too tall: slice across pages ----
+          if (tag === "H1" || tag === "H2" || tag === "H3") {
+            chapters.push({
+              level: parseInt(tag.substring(1), 10),
+              text: (child.textContent || "").trim(),
+              page: bodyPageNum,
+            });
+          }
+          let remainingPx = section.elHeightPx;
+          let srcYpx = 0;
+          // For very long sections we don't try to keep footnotes on the SAME
+          // page as the marker; they go to the page where the slice containing
+          // them ends. This keeps text uncompressed and readable.
+          for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
 
-          // Commit new footnotes to this page.
-          for (const id of newIds) pageFnIds.push(id);
+          while (remainingPx > 0) {
+            const availMM =
+              PAGE_H - MARGIN - reservedFor(pageFnIds) - currentY;
+            const availPx = availMM / mmPerPx;
+
+            if (availPx < 30 / mmPerPx) {
+              // Less than ~30mm left — start a fresh page.
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+              continue;
+            }
+
+            const takePx = Math.min(remainingPx, availPx);
+            const slice = sliceSection(section, srcYpx, takePx);
+            pdf.addImage(
+              slice.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              slice.heightMM
+            );
+            // Link annotations on partitioned blocks: only emit links whose rects
+            // fall fully within this slice.
+            const sliceTopPx = srcYpx;
+            const sliceBotPx = srcYpx + takePx;
+            for (const lk of section.links) {
+              if (lk.y >= sliceTopPx && lk.y + lk.h <= sliceBotPx) {
+                const localY = lk.y - sliceTopPx;
+                pdf.link(
+                  MARGIN + lk.x * mmPerPx,
+                  currentY + localY * mmPerPx,
+                  lk.w * mmPerPx,
+                  lk.h * mmPerPx,
+                  { url: lk.href }
+                );
+              }
+            }
+
+            currentY += slice.heightMM;
+            srcYpx += takePx;
+            remainingPx -= takePx;
+
+            if (remainingPx > 0) {
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+            } else {
+              currentY += SECTION_GAP;
+            }
+          }
         }
         // Final flush for the last page.
         flushFootnotes();
+      }
+
+      // ----- Optional: build & insert index pages between cover and body -----
+      if (includeIndex && chapters.length > 0) {
+        const idxTitle = indexTitle(numeralScript);
+        const isRTL = numeralScript === "ar";
+        const rows = chapters
+          .map((ch) => {
+            const indent = (ch.level - 1) * 18; // px
+            const pgLabel = toNumerals(ch.page, numeralScript);
+            const nameCell = `<td style="padding:6px 4px; ${
+              isRTL ? "padding-right:" : "padding-left:"
+            }${indent}px;${
+              isRTL ? "text-align:right;" : "text-align:left;"
+            }">${escapeHtml(ch.text)}</td>`;
+            const pageCell = `<td style="padding:6px 4px; ${
+              isRTL ? "text-align:left;" : "text-align:right;"
+            }; white-space:nowrap; color:#475569;">${escapeHtml(pgLabel)}</td>`;
+            return `<tr>${
+              isRTL ? pageCell + nameCell : nameCell + pageCell
+            }</tr>`;
+          })
+          .join("");
+        const indexHtml = `
+          <div data-pdf-body data-pdf-index dir="${isRTL ? "rtl" : "ltr"}" style="
+            box-sizing: border-box;
+            font-size: 11pt;
+            line-height: 1.55;
+          ">
+            <h1 style="
+              font-family: inherit;
+              font-weight: 400;
+              text-align: center;
+              font-size: 22pt;
+              margin: 0 0 10mm 0;
+            ">${escapeHtml(idxTitle)}</h1>
+            <table style="
+              border-collapse: collapse;
+              width: 100%;
+              table-layout: auto;
+              font-size: 11pt;
+            ">${rows}</table>
+          </div>`;
+        const idxWrap = document.createElement("div");
+        idxWrap.style.width = `${widthPx}px`;
+        idxWrap.innerHTML = indexHtml;
+        const idxEl = idxWrap.firstElementChild as HTMLElement;
+        container.appendChild(idxWrap);
+        const cap = await captureElement(idxEl);
+        container.removeChild(idxWrap);
+
+        // Paginate index content (may be > 1 page) and insert pages after cover.
+        const idxMmPerPx = CONTENT_W / cap.elWidthPx;
+        let remPx = cap.elHeightPx;
+        let yPx = 0;
+        let insertAt = coverPages + 1; // page index where we insert (after cover)
+        while (remPx > 0) {
+          const availPx = CONTENT_H / idxMmPerPx;
+          const takePx = Math.min(remPx, availPx);
+          const slice = sliceSection(cap, yPx, takePx);
+          pdf.insertPage(insertAt);
+          pdf.setPage(insertAt);
+          pdf.addImage(
+            slice.dataUrl,
+            "JPEG",
+            MARGIN,
+            MARGIN,
+            CONTENT_W,
+            slice.heightMM
+          );
+          yPx += takePx;
+          remPx -= takePx;
+          insertAt += 1;
+        }
       }
 
       const filename =
