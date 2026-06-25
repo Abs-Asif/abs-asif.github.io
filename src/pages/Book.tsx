@@ -768,7 +768,7 @@ const Book = () => {
           item.className = "fn-item";
           item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
           fnWrap.appendChild(item);
-          const cap = await captureElement(item);
+          const cap = await captureElement(item, { pad: false });
           fnTiles.set(id, { id, cap });
         }
         fnWrap.remove();
@@ -777,7 +777,7 @@ const Book = () => {
       // ----- Per-page footnote tracking -----
       const DIV_GAP_TOP = 2.5; // mm above divider
       const DIV_GAP_BOT = 1.8; // mm below divider
-      const FN_ITEM_GAP = 0.8; // mm between footnotes
+      const FN_ITEM_GAP = 0.4; // mm between footnotes
       let pageFnIds: string[] = [];
       const pageFnHeight = () => {
         if (pageFnIds.length === 0) return 0;
