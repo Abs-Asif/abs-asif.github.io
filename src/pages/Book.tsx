@@ -1140,6 +1140,21 @@ const Book = () => {
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
         <button
+          onClick={() => setIncludeIndex((v) => !v)}
+          className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
+            includeIndex
+              ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-800"
+              : "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+          }`}
+          title={`Index page is ${includeIndex ? "ON" : "OFF"} — auto-generated from #, ##, ### headings`}
+        >
+          <ListTree size={18} />
+          <span className="text-sm font-medium hidden sm:inline">
+            Index{includeIndex ? ": On" : ": Off"}
+          </span>
+        </button>
+
+        <button
           onClick={() => setPreview((p) => !p)}
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
           title={preview ? "Back to editor" : "Preview with markdown"}
