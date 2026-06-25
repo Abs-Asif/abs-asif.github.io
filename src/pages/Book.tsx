@@ -418,7 +418,7 @@ const Book = () => {
       [data-pdf-body] a {
         color: #1d4ed8;
         text-decoration: none;
-        border-bottom: 1px solid rgba(29, 78, 216, 0.35);
+        border-bottom: none;
       }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
@@ -431,13 +431,15 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 4px 7px;
-        vertical-align: top;
+        padding: 4px 6px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.4;
+        line-height: 1.35;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
+      [data-pdf-body] td > p,
+      [data-pdf-body] th > p { margin: 0; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
@@ -454,7 +456,8 @@ const Book = () => {
         display: flex;
         gap: 0.55em;
         align-items: flex-start;
-        margin: 0 0 1.2mm 0;
+        margin: 0;
+        padding: 0;
         line-height: 1.5;
       }
       [data-pdf-body] .fn-item .fn-num {
@@ -463,7 +466,7 @@ const Book = () => {
         text-align: right;
         color: #1d4ed8;
       }
-      [data-pdf-body] .fn-item .fn-body { flex: 1; }
+      [data-pdf-body] .fn-item .fn-body { flex: 1; text-align: justify; }
       [data-pdf-body] .fn-item .fn-body > p { margin: 0; }
     `;
     container.appendChild(styleEl);
