@@ -688,7 +688,7 @@ const Book = () => {
       // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
       // fonts can't render Bangla / Arabic.
       const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
-      const PAGE_NUM_PT = 10; // visible final size in PDF
+      const PAGE_NUM_PT = 9; // visible final size in PDF
       const renderNumberTile = async (n: number) => {
         const cached = numberCache.get(n);
         if (cached) return cached;
@@ -697,13 +697,13 @@ const Book = () => {
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "0";
+        numDiv.style.padding = "10px 6px"; // generous padding so html2canvas never clips ascenders/descenders
         numDiv.style.margin = "0";
         numDiv.style.display = "inline-block";
         numDiv.style.background = "#ffffff";
         numDiv.style.color = "#475569";
         numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`; // render large, downscale for crispness
-        numDiv.style.lineHeight = "1.35"; // room for descenders (e.g. Bangla ৭, ৯)
+        numDiv.style.lineHeight = "1.6"; // room for descenders (e.g. Bangla ৭, ৯)
         numDiv.style.whiteSpace = "nowrap";
         numDiv.style.fontFamily =
           "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
@@ -730,9 +730,9 @@ const Book = () => {
         bodyPageNum += 1;
         const tile = await renderNumberTile(bodyPageNum);
         // Real-book layout: odd pages on the right, even pages on the left.
-        // Place inside the top margin band, leaving room for the full glyph height.
-        const y = Math.max(4, MARGIN - tile.hMM - 1.5);
+        // Position uses the tile's full padded height so glyphs are never clipped.
         const edgePad = 8; // mm from outer page edge
+        const y = 2; // tile carries its own internal padding, so flush near top edge is safe
         const isOdd = bodyPageNum % 2 === 1;
         const x = isOdd ? PAGE_W - edgePad - tile.wMM : edgePad;
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
