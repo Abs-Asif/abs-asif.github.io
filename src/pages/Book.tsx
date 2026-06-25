@@ -248,6 +248,7 @@ const Book = () => {
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [includeIndex, setIncludeIndex] = useState(false);
 
   const previewHtml = useMemo(
     () => renderForPreview(content, detectScript(title || content)),
