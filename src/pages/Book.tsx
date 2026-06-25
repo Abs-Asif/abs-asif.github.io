@@ -562,13 +562,20 @@ const Book = () => {
         elWidthPx: number;
         elHeightPx: number;
         links: LinkRect[];
+        canvas: HTMLCanvasElement;
       };
 
-      const captureElement = async (el: HTMLElement): Promise<CaptureResult> => {
+      const captureElement = async (
+        el: HTMLElement,
+        opts: { pad?: boolean } = {}
+      ): Promise<CaptureResult> => {
+        const pad = opts.pad !== false;
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
-        el.style.paddingTop = "6px";
-        el.style.paddingBottom = "8px";
+        if (pad) {
+          el.style.paddingTop = "2px";
+          el.style.paddingBottom = "2px";
+        }
 
         // Capture link rects in CSS pixels relative to the element box.
         const baseRect = el.getBoundingClientRect();
@@ -607,6 +614,40 @@ const Book = () => {
           elWidthPx,
           elHeightPx,
           links,
+          canvas,
+        };
+      };
+
+      // Slice a captured section vertically. Returns image dataUrl + heightMM for a
+      // contiguous range of source pixels [sy, sy+sh) of the original canvas.
+      const sliceSection = (
+        section: CaptureResult,
+        syPx: number,
+        shPx: number
+      ): { dataUrl: string; heightMM: number } => {
+        const src = section.canvas;
+        const scale = src.width / section.elWidthPx; // = renderScale
+        const slice = document.createElement("canvas");
+        slice.width = src.width;
+        slice.height = Math.round(shPx * scale);
+        const ctx = slice.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(
+          src,
+          0,
+          Math.round(syPx * scale),
+          src.width,
+          slice.height,
+          0,
+          0,
+          src.width,
+          slice.height
+        );
+        const mmPerPx = CONTENT_W / section.elWidthPx;
+        return {
+          dataUrl: slice.toDataURL("image/jpeg", 0.95),
+          heightMM: shPx * mmPerPx,
         };
       };
 
