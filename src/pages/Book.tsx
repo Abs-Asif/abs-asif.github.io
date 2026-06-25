@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { Download, Loader2, Eye, Pencil, HelpCircle } from "lucide-react";
+import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
@@ -221,6 +221,10 @@ function renderForPreview(md: string, script: NumeralScript): string {
   return html;
 }
 
+function indexTitle(script: NumeralScript): string {
+  return script === "bn" ? "সূচিপত্র" : script === "ar" ? "الفهرس" : "Index";
+}
+
 function renderForPdfBody(
   md: string,
   script: NumeralScript
@@ -244,6 +248,7 @@ const Book = () => {
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [includeIndex, setIncludeIndex] = useState(false);
 
   const previewHtml = useMemo(
     () => renderForPreview(content, detectScript(title || content)),
@@ -413,7 +418,7 @@ const Book = () => {
       [data-pdf-body] a {
         color: #1d4ed8;
         text-decoration: none;
-        border-bottom: 1px solid rgba(29, 78, 216, 0.35);
+        border-bottom: none;
       }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
@@ -426,13 +431,15 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 4px 7px;
-        vertical-align: top;
+        padding: 4px 6px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.4;
+        line-height: 1.35;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
+      [data-pdf-body] td > p,
+      [data-pdf-body] th > p { margin: 0; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
@@ -449,7 +456,8 @@ const Book = () => {
         display: flex;
         gap: 0.55em;
         align-items: flex-start;
-        margin: 0 0 1.2mm 0;
+        margin: 0;
+        padding: 0;
         line-height: 1.5;
       }
       [data-pdf-body] .fn-item .fn-num {
@@ -458,7 +466,7 @@ const Book = () => {
         text-align: right;
         color: #1d4ed8;
       }
-      [data-pdf-body] .fn-item .fn-body { flex: 1; }
+      [data-pdf-body] .fn-item .fn-body { flex: 1; text-align: justify; }
       [data-pdf-body] .fn-item .fn-body > p { margin: 0; }
     `;
     container.appendChild(styleEl);
@@ -554,13 +562,20 @@ const Book = () => {
         elWidthPx: number;
         elHeightPx: number;
         links: LinkRect[];
+        canvas: HTMLCanvasElement;
       };
 
-      const captureElement = async (el: HTMLElement): Promise<CaptureResult> => {
+      const captureElement = async (
+        el: HTMLElement,
+        opts: { pad?: boolean } = {}
+      ): Promise<CaptureResult> => {
+        const pad = opts.pad !== false;
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
-        el.style.paddingTop = "6px";
-        el.style.paddingBottom = "8px";
+        if (pad) {
+          el.style.paddingTop = "2px";
+          el.style.paddingBottom = "2px";
+        }
 
         // Capture link rects in CSS pixels relative to the element box.
         const baseRect = el.getBoundingClientRect();
@@ -599,6 +614,40 @@ const Book = () => {
           elWidthPx,
           elHeightPx,
           links,
+          canvas,
+        };
+      };
+
+      // Slice a captured section vertically. Returns image dataUrl + heightMM for a
+      // contiguous range of source pixels [sy, sy+sh) of the original canvas.
+      const sliceSection = (
+        section: CaptureResult,
+        syPx: number,
+        shPx: number
+      ): { dataUrl: string; heightMM: number } => {
+        const src = section.canvas;
+        const scale = src.width / section.elWidthPx; // = renderScale
+        const slice = document.createElement("canvas");
+        slice.width = src.width;
+        slice.height = Math.round(shPx * scale);
+        const ctx = slice.getContext("2d")!;
+        ctx.fillStyle = "#ffffff";
+        ctx.fillRect(0, 0, slice.width, slice.height);
+        ctx.drawImage(
+          src,
+          0,
+          Math.round(syPx * scale),
+          src.width,
+          slice.height,
+          0,
+          0,
+          src.width,
+          slice.height
+        );
+        const mmPerPx = CONTENT_W / section.elWidthPx;
+        return {
+          dataUrl: slice.toDataURL("image/jpeg", 0.95),
+          heightMM: shPx * mmPerPx,
         };
       };
 
@@ -639,7 +688,7 @@ const Book = () => {
       // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
       // fonts can't render Bangla / Arabic.
       const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
-      const PAGE_NUM_PT = 10; // visible final size in PDF
+      const PAGE_NUM_PT = 9; // visible final size in PDF
       const renderNumberTile = async (n: number) => {
         const cached = numberCache.get(n);
         if (cached) return cached;
@@ -648,13 +697,13 @@ const Book = () => {
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "0";
+        numDiv.style.padding = "10px 6px"; // generous padding so html2canvas never clips ascenders/descenders
         numDiv.style.margin = "0";
         numDiv.style.display = "inline-block";
         numDiv.style.background = "#ffffff";
         numDiv.style.color = "#475569";
         numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`; // render large, downscale for crispness
-        numDiv.style.lineHeight = "1.35"; // room for descenders (e.g. Bangla ৭, ৯)
+        numDiv.style.lineHeight = "1.6"; // room for descenders (e.g. Bangla ৭, ৯)
         numDiv.style.whiteSpace = "nowrap";
         numDiv.style.fontFamily =
           "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
@@ -681,9 +730,9 @@ const Book = () => {
         bodyPageNum += 1;
         const tile = await renderNumberTile(bodyPageNum);
         // Real-book layout: odd pages on the right, even pages on the left.
-        // Place inside the top margin band, leaving room for the full glyph height.
-        const y = Math.max(4, MARGIN - tile.hMM - 1.5);
+        // Position uses the tile's full padded height so glyphs are never clipped.
         const edgePad = 8; // mm from outer page edge
+        const y = 2; // tile carries its own internal padding, so flush near top edge is safe
         const isOdd = bodyPageNum % 2 === 1;
         const x = isOdd ? PAGE_W - edgePad - tile.wMM : edgePad;
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
@@ -719,7 +768,7 @@ const Book = () => {
           item.className = "fn-item";
           item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
           fnWrap.appendChild(item);
-          const cap = await captureElement(item);
+          const cap = await captureElement(item, { pad: false });
           fnTiles.set(id, { id, cap });
         }
         fnWrap.remove();
@@ -728,7 +777,7 @@ const Book = () => {
       // ----- Per-page footnote tracking -----
       const DIV_GAP_TOP = 2.5; // mm above divider
       const DIV_GAP_BOT = 1.8; // mm below divider
-      const FN_ITEM_GAP = 0.8; // mm between footnotes
+      const FN_ITEM_GAP = 0.4; // mm between footnotes
       let pageFnIds: string[] = [];
       const pageFnHeight = () => {
         if (pageFnIds.length === 0) return 0;
@@ -766,6 +815,10 @@ const Book = () => {
         return out;
       };
 
+      type Chapter = { level: number; text: string; page: number };
+      const chapters: Chapter[] = [];
+      const coverPages = 1; // we'll insert index pages later before body
+
       if (bodyChildren.length > 0) {
         pdf.addPage();
         await stampPageNumber();
@@ -781,48 +834,234 @@ const Book = () => {
           }
 
           const section = await captureElement(child);
-          let drawW = CONTENT_W;
-          let drawH = section.heightMM;
-          if (drawH > CONTENT_H) {
-            const ratio = CONTENT_H / drawH;
-            drawH = CONTENT_H;
-            drawW = CONTENT_W * ratio;
+          const mmPerPx = CONTENT_W / section.elWidthPx;
+
+          // Record headings (H1/H2/H3) → chapter index entries.
+          const tag = (child.tagName || "").toUpperCase();
+          if (tag === "H1" || tag === "H2" || tag === "H3") {
+            // Page number where this heading STARTS — recorded after we
+            // decide whether to break to a new page below.
+            // We'll record after currentY adjustment.
           }
 
-          // Footnote ids introduced by this section (not already on the page).
+          // Footnotes referenced by this section (those not yet on the page).
           const childIds = idsInChild(child);
-          const newIds = childIds.filter((id) => !pageFnIds.includes(id));
 
-          // Compute reserved bottom space if we accept this section + its new footnotes.
-          const tentativeIds = [...pageFnIds, ...newIds];
-          let tentativeReserved = 0;
-          if (tentativeIds.length > 0) {
-            tentativeReserved = DIV_GAP_TOP + DIV_GAP_BOT;
-            tentativeIds.forEach((id, i) => {
-              tentativeReserved += fnTiles.get(id)!.cap.heightMM;
-              if (i < tentativeIds.length - 1) tentativeReserved += FN_ITEM_GAP;
+          const reservedFor = (ids: string[]): number => {
+            if (ids.length === 0) return 0;
+            let h = DIV_GAP_TOP + DIV_GAP_BOT;
+            ids.forEach((id, i) => {
+              h += fnTiles.get(id)!.cap.heightMM;
+              if (i < ids.length - 1) h += FN_ITEM_GAP;
             });
-          }
-          const availableBottom = PAGE_H - MARGIN - tentativeReserved;
+            return h;
+          };
 
-          if (currentY + drawH > availableBottom && currentY > MARGIN) {
-            // Doesn't fit: flush current page footnotes, start a new page.
+          // ---- Try to place the whole section on the current page ----
+          const tentativeIdsWhole = [
+            ...pageFnIds,
+            ...childIds.filter((id) => !pageFnIds.includes(id)),
+          ];
+          const wholeAvail =
+            PAGE_H - MARGIN - reservedFor(tentativeIdsWhole) - currentY;
+
+          if (section.heightMM <= wholeAvail) {
+            // Fits as-is on current page.
+            if (tag === "H1" || tag === "H2" || tag === "H3") {
+              chapters.push({
+                level: parseInt(tag.substring(1), 10),
+                text: (child.textContent || "").trim(),
+                page: bodyPageNum,
+              });
+            }
+            pdf.addImage(
+              section.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              section.heightMM
+            );
+            addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
+            currentY += section.heightMM + SECTION_GAP;
+            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            continue;
+          }
+
+          // ---- Doesn't fit whole. If it fits on a fresh page entirely, break. ----
+          const freshAvail = CONTENT_H - reservedFor(childIds);
+          if (section.heightMM <= freshAvail && currentY > MARGIN) {
             flushFootnotes();
             pdf.addPage();
             await stampPageNumber();
             currentY = MARGIN;
+            if (tag === "H1" || tag === "H2" || tag === "H3") {
+              chapters.push({
+                level: parseInt(tag.substring(1), 10),
+                text: (child.textContent || "").trim(),
+                page: bodyPageNum,
+              });
+            }
+            pdf.addImage(
+              section.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              section.heightMM
+            );
+            addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
+            currentY += section.heightMM + SECTION_GAP;
+            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            continue;
           }
 
-          const xOffset = MARGIN + (CONTENT_W - drawW) / 2;
-          pdf.addImage(section.dataUrl, "JPEG", xOffset, currentY, drawW, drawH);
-          addLinkAnnotations(section, xOffset, currentY, drawW, drawH);
-          currentY += drawH + SECTION_GAP;
+          // ---- Section is too tall: slice across pages ----
+          if (tag === "H1" || tag === "H2" || tag === "H3") {
+            chapters.push({
+              level: parseInt(tag.substring(1), 10),
+              text: (child.textContent || "").trim(),
+              page: bodyPageNum,
+            });
+          }
+          let remainingPx = section.elHeightPx;
+          let srcYpx = 0;
+          // For very long sections we don't try to keep footnotes on the SAME
+          // page as the marker; they go to the page where the slice containing
+          // them ends. This keeps text uncompressed and readable.
+          for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
 
-          // Commit new footnotes to this page.
-          for (const id of newIds) pageFnIds.push(id);
+          while (remainingPx > 0) {
+            const availMM =
+              PAGE_H - MARGIN - reservedFor(pageFnIds) - currentY;
+            const availPx = availMM / mmPerPx;
+
+            if (availPx < 30 / mmPerPx) {
+              // Less than ~30mm left — start a fresh page.
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+              continue;
+            }
+
+            const takePx = Math.min(remainingPx, availPx);
+            const slice = sliceSection(section, srcYpx, takePx);
+            pdf.addImage(
+              slice.dataUrl,
+              "JPEG",
+              MARGIN,
+              currentY,
+              CONTENT_W,
+              slice.heightMM
+            );
+            // Link annotations on partitioned blocks: only emit links whose rects
+            // fall fully within this slice.
+            const sliceTopPx = srcYpx;
+            const sliceBotPx = srcYpx + takePx;
+            for (const lk of section.links) {
+              if (lk.y >= sliceTopPx && lk.y + lk.h <= sliceBotPx) {
+                const localY = lk.y - sliceTopPx;
+                pdf.link(
+                  MARGIN + lk.x * mmPerPx,
+                  currentY + localY * mmPerPx,
+                  lk.w * mmPerPx,
+                  lk.h * mmPerPx,
+                  { url: lk.href }
+                );
+              }
+            }
+
+            currentY += slice.heightMM;
+            srcYpx += takePx;
+            remainingPx -= takePx;
+
+            if (remainingPx > 0) {
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+            } else {
+              currentY += SECTION_GAP;
+            }
+          }
         }
         // Final flush for the last page.
         flushFootnotes();
+      }
+
+      // ----- Optional: build & insert index pages between cover and body -----
+      if (includeIndex && chapters.length > 0) {
+        const idxTitle = indexTitle(numeralScript);
+        const isRTL = numeralScript === "ar";
+        const rows = chapters
+          .map((ch) => {
+            const indent = (ch.level - 1) * 18; // px
+            const pgLabel = toNumerals(ch.page, numeralScript);
+            const nameCell = `<td style="padding:6px 4px; ${
+              isRTL ? "padding-right:" : "padding-left:"
+            }${indent}px;${
+              isRTL ? "text-align:right;" : "text-align:left;"
+            }">${escapeHtml(ch.text)}</td>`;
+            const pageCell = `<td style="padding:6px 4px; ${
+              isRTL ? "text-align:left;" : "text-align:right;"
+            }; white-space:nowrap; color:#475569;">${escapeHtml(pgLabel)}</td>`;
+            return `<tr>${
+              isRTL ? pageCell + nameCell : nameCell + pageCell
+            }</tr>`;
+          })
+          .join("");
+        const indexHtml = `
+          <div data-pdf-body data-pdf-index dir="${isRTL ? "rtl" : "ltr"}" style="
+            box-sizing: border-box;
+            font-size: 11pt;
+            line-height: 1.55;
+          ">
+            <h1 style="
+              font-family: inherit;
+              font-weight: 400;
+              text-align: center;
+              font-size: 22pt;
+              margin: 0 0 10mm 0;
+            ">${escapeHtml(idxTitle)}</h1>
+            <table style="
+              border-collapse: collapse;
+              width: 100%;
+              table-layout: auto;
+              font-size: 11pt;
+            ">${rows}</table>
+          </div>`;
+        const idxWrap = document.createElement("div");
+        idxWrap.style.width = `${widthPx}px`;
+        idxWrap.innerHTML = indexHtml;
+        const idxEl = idxWrap.firstElementChild as HTMLElement;
+        container.appendChild(idxWrap);
+        const cap = await captureElement(idxEl);
+        container.removeChild(idxWrap);
+
+        // Paginate index content (may be > 1 page) and insert pages after cover.
+        const idxMmPerPx = CONTENT_W / cap.elWidthPx;
+        let remPx = cap.elHeightPx;
+        let yPx = 0;
+        let insertAt = coverPages + 1; // page index where we insert (after cover)
+        while (remPx > 0) {
+          const availPx = CONTENT_H / idxMmPerPx;
+          const takePx = Math.min(remPx, availPx);
+          const slice = sliceSection(cap, yPx, takePx);
+          pdf.insertPage(insertAt);
+          pdf.setPage(insertAt);
+          pdf.addImage(
+            slice.dataUrl,
+            "JPEG",
+            MARGIN,
+            MARGIN,
+            CONTENT_W,
+            slice.heightMM
+          );
+          yPx += takePx;
+          remPx -= takePx;
+          insertAt += 1;
+        }
       }
 
       const filename =
@@ -900,6 +1139,21 @@ const Book = () => {
 
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+        <button
+          onClick={() => setIncludeIndex((v) => !v)}
+          className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
+            includeIndex
+              ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-800"
+              : "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+          }`}
+          title={`Index page is ${includeIndex ? "ON" : "OFF"} — auto-generated from #, ##, ### headings`}
+        >
+          <ListTree size={18} />
+          <span className="text-sm font-medium hidden sm:inline">
+            Index{includeIndex ? ": On" : ": Off"}
+          </span>
+        </button>
+
         <button
           onClick={() => setPreview((p) => !p)}
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
