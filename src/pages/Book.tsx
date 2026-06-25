@@ -221,6 +221,10 @@ function renderForPreview(md: string, script: NumeralScript): string {
   return html;
 }
 
+function indexTitle(script: NumeralScript): string {
+  return script === "bn" ? "সূচিপত্র" : script === "ar" ? "الفهرس" : "Index";
+}
+
 function renderForPdfBody(
   md: string,
   script: NumeralScript
