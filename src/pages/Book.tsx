@@ -1221,6 +1221,34 @@ const Book = () => {
 
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+        {generating ? (
+          <div className="pointer-events-auto w-full sm:w-96 bg-white border border-slate-200 shadow-xl rounded-2xl px-5 py-4">
+            <div className="flex items-center justify-between mb-2 gap-3">
+              <div className="flex items-center gap-2 text-slate-800 text-sm font-medium">
+                <Loader2 size={16} className="animate-spin" />
+                <span>{progressLabel || "প্রক্রিয়াধীন..."}</span>
+              </div>
+              <span className="text-xs text-slate-500 tabular-nums">
+                {Math.round(progress * 100)}%
+              </span>
+            </div>
+            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-slate-900 transition-all duration-200"
+                style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+        <>
+        <button
+          onClick={handleClearAll}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-rose-600 border border-slate-200 shadow-lg hover:bg-rose-50 transition-all"
+          title="সব লেখা মুছে ফেলুন"
+        >
+          <Trash2 size={18} />
+        </button>
+
         <button
           onClick={() => setIncludeIndex((v) => !v)}
           className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
@@ -1264,18 +1292,11 @@ const Book = () => {
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           title="Download as PDF"
         >
-          {generating ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              <span className="text-sm font-medium hidden sm:inline">Generating...</span>
-            </>
-          ) : (
-            <>
-              <Download size={18} />
-              <span className="text-sm font-medium hidden sm:inline">Download</span>
-            </>
-          )}
+          <Download size={18} />
+          <span className="text-sm font-medium hidden sm:inline">Download</span>
         </button>
+        </>
+        )}
       </div>
     </div>
   );
