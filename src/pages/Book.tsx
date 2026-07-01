@@ -633,11 +633,23 @@ const Book = () => {
         opts: { pad?: boolean } = {}
       ): Promise<CaptureResult> => {
         const pad = opts.pad !== false;
+        // Add a tiny amount of breathing room to prevent html2canvas from
+        // clipping ascenders/descenders — but ONLY if the element doesn't
+        // already have generous padding (e.g. <pre>, <table>). Overriding
+        // native padding with 2px was causing code blocks to visually clip
+        // their bottom line.
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
+        let padApplied = false;
         if (pad) {
-          el.style.paddingTop = "2px";
-          el.style.paddingBottom = "2px";
+          const cs = window.getComputedStyle(el);
+          const curTop = parseFloat(cs.paddingTop) || 0;
+          const curBot = parseFloat(cs.paddingBottom) || 0;
+          if (curTop < 3 && curBot < 3) {
+            el.style.paddingTop = "2px";
+            el.style.paddingBottom = "2px";
+            padApplied = true;
+          }
         }
 
         // Capture link rects in CSS pixels relative to the element box.
@@ -665,8 +677,10 @@ const Book = () => {
           logging: false,
           windowWidth: widthPx,
         });
-        el.style.paddingTop = prevPadTop;
-        el.style.paddingBottom = prevPadBot;
+        if (padApplied) {
+          el.style.paddingTop = prevPadTop;
+          el.style.paddingBottom = prevPadBot;
+        }
         const elWidthPx = canvas.width / renderScale;
         const elHeightPx = canvas.height / renderScale;
         const mmPerPx = CONTENT_W / elWidthPx;
