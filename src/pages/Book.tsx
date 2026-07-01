@@ -1141,10 +1141,17 @@ const Book = () => {
 
       const filename =
         safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
+      setProgress(0.98);
+      setProgressLabel("সংরক্ষণ হচ্ছে...");
       pdf.save(`${filename}.pdf`);
+      setProgress(1);
     } finally {
       container.remove();
-      setGenerating(false);
+      setTimeout(() => {
+        setGenerating(false);
+        setProgress(0);
+        setProgressLabel("");
+      }, 350);
     }
   };
 
