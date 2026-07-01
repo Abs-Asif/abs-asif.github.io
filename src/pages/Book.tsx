@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
-import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree } from "lucide-react";
+import { useEffect } from "react";
+import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
@@ -79,14 +80,23 @@ function applyArabicAlignment(html: string): string {
   const root = doc.getElementById("__root");
   if (!root) return html;
   root
-    .querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th")
+    .querySelectorAll("p, li, blockquote, td, th")
     .forEach((el) => {
       const txt = el.textContent || "";
       if (isArabicOnly(txt)) {
         el.setAttribute("dir", "rtl");
-        (el as HTMLElement).style.textAlign = "right";
+        // Keep justification so both edges align; dir=rtl already anchors to right.
+        (el as HTMLElement).style.textAlign = "justify";
       }
     });
+  // Headings: only set dir=rtl for Arabic (keep them centered).
+  root.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
+    const txt = el.textContent || "";
+    if (isArabicOnly(txt)) {
+      el.setAttribute("dir", "rtl");
+      (el as HTMLElement).style.textAlign = "center";
+    }
+  });
   return root.innerHTML;
 }
 
