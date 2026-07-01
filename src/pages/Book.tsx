@@ -4,24 +4,27 @@ import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree, Trash2 } from "lu
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
-import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
 
-// Configure marked once: GFM, line breaks, and highlight.js for code fences.
-marked.use(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
-      try {
-        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
-      } catch {
-        return code;
-      }
-    },
-  })
-);
+// Custom code renderer: syntax-highlight with hljs, and avoid double-escaping
+// (marked v9+ escapes the fenced content BEFORE calling the renderer, which
+// would turn `&` into `&amp;amp;` if we returned hljs-highlighted HTML).
+const codeRenderer = new marked.Renderer();
+codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+  const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
+  let highlighted: string;
+  try {
+    highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
+  } catch {
+    highlighted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+};
+marked.use({ renderer: codeRenderer });
 
 type NumeralScript = "bn" | "ar" | "en";
 
