@@ -253,12 +253,57 @@ function renderForPdfBody(
 }
 
 const Book = () => {
+  const CACHE_KEY = "book-draft-v1";
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [includeIndex, setIncludeIndex] = useState(false);
+  const [progress, setProgress] = useState(0); // 0..1
+  const [progressLabel, setProgressLabel] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load cached draft on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p.title === "string") setTitle(p.title);
+        if (typeof p.author === "string") setAuthor(p.author);
+        if (typeof p.content === "string") setContent(p.content);
+        if (typeof p.includeIndex === "boolean") setIncludeIndex(p.includeIndex);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  // Persist on any edit (after hydration to avoid overwriting stored draft with empty state).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({ title, author, content, includeIndex })
+      );
+    } catch {}
+  }, [title, author, content, includeIndex, hydrated]);
+
+  const handleClearAll = () => {
+    if (
+      !window.confirm(
+        "সব লেখা মুছে ফেলা হবে (শিরোনাম, লেখক ও পুরো বই)। আপনি কি নিশ্চিত?"
+      )
+    )
+      return;
+    setTitle("");
+    setAuthor("");
+    setContent("");
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch {}
+  };
 
   const previewHtml = useMemo(
     () => renderForPreview(content, detectScript(title || content)),
