@@ -449,7 +449,7 @@ const Book = () => {
         color: #abb2bf;
         padding: 0.9em 1em;
         border-radius: 8px;
-        overflow: hidden;
+        overflow: visible;
         white-space: pre-wrap;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 9.5pt;
