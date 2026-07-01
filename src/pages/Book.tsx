@@ -312,6 +312,8 @@ const Book = () => {
 
   const handleDownloadPDF = async () => {
     setGenerating(true);
+    setProgress(0);
+    setProgressLabel("প্রস্তুতি...");
 
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
@@ -364,8 +366,9 @@ const Book = () => {
         font-family: inherit;
         font-weight: 400;
         text-align: center;
-        margin: 1em 0 0.5em;
-        line-height: 1.3;
+        margin: 1em 0 0.55em;
+        line-height: 1.55;
+        padding: 0.15em 0 0.25em;
       }
       [data-pdf-body] h1 { font-size: 22pt; }
       [data-pdf-body] h2 { font-size: 18pt; }
@@ -486,15 +489,17 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 4px 6px;
-        vertical-align: middle;
+        padding: 5px 7px;
+        vertical-align: top;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.35;
+        line-height: 1.4;
+        box-sizing: border-box;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] td > p,
-      [data-pdf-body] th > p { margin: 0; }
+      [data-pdf-body] th > p { margin: 0; padding: 0; }
+      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] { text-align: right; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
@@ -582,7 +587,7 @@ const Book = () => {
     bodyWrap.setAttribute("data-pdf-body", "");
     bodyWrap.style.fontSize = "11pt";
     bodyWrap.style.lineHeight = "1.65";
-    bodyWrap.style.textAlign = "left";
+    bodyWrap.style.textAlign = "justify";
     bodyWrap.innerHTML = bodyHtml;
 
     const coverWrap = document.createElement("div");
