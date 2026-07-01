@@ -883,8 +883,11 @@ const Book = () => {
         pdf.addPage();
         await stampPageNumber();
         let currentY = MARGIN;
-
-        for (const child of bodyChildren) {
+        const totalChildren = bodyChildren.length;
+        setProgressLabel("পাতা তৈরি হচ্ছে...");
+        for (let ci = 0; ci < bodyChildren.length; ci++) {
+          const child = bodyChildren[ci];
+          setProgress(0.1 + 0.8 * (ci / Math.max(1, totalChildren)));
           const isEmpty =
             !child.textContent?.trim() &&
             child.querySelectorAll("img").length === 0;
@@ -898,10 +901,22 @@ const Book = () => {
 
           // Record headings (H1/H2/H3) → chapter index entries.
           const tag = (child.tagName || "").toUpperCase();
-          if (tag === "H1" || tag === "H2" || tag === "H3") {
-            // Page number where this heading STARTS — recorded after we
-            // decide whether to break to a new page below.
-            // We'll record after currentY adjustment.
+          const isHeading =
+            tag === "H1" || tag === "H2" || tag === "H3" ||
+            tag === "H4" || tag === "H5" || tag === "H6";
+
+          // Widow-heading rule: a heading may not be the last thing on a page.
+          // If a heading fits but leaves less than ~2 body lines (≈ 14mm) of
+          // room after it, push it to the next page.
+          if (isHeading && currentY > MARGIN) {
+            const remainingAfter =
+              PAGE_H - MARGIN - currentY - section.heightMM;
+            if (remainingAfter < 14) {
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+            }
           }
 
           // Footnotes referenced by this section (those not yet on the page).
