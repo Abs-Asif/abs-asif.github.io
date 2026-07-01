@@ -909,12 +909,30 @@ const Book = () => {
             tag === "H4" || tag === "H5" || tag === "H6";
 
           // Widow-heading rule: a heading may not be the last thing on a page.
-          // If a heading fits but leaves less than ~2 body lines (≈ 14mm) of
-          // room after it, push it to the next page.
+          // Push heading to the next page if either (a) less than ~3 body
+          // lines (≈ 22mm) remain after it, or (b) the following non-empty
+          // block wouldn't fit even one line on the current page.
           if (isHeading && currentY > MARGIN) {
             const remainingAfter =
               PAGE_H - MARGIN - currentY - section.heightMM;
-            if (remainingAfter < 14) {
+            let breakBefore = remainingAfter < 22;
+            if (!breakBefore) {
+              // Peek next non-empty sibling; if it exists and is taller than
+              // remainingAfter (i.e. its first line can't be printed here),
+              // we'd still orphan the heading — so break preemptively.
+              for (let j = ci + 1; j < bodyChildren.length; j++) {
+                const nx = bodyChildren[j];
+                if (
+                  !nx.textContent?.trim() &&
+                  nx.querySelectorAll("img").length === 0
+                )
+                  continue;
+                // Minimum "first line" reservation ≈ 8mm; if even that won't fit, break.
+                if (remainingAfter < 8) breakBefore = true;
+                break;
+              }
+            }
+            if (breakBefore) {
               flushFootnotes();
               pdf.addPage();
               await stampPageNumber();
