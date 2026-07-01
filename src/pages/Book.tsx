@@ -915,7 +915,7 @@ const Book = () => {
           if (isHeading && currentY > MARGIN) {
             const remainingAfter =
               PAGE_H - MARGIN - currentY - section.heightMM;
-            let breakBefore = remainingAfter < 22;
+            let breakBefore = remainingAfter < 28;
             if (!breakBefore) {
               // Peek next non-empty sibling; if it exists and is taller than
               // remainingAfter (i.e. its first line can't be printed here),
