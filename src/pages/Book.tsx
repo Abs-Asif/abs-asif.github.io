@@ -1,26 +1,30 @@
 import React, { useMemo, useState } from "react";
-import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree } from "lucide-react";
+import { useEffect } from "react";
+import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree, Trash2 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
-import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
 
-// Configure marked once: GFM, line breaks, and highlight.js for code fences.
-marked.use(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
-      try {
-        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
-      } catch {
-        return code;
-      }
-    },
-  })
-);
+// Custom code renderer: syntax-highlight with hljs, and avoid double-escaping
+// (marked v9+ escapes the fenced content BEFORE calling the renderer, which
+// would turn `&` into `&amp;amp;` if we returned hljs-highlighted HTML).
+const codeRenderer = new marked.Renderer();
+codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
+  const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
+  let highlighted: string;
+  try {
+    highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
+  } catch {
+    highlighted = text
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+  return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
+};
+marked.use({ renderer: codeRenderer });
 
 type NumeralScript = "bn" | "ar" | "en";
 
@@ -79,14 +83,23 @@ function applyArabicAlignment(html: string): string {
   const root = doc.getElementById("__root");
   if (!root) return html;
   root
-    .querySelectorAll("p, li, h1, h2, h3, h4, h5, h6, blockquote, td, th")
+    .querySelectorAll("p, li, blockquote, td, th")
     .forEach((el) => {
       const txt = el.textContent || "";
       if (isArabicOnly(txt)) {
         el.setAttribute("dir", "rtl");
-        (el as HTMLElement).style.textAlign = "right";
+        // Keep justification so both edges align; dir=rtl already anchors to right.
+        (el as HTMLElement).style.textAlign = "justify";
       }
     });
+  // Headings: only set dir=rtl for Arabic (keep them centered).
+  root.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
+    const txt = el.textContent || "";
+    if (isArabicOnly(txt)) {
+      el.setAttribute("dir", "rtl");
+      (el as HTMLElement).style.textAlign = "center";
+    }
+  });
   return root.innerHTML;
 }
 
@@ -243,12 +256,57 @@ function renderForPdfBody(
 }
 
 const Book = () => {
+  const CACHE_KEY = "book-draft-v1";
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [includeIndex, setIncludeIndex] = useState(false);
+  const [progress, setProgress] = useState(0); // 0..1
+  const [progressLabel, setProgressLabel] = useState("");
+  const [hydrated, setHydrated] = useState(false);
+
+  // Load cached draft on mount.
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(CACHE_KEY);
+      if (raw) {
+        const p = JSON.parse(raw);
+        if (typeof p.title === "string") setTitle(p.title);
+        if (typeof p.author === "string") setAuthor(p.author);
+        if (typeof p.content === "string") setContent(p.content);
+        if (typeof p.includeIndex === "boolean") setIncludeIndex(p.includeIndex);
+      }
+    } catch {}
+    setHydrated(true);
+  }, []);
+
+  // Persist on any edit (after hydration to avoid overwriting stored draft with empty state).
+  useEffect(() => {
+    if (!hydrated) return;
+    try {
+      localStorage.setItem(
+        CACHE_KEY,
+        JSON.stringify({ title, author, content, includeIndex })
+      );
+    } catch {}
+  }, [title, author, content, includeIndex, hydrated]);
+
+  const handleClearAll = () => {
+    if (
+      !window.confirm(
+        "সব লেখা মুছে ফেলা হবে (শিরোনাম, লেখক ও পুরো বই)। আপনি কি নিশ্চিত?"
+      )
+    )
+      return;
+    setTitle("");
+    setAuthor("");
+    setContent("");
+    try {
+      localStorage.removeItem(CACHE_KEY);
+    } catch {}
+  };
 
   const previewHtml = useMemo(
     () => renderForPreview(content, detectScript(title || content)),
@@ -257,6 +315,8 @@ const Book = () => {
 
   const handleDownloadPDF = async () => {
     setGenerating(true);
+    setProgress(0);
+    setProgressLabel("প্রস্তুতি...");
 
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
@@ -309,8 +369,9 @@ const Book = () => {
         font-family: inherit;
         font-weight: 400;
         text-align: center;
-        margin: 1em 0 0.5em;
-        line-height: 1.3;
+        margin: 1em 0 0.55em;
+        line-height: 1.55;
+        padding: 0.15em 0 0.25em;
       }
       [data-pdf-body] h1 { font-size: 22pt; }
       [data-pdf-body] h2 { font-size: 18pt; }
@@ -388,7 +449,7 @@ const Book = () => {
         color: #abb2bf;
         padding: 0.9em 1em;
         border-radius: 8px;
-        overflow: hidden;
+        overflow: visible;
         white-space: pre-wrap;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
         font-size: 9.5pt;
@@ -431,15 +492,17 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 4px 6px;
-        vertical-align: middle;
+        padding: 5px 7px;
+        vertical-align: top;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.35;
+        line-height: 1.4;
+        box-sizing: border-box;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] td > p,
-      [data-pdf-body] th > p { margin: 0; }
+      [data-pdf-body] th > p { margin: 0; padding: 0; }
+      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] { text-align: right; }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
@@ -527,7 +590,7 @@ const Book = () => {
     bodyWrap.setAttribute("data-pdf-body", "");
     bodyWrap.style.fontSize = "11pt";
     bodyWrap.style.lineHeight = "1.65";
-    bodyWrap.style.textAlign = "left";
+    bodyWrap.style.textAlign = "justify";
     bodyWrap.innerHTML = bodyHtml;
 
     const coverWrap = document.createElement("div");
@@ -570,11 +633,23 @@ const Book = () => {
         opts: { pad?: boolean } = {}
       ): Promise<CaptureResult> => {
         const pad = opts.pad !== false;
+        // Add a tiny amount of breathing room to prevent html2canvas from
+        // clipping ascenders/descenders — but ONLY if the element doesn't
+        // already have generous padding (e.g. <pre>, <table>). Overriding
+        // native padding with 2px was causing code blocks to visually clip
+        // their bottom line.
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
+        let padApplied = false;
         if (pad) {
-          el.style.paddingTop = "2px";
-          el.style.paddingBottom = "2px";
+          const cs = window.getComputedStyle(el);
+          const curTop = parseFloat(cs.paddingTop) || 0;
+          const curBot = parseFloat(cs.paddingBottom) || 0;
+          if (curTop < 3 && curBot < 3) {
+            el.style.paddingTop = "2px";
+            el.style.paddingBottom = "2px";
+            padApplied = true;
+          }
         }
 
         // Capture link rects in CSS pixels relative to the element box.
@@ -602,8 +677,10 @@ const Book = () => {
           logging: false,
           windowWidth: widthPx,
         });
-        el.style.paddingTop = prevPadTop;
-        el.style.paddingBottom = prevPadBot;
+        if (padApplied) {
+          el.style.paddingTop = prevPadTop;
+          el.style.paddingBottom = prevPadBot;
+        }
         const elWidthPx = canvas.width / renderScale;
         const elHeightPx = canvas.height / renderScale;
         const mmPerPx = CONTENT_W / elWidthPx;
@@ -823,8 +900,11 @@ const Book = () => {
         pdf.addPage();
         await stampPageNumber();
         let currentY = MARGIN;
-
-        for (const child of bodyChildren) {
+        const totalChildren = bodyChildren.length;
+        setProgressLabel("পাতা তৈরি হচ্ছে...");
+        for (let ci = 0; ci < bodyChildren.length; ci++) {
+          const child = bodyChildren[ci];
+          setProgress(0.1 + 0.8 * (ci / Math.max(1, totalChildren)));
           const isEmpty =
             !child.textContent?.trim() &&
             child.querySelectorAll("img").length === 0;
@@ -838,10 +918,40 @@ const Book = () => {
 
           // Record headings (H1/H2/H3) → chapter index entries.
           const tag = (child.tagName || "").toUpperCase();
-          if (tag === "H1" || tag === "H2" || tag === "H3") {
-            // Page number where this heading STARTS — recorded after we
-            // decide whether to break to a new page below.
-            // We'll record after currentY adjustment.
+          const isHeading =
+            tag === "H1" || tag === "H2" || tag === "H3" ||
+            tag === "H4" || tag === "H5" || tag === "H6";
+
+          // Widow-heading rule: a heading may not be the last thing on a page.
+          // Push heading to the next page if either (a) less than ~3 body
+          // lines (≈ 22mm) remain after it, or (b) the following non-empty
+          // block wouldn't fit even one line on the current page.
+          if (isHeading && currentY > MARGIN) {
+            const remainingAfter =
+              PAGE_H - MARGIN - currentY - section.heightMM;
+            let breakBefore = remainingAfter < 32;
+            if (!breakBefore) {
+              // Peek next non-empty sibling; if it exists and is taller than
+              // remainingAfter (i.e. its first line can't be printed here),
+              // we'd still orphan the heading — so break preemptively.
+              for (let j = ci + 1; j < bodyChildren.length; j++) {
+                const nx = bodyChildren[j];
+                if (
+                  !nx.textContent?.trim() &&
+                  nx.querySelectorAll("img").length === 0
+                )
+                  continue;
+                // Minimum "first line" reservation ≈ 8mm; if even that won't fit, break.
+                if (remainingAfter < 8) breakBefore = true;
+                break;
+              }
+            }
+            if (breakBefore) {
+              flushFootnotes();
+              pdf.addPage();
+              await stampPageNumber();
+              currentY = MARGIN;
+            }
           }
 
           // Footnotes referenced by this section (those not yet on the page).
@@ -1066,10 +1176,17 @@ const Book = () => {
 
       const filename =
         safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
+      setProgress(0.98);
+      setProgressLabel("সংরক্ষণ হচ্ছে...");
       pdf.save(`${filename}.pdf`);
+      setProgress(1);
     } finally {
       container.remove();
-      setGenerating(false);
+      setTimeout(() => {
+        setGenerating(false);
+        setProgress(0);
+        setProgressLabel("");
+      }, 350);
     }
   };
 
@@ -1139,6 +1256,34 @@ const Book = () => {
 
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+        {generating ? (
+          <div className="pointer-events-auto w-full sm:w-96 bg-white border border-slate-200 shadow-xl rounded-2xl px-5 py-4">
+            <div className="flex items-center justify-between mb-2 gap-3">
+              <div className="flex items-center gap-2 text-slate-800 text-sm font-medium">
+                <Loader2 size={16} className="animate-spin" />
+                <span>{progressLabel || "প্রক্রিয়াধীন..."}</span>
+              </div>
+              <span className="text-xs text-slate-500 tabular-nums">
+                {Math.round(progress * 100)}%
+              </span>
+            </div>
+            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className="h-full bg-slate-900 transition-all duration-200"
+                style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }}
+              />
+            </div>
+          </div>
+        ) : (
+        <>
+        <button
+          onClick={handleClearAll}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-rose-600 border border-slate-200 shadow-lg hover:bg-rose-50 transition-all"
+          title="সব লেখা মুছে ফেলুন"
+        >
+          <Trash2 size={18} />
+        </button>
+
         <button
           onClick={() => setIncludeIndex((v) => !v)}
           className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
@@ -1182,18 +1327,11 @@ const Book = () => {
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
           title="Download as PDF"
         >
-          {generating ? (
-            <>
-              <Loader2 size={18} className="animate-spin" />
-              <span className="text-sm font-medium hidden sm:inline">Generating...</span>
-            </>
-          ) : (
-            <>
-              <Download size={18} />
-              <span className="text-sm font-medium hidden sm:inline">Download</span>
-            </>
-          )}
+          <Download size={18} />
+          <span className="text-sm font-medium hidden sm:inline">Download</span>
         </button>
+        </>
+        )}
       </div>
     </div>
   );
