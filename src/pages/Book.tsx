@@ -1480,8 +1480,16 @@ const Book = () => {
           />
         ) : (
           <textarea
+            ref={contentRef}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              requestAnimationFrame(updateSelToolbar);
+            }}
+            onSelect={updateSelToolbar}
+            onMouseUp={updateSelToolbar}
+            onKeyUp={updateSelToolbar}
+            onBlur={() => setTimeout(() => setSelToolbar(null), 150)}
             placeholder="এখানে আপনার বই লেখা শুরু করুন... (Markdown সমর্থিত)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
@@ -1489,6 +1497,82 @@ const Book = () => {
           />
         )}
       </div>
+
+      {/* Floating selection toolbar (Bold / Italic) */}
+      {selToolbar && !preview && (
+        <div
+          data-selection-toolbar
+          className="fixed z-50 flex items-center gap-1 bg-slate-900 text-white rounded-xl shadow-2xl px-1 py-1 animate-in fade-in-0 zoom-in-95"
+          style={{
+            top: Math.max(8, selToolbar.top),
+            left: Math.max(8, selToolbar.left),
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            onClick={() => wrapSelection("**")}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            title="Bold (**text**)"
+          >
+            <BoldIcon size={16} />
+          </button>
+          <button
+            onClick={() => wrapSelection("*")}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            title="Italic (*text*)"
+          >
+            <ItalicIcon size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* AI panel */}
+      {aiOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-slate-900 font-medium">
+                <Sparkles size={18} className="text-violet-600" />
+                <span>Local AI Assistant</span>
+              </div>
+              <button
+                onClick={() => !aiBusy && setAiOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
+                disabled={aiBusy}
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="AI কে কী করতে বলবেন লিখুন... (যেমন: 'বন্ধুত্ব নিয়ে একটি ছোট অনুচ্ছেদ লেখো')"
+              rows={4}
+              disabled={aiBusy}
+              className="w-full font-mixed text-base bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-slate-400 resize-none"
+            />
+            {aiStatus && (
+              <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
+                {aiBusy && <Loader2 size={12} className="animate-spin" />}
+                <span>{aiStatus}</span>
+              </div>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-[11px] text-slate-400">
+                মডেল ব্রাউজারেই চলে (~150MB, একবার ডাউনলোড হবে)।
+              </p>
+              <button
+                onClick={runAI}
+                disabled={aiBusy || !aiPrompt.trim()}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {aiBusy ? <Loader2 size={14} className="animate-spin" /> : <SendIcon size={14} />}
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
