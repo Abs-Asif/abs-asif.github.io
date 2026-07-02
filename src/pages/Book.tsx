@@ -1605,6 +1605,14 @@ const Book = () => {
         </button>
 
         <button
+          onClick={() => setAiOpen(true)}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
+          title="Local AI (transformers.js)"
+        >
+          <Sparkles size={18} />
+        </button>
+
+        <button
           onClick={() => setIncludeIndex((v) => !v)}
           className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
             includeIndex
