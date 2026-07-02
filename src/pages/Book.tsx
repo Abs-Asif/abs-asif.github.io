@@ -572,7 +572,7 @@ const Book = () => {
         <h1 style="
           font-size: 26pt;
           font-weight: 400;
-          line-height: 1.2;
+          line-height: 1.35;
           margin: 0 0 14mm 0;
           letter-spacing: normal;
           word-break: keep-all;
@@ -580,7 +580,8 @@ const Book = () => {
           font-feature-settings: normal;
           font-variant-ligatures: normal;
           white-space: normal;
-        ">${escapeHtml(safeTitle)}</h1>
+          padding: 0.15em 0 0.25em;
+        ">${parseInlineMd(safeTitle)}</h1>
         ${
           safeAuthor
             ? `<div style="
@@ -592,7 +593,7 @@ const Book = () => {
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 white-space: pre-wrap;
-              ">${escapeHtml(safeAuthor)}</div>`
+              ">${parseInlineMd(safeAuthor)}</div>`
             : ""
         }
         <div data-pdf-cover-footer style="
