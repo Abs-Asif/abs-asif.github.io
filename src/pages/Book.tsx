@@ -895,7 +895,7 @@ const Book = () => {
           item.className = "fn-item";
           item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
           fnWrap.appendChild(item);
-          const cap = await captureElement(item, { pad: false });
+          const cap = await captureElement(item, { pad: true });
           fnTiles.set(id, { id, cap });
         }
         fnWrap.remove();
