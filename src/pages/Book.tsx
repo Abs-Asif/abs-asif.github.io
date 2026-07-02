@@ -1,6 +1,19 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
-import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree, Trash2 } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  Eye,
+  Pencil,
+  HelpCircle,
+  ListTree,
+  Trash2,
+  Sparkles,
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
+  X as XIcon,
+  Send as SendIcon,
+} from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
@@ -25,6 +38,18 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
 };
 marked.use({ renderer: codeRenderer });
+
+// Parse a short single-line string as inline markdown (bold/italic/etc).
+// Used for the cover title & author so users can write **bold** / *italic*.
+function parseInlineMd(s: string): string {
+  if (!s) return "";
+  // marked.parseInline returns HTML without wrapping in <p>.
+  try {
+    return marked.parseInline(s, { async: false, gfm: true, breaks: false }) as string;
+  } catch {
+    return escapeHtml(s);
+  }
+}
 
 type NumeralScript = "bn" | "ar" | "en";
 
