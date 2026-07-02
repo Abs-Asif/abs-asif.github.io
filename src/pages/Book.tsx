@@ -1,6 +1,19 @@
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useRef, useState } from "react";
 import { useEffect } from "react";
-import { Download, Loader2, Eye, Pencil, HelpCircle, ListTree, Trash2 } from "lucide-react";
+import {
+  Download,
+  Loader2,
+  Eye,
+  Pencil,
+  HelpCircle,
+  ListTree,
+  Trash2,
+  Sparkles,
+  Bold as BoldIcon,
+  Italic as ItalicIcon,
+  X as XIcon,
+  Send as SendIcon,
+} from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
 import { marked } from "marked";
@@ -25,6 +38,18 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
 };
 marked.use({ renderer: codeRenderer });
+
+// Parse a short single-line string as inline markdown (bold/italic/etc).
+// Used for the cover title & author so users can write **bold** / *italic*.
+function parseInlineMd(s: string): string {
+  if (!s) return "";
+  // marked.parseInline returns HTML without wrapping in <p>.
+  try {
+    return marked.parseInline(s, { async: false, gfm: true, breaks: false }) as string;
+  } catch {
+    return escapeHtml(s);
+  }
+}
 
 type NumeralScript = "bn" | "ar" | "en";
 
@@ -267,6 +292,192 @@ const Book = () => {
   const [progressLabel, setProgressLabel] = useState("");
   const [hydrated, setHydrated] = useState(false);
 
+  // Refs for editor + selection toolbar
+  const contentRef = useRef<HTMLTextAreaElement | null>(null);
+  const [selToolbar, setSelToolbar] = useState<{
+    top: number;
+    left: number;
+  } | null>(null);
+
+  // AI panel state
+  const [aiOpen, setAiOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [aiBusy, setAiBusy] = useState(false);
+  const [aiStatus, setAiStatus] = useState("");
+  const aiPipelineRef = useRef<any>(null);
+
+  const insertAtCursor = (text: string) => {
+    const ta = contentRef.current;
+    if (!ta) {
+      setContent((c) => c + text);
+      return;
+    }
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = content.slice(0, start) + text + content.slice(end);
+    setContent(next);
+    // Restore caret after React re-render.
+    requestAnimationFrame(() => {
+      ta.focus();
+      const pos = start + text.length;
+      ta.setSelectionRange(pos, pos);
+    });
+  };
+
+  const wrapSelection = (marker: string) => {
+    const ta = contentRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return;
+    const selected = content.slice(start, end);
+    const next =
+      content.slice(0, start) + marker + selected + marker + content.slice(end);
+    setContent(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + marker.length, end + marker.length);
+      updateSelToolbar();
+    });
+  };
+
+  // Mirror-div trick to compute caret coordinates inside a textarea.
+  const measureCaretRect = (ta: HTMLTextAreaElement, index: number) => {
+    const style = window.getComputedStyle(ta);
+    const div = document.createElement("div");
+    // Copy relevant styles.
+    const props = [
+      "boxSizing",
+      "width",
+      "height",
+      "overflowX",
+      "overflowY",
+      "borderTopWidth",
+      "borderRightWidth",
+      "borderBottomWidth",
+      "borderLeftWidth",
+      "paddingTop",
+      "paddingRight",
+      "paddingBottom",
+      "paddingLeft",
+      "fontStyle",
+      "fontVariant",
+      "fontWeight",
+      "fontStretch",
+      "fontSize",
+      "fontSizeAdjust",
+      "lineHeight",
+      "fontFamily",
+      "textAlign",
+      "textTransform",
+      "textIndent",
+      "textDecoration",
+      "letterSpacing",
+      "wordSpacing",
+      "tabSize",
+      "MozTabSize" as any,
+      "whiteSpace",
+      "wordWrap",
+    ];
+    props.forEach((p) => {
+      // @ts-ignore
+      div.style[p] = (style as any)[p];
+    });
+    div.style.position = "absolute";
+    div.style.visibility = "hidden";
+    div.style.whiteSpace = "pre-wrap";
+    div.style.wordWrap = "break-word";
+    div.style.top = "0";
+    div.style.left = "-9999px";
+    const value = ta.value.slice(0, index);
+    div.textContent = value;
+    const span = document.createElement("span");
+    span.textContent = ta.value.slice(index) || ".";
+    div.appendChild(span);
+    document.body.appendChild(div);
+    const rect = span.getBoundingClientRect();
+    const taRect = ta.getBoundingClientRect();
+    const lineH = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
+    // Position relative to viewport
+    const top = taRect.top + (rect.top - div.getBoundingClientRect().top) - ta.scrollTop;
+    const left =
+      taRect.left + (rect.left - div.getBoundingClientRect().left) - ta.scrollLeft;
+    document.body.removeChild(div);
+    return { top, left, lineHeight: lineH };
+  };
+
+  const updateSelToolbar = () => {
+    const ta = contentRef.current;
+    if (!ta) return setSelToolbar(null);
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    if (start === end) return setSelToolbar(null);
+    // Anchor to selection start (works well for a small floating toolbar).
+    const { top, left } = measureCaretRect(ta, start);
+    setSelToolbar({ top: top - 44, left });
+  };
+
+  // Hide toolbar when clicking outside the textarea and toolbar.
+  useEffect(() => {
+    const onDown = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest("[data-selection-toolbar]")) return;
+      if (t === contentRef.current) return;
+      setSelToolbar(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, []);
+
+  // ---- AI (transformers.js) ----
+  const ensurePipeline = async () => {
+    if (aiPipelineRef.current) return aiPipelineRef.current;
+    setAiStatus("মডেল ডাউনলোড হচ্ছে (প্রথমবার একটু সময় লাগবে)...");
+    const mod = await import("@huggingface/transformers");
+    // Small instruction-tuned model (~150MB) that runs entirely in the browser.
+    const pipe = await mod.pipeline(
+      "text2text-generation",
+      "Xenova/LaMini-Flan-T5-77M",
+      {
+        progress_callback: (p: any) => {
+          if (p?.status === "progress" && typeof p.progress === "number") {
+            setAiStatus(
+              `মডেল লোড হচ্ছে... ${Math.round(p.progress)}%`
+            );
+          } else if (p?.status === "ready") {
+            setAiStatus("প্রস্তুত।");
+          }
+        },
+      } as any
+    );
+    aiPipelineRef.current = pipe;
+    return pipe;
+  };
+
+  const runAI = async () => {
+    const prompt = aiPrompt.trim();
+    if (!prompt || aiBusy) return;
+    setAiBusy(true);
+    setAiStatus("প্রক্রিয়াধীন...");
+    try {
+      const pipe = await ensurePipeline();
+      setAiStatus("উত্তর তৈরি হচ্ছে...");
+      const out = await pipe(prompt, { max_new_tokens: 220 });
+      const text =
+        Array.isArray(out) && out[0]?.generated_text
+          ? String(out[0].generated_text)
+          : String(out);
+      insertAtCursor((content.length && !content.endsWith("\n") ? "\n\n" : "") + text);
+      setAiPrompt("");
+      setAiStatus("");
+      setAiOpen(false);
+    } catch (e: any) {
+      setAiStatus("ত্রুটি: " + (e?.message || "AI চালানো যায়নি।"));
+    } finally {
+      setAiBusy(false);
+    }
+  };
+
   // Load cached draft on mount.
   useEffect(() => {
     try {
@@ -359,7 +570,18 @@ const Book = () => {
     const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
-      [data-pdf-body] p { margin: 0 0 0.75em 0; }
+      [data-pdf-body] p { margin: 0 0 0.75em 0; padding-bottom: 0.05em; }
+      /* Arabic / RTL paragraphs need more vertical room so descenders
+         (e.g. ج، ح، خ، ع، غ) are not clipped by html2canvas. */
+      [data-pdf-body] [dir="rtl"] {
+        line-height: 2.05 !important;
+        padding-bottom: 0.35em;
+      }
+      [data-pdf-body] p[dir="rtl"],
+      [data-pdf-body] li[dir="rtl"],
+      [data-pdf-body] blockquote[dir="rtl"] {
+        font-family: 'Scheherazade New', 'Noto Naskh Arabic', 'TimesNR', serif;
+      }
       [data-pdf-body] h1,
       [data-pdf-body] h2,
       [data-pdf-body] h3,
@@ -492,12 +714,16 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 5px 7px;
-        vertical-align: top;
+        padding: 7px 9px 8px 9px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.4;
+        line-height: 1.55;
         box-sizing: border-box;
+      }
+      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] {
+        line-height: 1.9;
+        padding: 7px 9px 10px 9px;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] td > p,
@@ -520,8 +746,8 @@ const Book = () => {
         gap: 0.55em;
         align-items: flex-start;
         margin: 0;
-        padding: 0;
-        line-height: 1.5;
+        padding: 0 0 0.25em 0;
+        line-height: 1.75;
       }
       [data-pdf-body] .fn-item .fn-num {
         font-weight: 600;
@@ -529,8 +755,17 @@ const Book = () => {
         text-align: right;
         color: #1d4ed8;
       }
-      [data-pdf-body] .fn-item .fn-body { flex: 1; text-align: justify; }
-      [data-pdf-body] .fn-item .fn-body > p { margin: 0; }
+      [data-pdf-body] .fn-item .fn-body {
+        flex: 1;
+        text-align: justify;
+        line-height: 1.75;
+        padding-bottom: 0.2em;
+      }
+      [data-pdf-body] .fn-item .fn-body > p { margin: 0; padding-bottom: 0.15em; }
+      [data-pdf-body] .fn-item .fn-body [dir="rtl"] {
+        line-height: 2.0 !important;
+        padding-bottom: 0.35em;
+      }
     `;
     container.appendChild(styleEl);
 
@@ -547,7 +782,7 @@ const Book = () => {
         <h1 style="
           font-size: 26pt;
           font-weight: 400;
-          line-height: 1.2;
+          line-height: 1.35;
           margin: 0 0 14mm 0;
           letter-spacing: normal;
           word-break: keep-all;
@@ -555,7 +790,8 @@ const Book = () => {
           font-feature-settings: normal;
           font-variant-ligatures: normal;
           white-space: normal;
-        ">${escapeHtml(safeTitle)}</h1>
+          padding: 0.15em 0 0.25em;
+        ">${parseInlineMd(safeTitle)}</h1>
         ${
           safeAuthor
             ? `<div style="
@@ -567,7 +803,7 @@ const Book = () => {
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 white-space: pre-wrap;
-              ">${escapeHtml(safeAuthor)}</div>`
+              ">${parseInlineMd(safeAuthor)}</div>`
             : ""
         }
         <div data-pdf-cover-footer style="
@@ -845,7 +1081,7 @@ const Book = () => {
           item.className = "fn-item";
           item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
           fnWrap.appendChild(item);
-          const cap = await captureElement(item, { pad: false });
+          const cap = await captureElement(item, { pad: true });
           fnTiles.set(id, { id, cap });
         }
         fnWrap.remove();
@@ -1244,8 +1480,16 @@ const Book = () => {
           />
         ) : (
           <textarea
+            ref={contentRef}
             value={content}
-            onChange={(e) => setContent(e.target.value)}
+            onChange={(e) => {
+              setContent(e.target.value);
+              requestAnimationFrame(updateSelToolbar);
+            }}
+            onSelect={updateSelToolbar}
+            onMouseUp={updateSelToolbar}
+            onKeyUp={updateSelToolbar}
+            onBlur={() => setTimeout(() => setSelToolbar(null), 150)}
             placeholder="এখানে আপনার বই লেখা শুরু করুন... (Markdown সমর্থিত)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
@@ -1253,6 +1497,82 @@ const Book = () => {
           />
         )}
       </div>
+
+      {/* Floating selection toolbar (Bold / Italic) */}
+      {selToolbar && !preview && (
+        <div
+          data-selection-toolbar
+          className="fixed z-50 flex items-center gap-1 bg-slate-900 text-white rounded-xl shadow-2xl px-1 py-1 animate-in fade-in-0 zoom-in-95"
+          style={{
+            top: Math.max(8, selToolbar.top),
+            left: Math.max(8, selToolbar.left),
+          }}
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          <button
+            onClick={() => wrapSelection("**")}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            title="Bold (**text**)"
+          >
+            <BoldIcon size={16} />
+          </button>
+          <button
+            onClick={() => wrapSelection("*")}
+            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
+            title="Italic (*text*)"
+          >
+            <ItalicIcon size={16} />
+          </button>
+        </div>
+      )}
+
+      {/* AI panel */}
+      {aiOpen && (
+        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
+            <div className="flex items-center justify-between mb-3">
+              <div className="flex items-center gap-2 text-slate-900 font-medium">
+                <Sparkles size={18} className="text-violet-600" />
+                <span>Local AI Assistant</span>
+              </div>
+              <button
+                onClick={() => !aiBusy && setAiOpen(false)}
+                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
+                disabled={aiBusy}
+              >
+                <XIcon size={16} />
+              </button>
+            </div>
+            <textarea
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+              placeholder="AI কে কী করতে বলবেন লিখুন... (যেমন: 'বন্ধুত্ব নিয়ে একটি ছোট অনুচ্ছেদ লেখো')"
+              rows={4}
+              disabled={aiBusy}
+              className="w-full font-mixed text-base bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-slate-400 resize-none"
+            />
+            {aiStatus && (
+              <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
+                {aiBusy && <Loader2 size={12} className="animate-spin" />}
+                <span>{aiStatus}</span>
+              </div>
+            )}
+            <div className="mt-3 flex items-center justify-between gap-2">
+              <p className="text-[11px] text-slate-400">
+                মডেল ব্রাউজারেই চলে (~150MB, একবার ডাউনলোড হবে)।
+              </p>
+              <button
+                onClick={runAI}
+                disabled={aiBusy || !aiPrompt.trim()}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {aiBusy ? <Loader2 size={14} className="animate-spin" /> : <SendIcon size={14} />}
+                Send
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
@@ -1282,6 +1602,14 @@ const Book = () => {
           title="সব লেখা মুছে ফেলুন"
         >
           <Trash2 size={18} />
+        </button>
+
+        <button
+          onClick={() => setAiOpen(true)}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
+          title="Local AI (transformers.js)"
+        >
+          <Sparkles size={18} />
         </button>
 
         <button
