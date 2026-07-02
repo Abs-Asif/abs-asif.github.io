@@ -384,7 +384,18 @@ const Book = () => {
     const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
-      [data-pdf-body] p { margin: 0 0 0.75em 0; }
+      [data-pdf-body] p { margin: 0 0 0.75em 0; padding-bottom: 0.05em; }
+      /* Arabic / RTL paragraphs need more vertical room so descenders
+         (e.g. ج، ح، خ، ع، غ) are not clipped by html2canvas. */
+      [data-pdf-body] [dir="rtl"] {
+        line-height: 2.05 !important;
+        padding-bottom: 0.35em;
+      }
+      [data-pdf-body] p[dir="rtl"],
+      [data-pdf-body] li[dir="rtl"],
+      [data-pdf-body] blockquote[dir="rtl"] {
+        font-family: 'Scheherazade New', 'Noto Naskh Arabic', 'TimesNR', serif;
+      }
       [data-pdf-body] h1,
       [data-pdf-body] h2,
       [data-pdf-body] h3,
@@ -517,12 +528,16 @@ const Book = () => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 5px 7px;
-        vertical-align: top;
+        padding: 7px 9px 8px 9px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.4;
+        line-height: 1.55;
         box-sizing: border-box;
+      }
+      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] {
+        line-height: 1.9;
+        padding: 7px 9px 10px 9px;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] td > p,
@@ -545,8 +560,8 @@ const Book = () => {
         gap: 0.55em;
         align-items: flex-start;
         margin: 0;
-        padding: 0;
-        line-height: 1.5;
+        padding: 0 0 0.25em 0;
+        line-height: 1.75;
       }
       [data-pdf-body] .fn-item .fn-num {
         font-weight: 600;
@@ -554,8 +569,17 @@ const Book = () => {
         text-align: right;
         color: #1d4ed8;
       }
-      [data-pdf-body] .fn-item .fn-body { flex: 1; text-align: justify; }
-      [data-pdf-body] .fn-item .fn-body > p { margin: 0; }
+      [data-pdf-body] .fn-item .fn-body {
+        flex: 1;
+        text-align: justify;
+        line-height: 1.75;
+        padding-bottom: 0.2em;
+      }
+      [data-pdf-body] .fn-item .fn-body > p { margin: 0; padding-bottom: 0.15em; }
+      [data-pdf-body] .fn-item .fn-body [dir="rtl"] {
+        line-height: 2.0 !important;
+        padding-bottom: 0.35em;
+      }
     `;
     container.appendChild(styleEl);
 
