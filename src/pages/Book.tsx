@@ -572,11 +572,14 @@ const Book = () => {
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
       [data-pdf-body] p { margin: 0 0 0.75em 0; padding-bottom: 0.05em; }
-      /* Arabic / RTL paragraphs need more vertical room so descenders
-         (e.g. ج، ح، خ، ع، غ) are not clipped by html2canvas. */
+      /* Arabic / RTL paragraphs: html2canvas tends to clip descenders
+         (ج ح خ ع غ ي) unless we leave real box-space below the last line.
+         We use generous line-height AND explicit top/bottom padding so the
+         glyph bounding box always fits. */
       [data-pdf-body] [dir="rtl"] {
-        line-height: 2.05 !important;
-        padding-bottom: 0.35em;
+        line-height: 2.15 !important;
+        padding-top: 0.25em;
+        padding-bottom: 0.75em;
       }
       [data-pdf-body] p[dir="rtl"],
       [data-pdf-body] li[dir="rtl"],
@@ -594,7 +597,16 @@ const Book = () => {
         text-align: center;
         margin: 1em 0 0.55em;
         line-height: 1.55;
-        padding: 0.15em 0 0.25em;
+        padding: 0.2em 0 0.45em;
+      }
+      [data-pdf-body] h1[dir="rtl"],
+      [data-pdf-body] h2[dir="rtl"],
+      [data-pdf-body] h3[dir="rtl"],
+      [data-pdf-body] h4[dir="rtl"],
+      [data-pdf-body] h5[dir="rtl"],
+      [data-pdf-body] h6[dir="rtl"] {
+        line-height: 1.9;
+        padding: 0.25em 0 0.8em;
       }
       [data-pdf-body] h1 { font-size: 22pt; }
       [data-pdf-body] h2 { font-size: 18pt; }
@@ -706,30 +718,36 @@ const Book = () => {
       }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
+      /* Tables — uniform padding on all sides, top-aligned so text sits at
+         the top of the cell instead of being pushed down by vertical-align:
+         middle when other cells in the row wrap to multiple lines. */
       [data-pdf-body] table {
         border-collapse: collapse;
         width: 100%;
-        margin: 0.5em 0 1em;
-        table-layout: fixed;
+        margin: 0.7em 0 1em;
+        table-layout: auto;
         word-wrap: break-word;
+        font-size: 10pt;
       }
-      [data-pdf-body] th, [data-pdf-body] td {
+      [data-pdf-body] th,
+      [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 7px 9px 8px 9px;
-        vertical-align: middle;
+        padding: 8px 10px;
+        vertical-align: top;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.55;
+        line-height: 1.5;
         box-sizing: border-box;
       }
-      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] {
-        line-height: 1.9;
-        padding: 7px 9px 10px 9px;
-      }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
-      [data-pdf-body] td > p,
-      [data-pdf-body] th > p { margin: 0; padding: 0; }
-      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] { text-align: right; }
+      [data-pdf-body] td > p:only-child,
+      [data-pdf-body] th > p:only-child { margin: 0; padding: 0; }
+      [data-pdf-body] td[dir="rtl"],
+      [data-pdf-body] th[dir="rtl"] {
+        text-align: right;
+        line-height: 2.0;
+        padding: 8px 10px 14px 10px;
+      }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
       [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
       [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
@@ -742,30 +760,37 @@ const Book = () => {
         color: #1d4ed8;
         margin: 0 0.05em;
       }
+      /* Footnotes — tight vertical rhythm, but still enough bottom space
+         so descenders (Bangla ৃ, য়, Arabic ج, English g,y,p) aren't clipped. */
       [data-pdf-body] .fn-item {
         display: flex;
-        gap: 0.55em;
+        gap: 0.5em;
         align-items: flex-start;
         margin: 0;
-        padding: 0 0 0.25em 0;
-        line-height: 1.75;
+        padding: 0 0 0.15em 0;
+        line-height: 1.4;
       }
       [data-pdf-body] .fn-item .fn-num {
         font-weight: 600;
         min-width: 1.6em;
         text-align: right;
         color: #1d4ed8;
+        line-height: 1.4;
       }
       [data-pdf-body] .fn-item .fn-body {
         flex: 1;
         text-align: justify;
-        line-height: 1.75;
+        line-height: 1.4;
         padding-bottom: 0.2em;
       }
-      [data-pdf-body] .fn-item .fn-body > p { margin: 0; padding-bottom: 0.15em; }
+      [data-pdf-body] .fn-item .fn-body > p {
+        margin: 0;
+        padding-bottom: 0.12em;
+        line-height: 1.4;
+      }
       [data-pdf-body] .fn-item .fn-body [dir="rtl"] {
-        line-height: 2.0 !important;
-        padding-bottom: 0.35em;
+        line-height: 1.9 !important;
+        padding-bottom: 0.55em;
       }
     `;
     container.appendChild(styleEl);
