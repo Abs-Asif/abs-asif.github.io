@@ -1612,7 +1612,7 @@ const Book = () => {
             )}
             <div className="mt-3 flex items-center justify-between gap-2">
               <p className="text-[11px] text-slate-400">
-                মডেল ব্রাউজারেই চলে (~150MB, একবার ডাউনলোড হবে)।
+                মডেল ব্রাউজারেই চলে — সম্পূর্ণ লোকাল। (Experimental)
               </p>
               <button
                 onClick={runAI}
