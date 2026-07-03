@@ -9,6 +9,7 @@ import {
   ListTree,
   Trash2,
   Sparkles,
+  FlaskConical,
   Bold as BoldIcon,
   Italic as ItalicIcon,
   X as XIcon,
