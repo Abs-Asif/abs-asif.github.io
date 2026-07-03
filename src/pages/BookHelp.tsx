@@ -1,6 +1,6 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FlaskConical } from "lucide-react";
 import { marked } from "marked";
 import { markedHighlight } from "marked-highlight";
 import hljs from "highlight.js";
@@ -249,6 +249,24 @@ const sections: Section[] = [
   },
 ];
 
+/* Sections shown only when experimental features are enabled. */
+const experimentalSections: Section[] = [
+  {
+    title: "লোকাল AI সহকারী",
+    desc: (
+      <>
+        <strong>Experimental.</strong> নিচের ফ্লাস্ক-বোতাম চালু থাকলে বইয়ের
+        পাতায় একটা বেগুনি <em>Sparkles</em> বোতাম আসবে (মডেল লোড হওয়ার পর)।
+        সেখানে ছোট একটা কমান্ড লিখে পাঠালে ব্রাউজারের ভেতরেই একটা ছোট AI মডেল
+        (~৭৭M) উত্তর তৈরি করে সরাসরি বইয়ের লেখায় বসিয়ে দেবে। কোনো ডেটা
+        সার্ভারে যায় না — সব কিছু আপনার মেশিনেই চলে। ছোট মডেল, তাই সাধারণ ও
+        সংক্ষিপ্ত কাজেই ভালো।
+      </>
+    ),
+    example: `> AI-কে বলুন: "বন্ধুত্ব নিয়ে ৩ লাইনের একটি অনুচ্ছেদ লেখো।"`,
+  },
+];
+
 const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
   const [text, setText] = useState(initial);
   const html = useMemo(
@@ -274,6 +292,12 @@ const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
 };
 
 const BookHelp = () => {
+  const [experimental, setExperimental] = useState(false);
+  useEffect(() => {
+    try {
+      setExperimental(localStorage.getItem("book-experimental-v1") === "1");
+    } catch {}
+  }, []);
   return (
     <div className="min-h-screen bg-white px-5 pt-8 md:px-16 md:pt-14 lg:px-28 pb-24">
       <div className="w-full max-w-3xl mx-auto">
@@ -308,6 +332,41 @@ const BookHelp = () => {
             </article>
           ))}
         </section>
+
+        {experimental && experimentalSections.length > 0 && (
+          <section className="mt-14 font-mixed">
+            <div className="flex items-center gap-2 mb-6">
+              <FlaskConical size={20} className="text-amber-600" />
+              <h2 className="text-xl md:text-2xl font-semibold text-slate-900">
+                পরীক্ষামূলক ফিচার
+              </h2>
+              <span className="ml-2 text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
+                Experimental
+              </span>
+            </div>
+            <p className="text-sm text-slate-500 mb-6">
+              এই ফিচারগুলো এখনো পরীক্ষার পর্যায়ে আছে — যেকোনো সময় বদলাতে বা
+              সরিয়ে ফেলতে পারি। বইয়ের পাতায় নিচের বার-এ ফ্লাস্ক বোতাম আছে,
+              সেটা দিয়ে চালু/বন্ধ করা যাবে।
+            </p>
+            <div className="space-y-10">
+              {experimentalSections.map((s, i) => (
+                <article key={i} className="border-b border-slate-100 pb-8">
+                  <h3 className="text-lg md:text-xl font-semibold text-slate-900 mb-2 flex items-center gap-2">
+                    {s.title}
+                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
+                      Experimental
+                    </span>
+                  </h3>
+                  <p className="text-base text-slate-700 leading-relaxed">
+                    {s.desc}
+                  </p>
+                  <MiniTry initial={s.example} />
+                </article>
+              ))}
+            </div>
+          </section>
+        )}
       </div>
     </div>
   );
