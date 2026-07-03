@@ -1375,9 +1375,7 @@ const Book = () => {
             }${indent}px;${
               isRTL ? "text-align:right;" : "text-align:left;"
             }">${escapeHtml(ch.text)}</td>`;
-            const pageCell = `<td style="padding:6px 4px; ${
-              isRTL ? "text-align:left;" : "text-align:right;"
-            }; white-space:nowrap; color:#475569;">${escapeHtml(pgLabel)}</td>`;
+            const pageCell = `<td style="padding:6px 8px; text-align:center; white-space:nowrap; color:#475569; width:16%;">${escapeHtml(pgLabel)}</td>`;
             return `<tr>${
               isRTL ? pageCell + nameCell : nameCell + pageCell
             }</tr>`;
