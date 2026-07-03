@@ -1658,12 +1658,26 @@ const Book = () => {
         </button>
 
         <button
-          onClick={() => setAiOpen(true)}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
-          title="Local AI (transformers.js)"
+          onClick={() => setExperimental((v) => !v)}
+          className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
+            experimental
+              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
+              : "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
+          }`}
+          title={`Experimental features: ${experimental ? "ON" : "OFF"}`}
         >
-          <Sparkles size={18} />
+          <FlaskConical size={18} />
         </button>
+
+        {experimental && aiReady && (
+          <button
+            onClick={() => setAiOpen(true)}
+            className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
+            title="Local AI (experimental)"
+          >
+            <Sparkles size={18} />
+          </button>
+        )}
 
         <button
           onClick={() => setIncludeIndex((v) => !v)}
