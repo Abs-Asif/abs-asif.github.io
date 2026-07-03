@@ -306,6 +306,22 @@ const Book = () => {
   const [aiBusy, setAiBusy] = useState(false);
   const [aiStatus, setAiStatus] = useState("");
   const aiPipelineRef = useRef<any>(null);
+  const [aiReady, setAiReady] = useState(false);
+
+  // Experimental features toggle (persisted).
+  const EXP_KEY = "book-experimental-v1";
+  const [experimental, setExperimental] = useState(false);
+  useEffect(() => {
+    try {
+      const v = localStorage.getItem(EXP_KEY);
+      if (v === "1") setExperimental(true);
+    } catch {}
+  }, []);
+  useEffect(() => {
+    try {
+      localStorage.setItem(EXP_KEY, experimental ? "1" : "0");
+    } catch {}
+  }, [experimental]);
 
   const insertAtCursor = (text: string) => {
     const ta = contentRef.current;
@@ -430,40 +446,53 @@ const Book = () => {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  // ---- AI (transformers.js) ----
+  // ---- AI (transformers.js) — tiny instruction-tuned model, silent load ----
   const ensurePipeline = async () => {
     if (aiPipelineRef.current) return aiPipelineRef.current;
-    setAiStatus("মডেল ডাউনলোড হচ্ছে (প্রথমবার একটু সময় লাগবে)...");
     const mod = await import("@huggingface/transformers");
-    // Small instruction-tuned model (~150MB) that runs entirely in the browser.
+    // LaMini-Flan-T5-77M: ~77M params, one of the smallest instruction-
+    // tuned models that still produces coherent output in the browser.
     const pipe = await mod.pipeline(
       "text2text-generation",
-      "Xenova/LaMini-Flan-T5-77M",
-      {
-        progress_callback: (p: any) => {
-          if (p?.status === "progress" && typeof p.progress === "number") {
-            setAiStatus(
-              `মডেল লোড হচ্ছে... ${Math.round(p.progress)}%`
-            );
-          } else if (p?.status === "ready") {
-            setAiStatus("প্রস্তুত।");
-          }
-        },
-      } as any
+      "Xenova/LaMini-Flan-T5-77M"
     );
     aiPipelineRef.current = pipe;
     return pipe;
   };
 
+  // Preload silently in the background whenever the AI experimental
+  // feature is enabled. The button only appears once the model is ready.
+  useEffect(() => {
+    if (!experimental) return;
+    if (aiReady) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        await ensurePipeline();
+        if (!cancelled) setAiReady(true);
+      } catch {
+        /* silent — button just won't show */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [experimental, aiReady]);
+
+  // Short "house rules" the tiny model uses as context. Kept minimal to
+  // save tokens on a 77M model.
+  const AI_CONTEXT =
+    "You are helping write a book in Markdown. Rules: use # ## ### for headings; **bold**, *italic*; - for bullets; > for quotes; | tables |; ```lang code```; [[1]] cites footnote [[1==note text]]. Return only the Markdown content, no commentary.";
+
   const runAI = async () => {
     const prompt = aiPrompt.trim();
     if (!prompt || aiBusy) return;
     setAiBusy(true);
-    setAiStatus("প্রক্রিয়াধীন...");
+    setAiStatus("উত্তর তৈরি হচ্ছে...");
     try {
       const pipe = await ensurePipeline();
-      setAiStatus("উত্তর তৈরি হচ্ছে...");
-      const out = await pipe(prompt, { max_new_tokens: 220 });
+      const fullPrompt = `${AI_CONTEXT}\n\nTask: ${prompt}`;
+      const out = await pipe(fullPrompt, { max_new_tokens: 220 });
       const text =
         Array.isArray(out) && out[0]?.generated_text
           ? String(out[0].generated_text)
