@@ -1718,54 +1718,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         </div>
       )}
 
-      {/* AI panel */}
-      {aiOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-slate-900 font-medium">
-                <Sparkles size={18} className="text-violet-600" />
-                <span>Local AI Assistant</span>
-              </div>
-              <button
-                onClick={() => !aiBusy && setAiOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
-                disabled={aiBusy}
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
-            <textarea
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="AI কে কী করতে বলবেন লিখুন... (যেমন: 'বন্ধুত্ব নিয়ে একটি ছোট অনুচ্ছেদ লেখো')"
-              rows={4}
-              disabled={aiBusy}
-              className="w-full font-mixed text-base bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-slate-400 resize-none"
-            />
-            {aiStatus && (
-              <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
-                {aiBusy && <Loader2 size={12} className="animate-spin" />}
-                <span>{aiStatus}</span>
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-[11px] text-slate-400">
-                মডেল ব্রাউজারেই চলে — সম্পূর্ণ লোকাল। (Experimental)
-              </p>
-              <button
-                onClick={runAI}
-                disabled={aiBusy || !aiPrompt.trim()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {aiBusy ? <Loader2 size={14} className="animate-spin" /> : <SendIcon size={14} />}
-                Send
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
         {generating ? (
@@ -1788,10 +1740,27 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           </div>
         ) : (
         <>
+        <a
+          href="#"
+          onClick={(e) => { e.preventDefault(); window.location.hash = ""; }}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="বই-তালিকায় ফিরে যান"
+        >
+          <ArrowLeft size={18} />
+        </a>
+
+        <button
+          onClick={handlePaste}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="ক্লিপবোর্ড থেকে পেস্ট করুন"
+        >
+          <ClipboardPaste size={18} />
+        </button>
+
         <button
           onClick={handleClearAll}
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-rose-600 border border-slate-200 shadow-lg hover:bg-rose-50 transition-all"
-          title="সব লেখা মুছে ফেলুন"
+          title="এই বইটি মুছে ফেলুন"
         >
           <Trash2 size={18} />
         </button>
@@ -1807,16 +1776,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         >
           <FlaskConical size={18} />
         </button>
-
-        {experimental && aiReady && (
-          <button
-            onClick={() => setAiOpen(true)}
-            className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
-            title="Local AI (experimental)"
-          >
-            <Sparkles size={18} />
-          </button>
-        )}
 
         <button
           onClick={() => setIncludeIndex((v) => !v)}
@@ -1880,4 +1839,4 @@ function escapeHtml(str: string) {
     .replace(/'/g, "&#39;");
 }
 
-export default Book;
+export default BookRouter;
