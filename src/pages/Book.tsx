@@ -338,8 +338,150 @@ function renderForPdfBody(
   return { html: colorizeDigits(html), defs };
 }
 
-const Book = () => {
-  const CACHE_KEY = "book-draft-v1";
+/* =========================================================================
+   Multi-book routing wrapper
+   ---------------------------------------------------------------------
+   /book                → BookLanding (search + list + create)
+   /book#N              → BookEditor for book id N
+   ========================================================================= */
+
+const LIST_KEY = "book-list-v1";
+const cacheKeyFor = (id: number) => `book-draft-v1:${id}`;
+
+type BookMeta = { id: number; title: string; author: string };
+
+function loadBookList(): number[] {
+  try {
+    const raw = localStorage.getItem(LIST_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((x) => typeof x === "number");
+  } catch {
+    return [];
+  }
+}
+function saveBookList(ids: number[]) {
+  try { localStorage.setItem(LIST_KEY, JSON.stringify(ids)); } catch {}
+}
+function readBookMeta(id: number): BookMeta {
+  try {
+    const raw = localStorage.getItem(cacheKeyFor(id));
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        id,
+        title: typeof p.title === "string" ? p.title : "",
+        author: typeof p.author === "string" ? p.author : "",
+      };
+    }
+  } catch {}
+  return { id, title: "", author: "" };
+}
+
+const BookRouter = () => {
+  const [hash, setHash] = useState<string>(() =>
+    typeof window !== "undefined" ? window.location.hash : ""
+  );
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const m = hash.match(/^#(\d+)$/);
+  if (!m) return <BookLanding />;
+  const id = parseInt(m[1], 10);
+  return <BookEditor bookId={id} key={id} />;
+};
+
+const BookLanding = () => {
+  const [books, setBooks] = useState<BookMeta[]>([]);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const ids = loadBookList();
+    setBooks(ids.map(readBookMeta));
+  }, []);
+
+  const createBook = () => {
+    const ids = loadBookList();
+    const next = ids.length ? Math.max(...ids) + 1 : 1;
+    saveBookList([...ids, next]);
+    window.location.hash = `#${next}`;
+  };
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return books;
+    return books.filter(
+      (b) =>
+        (b.title || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q)
+    );
+  }, [books, query]);
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Sticky (non-scrolling) search bar */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 md:px-16 lg:px-28">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-4 py-2.5">
+            <Search size={16} className="text-slate-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="বই খুঁজুন..."
+              className="flex-1 bg-transparent focus:outline-none text-base font-mixed placeholder:text-slate-400"
+              dir="auto"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 px-5 py-8 md:px-16 lg:px-28">
+        <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {filtered.map((b) => (
+            <a
+              key={b.id}
+              href={`#${b.id}`}
+              className="group aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all p-4 flex flex-col justify-between"
+            >
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                #{b.id}
+              </div>
+              <div>
+                <div className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3">
+                  {b.title || <span className="text-slate-400">শিরোনামহীন</span>}
+                </div>
+                {b.author && (
+                  <div className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2">
+                    {b.author}
+                  </div>
+                )}
+              </div>
+            </a>
+          ))}
+          <button
+            onClick={createBook}
+            className="aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-500 transition-all flex flex-col items-center justify-center gap-2 text-slate-500"
+            title="নতুন বই তৈরি করুন"
+          >
+            <Plus size={32} />
+            <span className="text-xs font-medium">নতুন বই</span>
+          </button>
+        </div>
+        {books.length === 0 && (
+          <p className="text-center text-slate-400 text-sm mt-10 font-mixed">
+            এখনো কোনো বই নেই। উপরের + বোতাম চেপে নতুন একটা তৈরি করুন।
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const BookEditor = ({ bookId }: { bookId: number }) => {
+  const CACHE_KEY = cacheKeyFor(bookId);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
@@ -357,15 +499,7 @@ const Book = () => {
     left: number;
   } | null>(null);
 
-  // AI panel state
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiStatus, setAiStatus] = useState("");
-  const aiPipelineRef = useRef<any>(null);
-  const [aiReady, setAiReady] = useState(false);
-
-  // Experimental features toggle (persisted).
+  // Experimental features toggle (persisted, global).
   const EXP_KEY = "book-experimental-v1";
   const [experimental, setExperimental] = useState(false);
   useEffect(() => {
