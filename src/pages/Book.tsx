@@ -972,7 +972,10 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     `;
     container.appendChild(styleEl);
 
-    // Cover section
+    // Cover section — parse each line as inline markdown so bold/italic works
+    // AND explicit newlines in the title/author textareas become <br>.
+    const mlInline = (s: string) =>
+      s.split("\n").map(parseInlineMd).join("<br>");
     const coverHtml = `
       <div data-pdf-section data-pdf-cover style="
         width: 100%;
@@ -994,7 +997,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           font-variant-ligatures: normal;
           white-space: normal;
           padding: 0.15em 0 0.25em;
-        ">${parseInlineMd(safeTitle)}</h1>
+        ">${mlInline(safeTitle)}</h1>
         ${
           safeAuthor
             ? `<div style="
@@ -1006,7 +1009,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 white-space: pre-wrap;
-              ">${parseInlineMd(safeAuthor)}</div>`
+              ">${mlInline(safeAuthor)}</div>`
             : ""
         }
         <div data-pdf-cover-footer style="
@@ -1018,7 +1021,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           font-size: 9pt;
           color: #475569;
         ">
-          Made using <a href="https://abdullah.ami.bd/book" style="color:#1d4ed8;text-decoration:none;border-bottom:1px solid rgba(29,78,216,0.35);">abdullah.ami.bd/book</a>
+          Compiled by Abdullah Bari Asif.
         </div>
       </div>
     `;
