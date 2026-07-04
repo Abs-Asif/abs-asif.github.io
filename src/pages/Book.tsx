@@ -8,12 +8,13 @@ import {
   HelpCircle,
   ListTree,
   Trash2,
-  Sparkles,
   FlaskConical,
   Bold as BoldIcon,
   Italic as ItalicIcon,
-  X as XIcon,
-  Send as SendIcon,
+  ClipboardPaste,
+  Plus,
+  Search,
+  ArrowLeft,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
