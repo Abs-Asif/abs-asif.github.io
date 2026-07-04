@@ -174,6 +174,62 @@ function renderMarkdown(md: string): string {
   return applyArabicAlignment(html);
 }
 
+/* ---------- Auto-red numbers ---------- */
+// Wrap every run of ASCII/Bangla/Arabic digits in <span class="num-red"> so
+// they render in red inside preview + PDF. Skip anything inside .fn-ref (the
+// footnote markers keep their own color) and inside .num-marker (list markers
+// already carry their own script-aware formatting; also colored via CSS).
+function colorizeDigits(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const DIGIT_RE = /([0-9\u09E6-\u09EF\u0660-\u0669]+)/g;
+  const doc = new DOMParser().parseFromString(
+    `<div id="__root">${html}</div>`,
+    "text/html"
+  );
+  const root = doc.getElementById("__root");
+  if (!root) return html;
+  const skip = (el: Element | null): boolean => {
+    while (el && el !== root) {
+      if (el.classList && (el.classList.contains("fn-ref") ||
+          el.classList.contains("fn-num") ||
+          el.classList.contains("num-marker"))) return true;
+      const tag = el.tagName?.toLowerCase();
+      if (tag === "code" || tag === "pre" || tag === "a") return true;
+      el = el.parentElement;
+    }
+    return false;
+  };
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets: Text[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const t = n as Text;
+    if (!t.nodeValue || !DIGIT_RE.test(t.nodeValue)) continue;
+    DIGIT_RE.lastIndex = 0;
+    if (skip(t.parentElement)) continue;
+    targets.push(t);
+  }
+  for (const t of targets) {
+    const parts = (t.nodeValue || "").split(DIGIT_RE);
+    if (parts.length <= 1) continue;
+    const frag = doc.createDocumentFragment();
+    for (const p of parts) {
+      if (!p) continue;
+      if (DIGIT_RE.test(p)) {
+        DIGIT_RE.lastIndex = 0;
+        const s = doc.createElement("span");
+        s.className = "num-red";
+        s.textContent = p;
+        frag.appendChild(s);
+      } else {
+        frag.appendChild(doc.createTextNode(p));
+      }
+    }
+    t.parentNode?.replaceChild(frag, t);
+  }
+  return root.innerHTML;
+}
+
 /* ---------- Footnotes ---------- */
 // Definition: [[id==footnote body]]   Marker: [[id]]
 function extractFootnoteDefs(md: string): {
