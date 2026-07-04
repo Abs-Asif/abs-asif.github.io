@@ -1717,7 +1717,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         {/* Editor / Preview */}
         {preview ? (
           <div
-            className="font-mixed prose-xl md:prose-2xl max-w-none pdf-preview"
+            className={`font-mixed prose-xl md:prose-2xl max-w-none pdf-preview${experimental ? " exp" : ""}`}
             dir="auto"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
