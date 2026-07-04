@@ -969,6 +969,36 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         line-height: 1.9 !important;
         padding-bottom: 0.55em;
       }
+
+      /* ---------- Experimental features (opt-in via .exp on body) ---------- */
+      [data-pdf-body].exp h1,
+      [data-pdf-body].exp h2,
+      [data-pdf-body].exp h3 { font-variant: small-caps; letter-spacing: 0.02em; }
+      [data-pdf-body].exp h1::first-letter,
+      [data-pdf-body].exp h2::first-letter,
+      [data-pdf-body].exp h3::first-letter { color: #dc2626; }
+      [data-pdf-body].exp h1 + p::first-letter,
+      [data-pdf-body].exp h2 + p::first-letter,
+      [data-pdf-body].exp h3 + p::first-letter {
+        font-size: 2.6em;
+        float: left;
+        line-height: 0.9;
+        padding: 0.05em 0.12em 0 0;
+        font-weight: 500;
+      }
+      [data-pdf-body].exp pre {
+        counter-reset: pdf-line;
+        padding-left: 3em;
+        position: relative;
+      }
+      [data-pdf-body].exp pre code { display: block; }
+      [data-pdf-body].exp pre code { counter-reset: pdf-line; }
+      [data-pdf-body].exp blockquote {
+        border-left-width: 6px;
+        border-left-color: #dc2626;
+        background: #fef2f2;
+        border-radius: 6px;
+      }
     `;
     container.appendChild(styleEl);
 
