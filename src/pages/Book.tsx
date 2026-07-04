@@ -1129,7 +1129,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         const mmPerPx = CONTENT_W / elWidthPx;
         const heightMM = elHeightPx * mmPerPx;
         return {
-          dataUrl: canvas.toDataURL("image/jpeg", 0.95),
+          dataUrl: canvas.toDataURL("image/jpeg", JPEG_Q),
           heightMM,
           elWidthPx,
           elHeightPx,
@@ -1166,7 +1166,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         );
         const mmPerPx = CONTENT_W / section.elWidthPx;
         return {
-          dataUrl: slice.toDataURL("image/jpeg", 0.95),
+          dataUrl: slice.toDataURL("image/jpeg", JPEG_Q),
           heightMM: shPx * mmPerPx,
         };
       };
