@@ -1058,7 +1058,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         compress: true,
       });
 
-      const renderScale = 3; // higher quality / sharper PDF
+      const renderScale = 4; // sharper PDF; compressed jsPDF keeps size in check
+      const JPEG_Q = 0.88;   // tuned for quality/size balance
 
       type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
