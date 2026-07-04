@@ -637,65 +637,13 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  // ---- AI (transformers.js) — tiny instruction-tuned model, silent load ----
-  const ensurePipeline = async () => {
-    if (aiPipelineRef.current) return aiPipelineRef.current;
-    const mod = await import("@huggingface/transformers");
-    // LaMini-Flan-T5-77M: ~77M params, one of the smallest instruction-
-    // tuned models that still produces coherent output in the browser.
-    const pipe = await mod.pipeline(
-      "text2text-generation",
-      "Xenova/LaMini-Flan-T5-77M"
-    );
-    aiPipelineRef.current = pipe;
-    return pipe;
-  };
-
-  // Preload silently in the background whenever the AI experimental
-  // feature is enabled. The button only appears once the model is ready.
-  useEffect(() => {
-    if (!experimental) return;
-    if (aiReady) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await ensurePipeline();
-        if (!cancelled) setAiReady(true);
-      } catch {
-        /* silent — button just won't show */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [experimental, aiReady]);
-
-  // Short "house rules" the tiny model uses as context. Kept minimal to
-  // save tokens on a 77M model.
-  const AI_CONTEXT =
-    "You are helping write a book in Markdown. Rules: use # ## ### for headings; **bold**, *italic*; - for bullets; > for quotes; | tables |; ```lang code```; [[1]] cites footnote [[1==note text]]. Return only the Markdown content, no commentary.";
-
-  const runAI = async () => {
-    const prompt = aiPrompt.trim();
-    if (!prompt || aiBusy) return;
-    setAiBusy(true);
-    setAiStatus("উত্তর তৈরি হচ্ছে...");
+  // ---- Paste from clipboard into the editor at the current caret ----
+  const handlePaste = async () => {
     try {
-      const pipe = await ensurePipeline();
-      const fullPrompt = `${AI_CONTEXT}\n\nTask: ${prompt}`;
-      const out = await pipe(fullPrompt, { max_new_tokens: 220 });
-      const text =
-        Array.isArray(out) && out[0]?.generated_text
-          ? String(out[0].generated_text)
-          : String(out);
-      insertAtCursor((content.length && !content.endsWith("\n") ? "\n\n" : "") + text);
-      setAiPrompt("");
-      setAiStatus("");
-      setAiOpen(false);
-    } catch (e: any) {
-      setAiStatus("ত্রুটি: " + (e?.message || "AI চালানো যায়নি।"));
-    } finally {
-      setAiBusy(false);
+      const text = await navigator.clipboard.readText();
+      if (text) insertAtCursor(text);
+    } catch {
+      alert("ক্লিপবোর্ড থেকে পড়া যায়নি। ব্রাউজার অনুমতি চেক করুন।");
     }
   };
 
