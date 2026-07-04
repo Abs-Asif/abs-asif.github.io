@@ -314,7 +314,7 @@ function renderForPreview(md: string, script: NumeralScript): string {
       .join("");
     html += `<div class="fn-list">${items}</div>`;
   }
-  return html;
+  return colorizeDigits(html);
 }
 
 function indexTitle(script: NumeralScript): string {
@@ -335,7 +335,7 @@ function renderForPdfBody(
     breaks: true,
   }) as string;
   html = applyArabicAlignment(html);
-  return { html, defs };
+  return { html: colorizeDigits(html), defs };
 }
 
 const Book = () => {
