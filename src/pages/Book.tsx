@@ -676,16 +676,16 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const handleClearAll = () => {
     if (
       !window.confirm(
-        "সব লেখা মুছে ফেলা হবে (শিরোনাম, লেখক ও পুরো বই)। আপনি কি নিশ্চিত?"
+        "এই বইটি সম্পূর্ণভাবে মুছে ফেলা হবে। আপনি কি নিশ্চিত?"
       )
     )
       return;
-    setTitle("");
-    setAuthor("");
-    setContent("");
     try {
       localStorage.removeItem(CACHE_KEY);
+      const ids = loadBookList().filter((x) => x !== bookId);
+      saveBookList(ids);
     } catch {}
+    window.location.hash = "";
   };
 
   const previewHtml = useMemo(
