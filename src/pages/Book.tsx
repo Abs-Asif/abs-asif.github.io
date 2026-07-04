@@ -181,7 +181,8 @@ function renderMarkdown(md: string): string {
 // already carry their own script-aware formatting; also colored via CSS).
 function colorizeDigits(html: string): string {
   if (typeof DOMParser === "undefined") return html;
-  const DIGIT_RE = /([0-9\u09E6-\u09EF\u0660-\u0669]+)/g;
+  const DIGIT_RE = /[0-9\u09E6-\u09EF\u0660-\u0669]+/;
+  const DIGIT_SPLIT = /([0-9\u09E6-\u09EF\u0660-\u0669]+)/g;
   const doc = new DOMParser().parseFromString(
     `<div id="__root">${html}</div>`,
     "text/html"
@@ -205,18 +206,16 @@ function colorizeDigits(html: string): string {
   while ((n = walker.nextNode())) {
     const t = n as Text;
     if (!t.nodeValue || !DIGIT_RE.test(t.nodeValue)) continue;
-    DIGIT_RE.lastIndex = 0;
     if (skip(t.parentElement)) continue;
     targets.push(t);
   }
   for (const t of targets) {
-    const parts = (t.nodeValue || "").split(DIGIT_RE);
+    const parts = (t.nodeValue || "").split(DIGIT_SPLIT);
     if (parts.length <= 1) continue;
     const frag = doc.createDocumentFragment();
     for (const p of parts) {
       if (!p) continue;
       if (DIGIT_RE.test(p)) {
-        DIGIT_RE.lastIndex = 0;
         const s = doc.createElement("span");
         s.className = "num-red";
         s.textContent = p;
