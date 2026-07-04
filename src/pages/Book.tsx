@@ -1058,7 +1058,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
     // Body wrapper — natural typography
     const bodyWrap = document.createElement("div");
-    bodyWrap.className = "tiptap";
+    bodyWrap.className = experimental ? "tiptap exp" : "tiptap";
     bodyWrap.setAttribute("data-pdf-body", "");
     bodyWrap.style.fontSize = "11pt";
     bodyWrap.style.lineHeight = "1.65";
