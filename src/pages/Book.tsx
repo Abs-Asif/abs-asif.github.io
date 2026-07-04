@@ -1204,6 +1204,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
       let bodyPageNum = 0;
 
+      // Extract clean chapter text: strip any footnote markers (<sup class="fn-ref">)
+      // so index entries don't include the little superscript numbers.
+      const cleanChapterText = (el: HTMLElement): string => {
+        const clone = el.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll(".fn-ref").forEach((n) => n.remove());
+        return (clone.textContent || "").trim();
+      };
+
       // Pre-render page-number glyphs to canvas tiles once per number so the
       // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
       // fonts can't render Bangla / Arabic.
