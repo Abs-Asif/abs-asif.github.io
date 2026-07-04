@@ -8,12 +8,13 @@ import {
   HelpCircle,
   ListTree,
   Trash2,
-  Sparkles,
   FlaskConical,
   Bold as BoldIcon,
   Italic as ItalicIcon,
-  X as XIcon,
-  Send as SendIcon,
+  ClipboardPaste,
+  Plus,
+  Search,
+  ArrowLeft,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -173,6 +174,61 @@ function renderMarkdown(md: string): string {
   return applyArabicAlignment(html);
 }
 
+/* ---------- Auto-red numbers ---------- */
+// Wrap every run of ASCII/Bangla/Arabic digits in <span class="num-red"> so
+// they render in red inside preview + PDF. Skip anything inside .fn-ref (the
+// footnote markers keep their own color) and inside .num-marker (list markers
+// already carry their own script-aware formatting; also colored via CSS).
+function colorizeDigits(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const DIGIT_RE = /[0-9\u09E6-\u09EF\u0660-\u0669]+/;
+  const DIGIT_SPLIT = /([0-9\u09E6-\u09EF\u0660-\u0669]+)/g;
+  const doc = new DOMParser().parseFromString(
+    `<div id="__root">${html}</div>`,
+    "text/html"
+  );
+  const root = doc.getElementById("__root");
+  if (!root) return html;
+  const skip = (el: Element | null): boolean => {
+    while (el && el !== root) {
+      if (el.classList && (el.classList.contains("fn-ref") ||
+          el.classList.contains("fn-num") ||
+          el.classList.contains("num-marker"))) return true;
+      const tag = el.tagName?.toLowerCase();
+      if (tag === "code" || tag === "pre" || tag === "a") return true;
+      el = el.parentElement;
+    }
+    return false;
+  };
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets: Text[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const t = n as Text;
+    if (!t.nodeValue || !DIGIT_RE.test(t.nodeValue)) continue;
+    if (skip(t.parentElement)) continue;
+    targets.push(t);
+  }
+  for (const t of targets) {
+    const parts = (t.nodeValue || "").split(DIGIT_SPLIT);
+    if (parts.length <= 1) continue;
+    const frag = doc.createDocumentFragment();
+    for (const p of parts) {
+      if (!p) continue;
+      if (DIGIT_RE.test(p)) {
+        const s = doc.createElement("span");
+        s.className = "num-red";
+        s.textContent = p;
+        frag.appendChild(s);
+      } else {
+        frag.appendChild(doc.createTextNode(p));
+      }
+    }
+    t.parentNode?.replaceChild(frag, t);
+  }
+  return root.innerHTML;
+}
+
 /* ---------- Footnotes ---------- */
 // Definition: [[id==footnote body]]   Marker: [[id]]
 function extractFootnoteDefs(md: string): {
@@ -257,7 +313,7 @@ function renderForPreview(md: string, script: NumeralScript): string {
       .join("");
     html += `<div class="fn-list">${items}</div>`;
   }
-  return html;
+  return colorizeDigits(html);
 }
 
 function indexTitle(script: NumeralScript): string {
@@ -278,11 +334,153 @@ function renderForPdfBody(
     breaks: true,
   }) as string;
   html = applyArabicAlignment(html);
-  return { html, defs };
+  return { html: colorizeDigits(html), defs };
 }
 
-const Book = () => {
-  const CACHE_KEY = "book-draft-v1";
+/* =========================================================================
+   Multi-book routing wrapper
+   ---------------------------------------------------------------------
+   /book                → BookLanding (search + list + create)
+   /book#N              → BookEditor for book id N
+   ========================================================================= */
+
+const LIST_KEY = "book-list-v1";
+const cacheKeyFor = (id: number) => `book-draft-v1:${id}`;
+
+type BookMeta = { id: number; title: string; author: string };
+
+function loadBookList(): number[] {
+  try {
+    const raw = localStorage.getItem(LIST_KEY);
+    if (!raw) return [];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return [];
+    return arr.filter((x) => typeof x === "number");
+  } catch {
+    return [];
+  }
+}
+function saveBookList(ids: number[]) {
+  try { localStorage.setItem(LIST_KEY, JSON.stringify(ids)); } catch {}
+}
+function readBookMeta(id: number): BookMeta {
+  try {
+    const raw = localStorage.getItem(cacheKeyFor(id));
+    if (raw) {
+      const p = JSON.parse(raw);
+      return {
+        id,
+        title: typeof p.title === "string" ? p.title : "",
+        author: typeof p.author === "string" ? p.author : "",
+      };
+    }
+  } catch {}
+  return { id, title: "", author: "" };
+}
+
+const BookRouter = () => {
+  const [hash, setHash] = useState<string>(() =>
+    typeof window !== "undefined" ? window.location.hash : ""
+  );
+  useEffect(() => {
+    const onHash = () => setHash(window.location.hash);
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  const m = hash.match(/^#(\d+)$/);
+  if (!m) return <BookLanding />;
+  const id = parseInt(m[1], 10);
+  return <BookEditor bookId={id} key={id} />;
+};
+
+const BookLanding = () => {
+  const [books, setBooks] = useState<BookMeta[]>([]);
+  const [query, setQuery] = useState("");
+
+  useEffect(() => {
+    const ids = loadBookList();
+    setBooks(ids.map(readBookMeta));
+  }, []);
+
+  const createBook = () => {
+    const ids = loadBookList();
+    const next = ids.length ? Math.max(...ids) + 1 : 1;
+    saveBookList([...ids, next]);
+    window.location.hash = `#${next}`;
+  };
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return books;
+    return books.filter(
+      (b) =>
+        (b.title || "").toLowerCase().includes(q) ||
+        (b.author || "").toLowerCase().includes(q)
+    );
+  }, [books, query]);
+
+  return (
+    <div className="min-h-screen bg-white flex flex-col">
+      {/* Sticky (non-scrolling) search bar */}
+      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 md:px-16 lg:px-28">
+        <div className="max-w-3xl mx-auto flex items-center gap-3">
+          <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-4 py-2.5">
+            <Search size={16} className="text-slate-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="বই খুঁজুন..."
+              className="flex-1 bg-transparent focus:outline-none text-base font-mixed placeholder:text-slate-400"
+              dir="auto"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="flex-1 px-5 py-8 md:px-16 lg:px-28">
+        <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-3 gap-4">
+          {filtered.map((b) => (
+            <a
+              key={b.id}
+              href={`#${b.id}`}
+              className="group aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all p-4 flex flex-col justify-between"
+            >
+              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                #{b.id}
+              </div>
+              <div>
+                <div className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3">
+                  {b.title || <span className="text-slate-400">শিরোনামহীন</span>}
+                </div>
+                {b.author && (
+                  <div className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2">
+                    {b.author}
+                  </div>
+                )}
+              </div>
+            </a>
+          ))}
+          <button
+            onClick={createBook}
+            className="aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-500 transition-all flex flex-col items-center justify-center gap-2 text-slate-500"
+            title="নতুন বই তৈরি করুন"
+          >
+            <Plus size={32} />
+            <span className="text-xs font-medium">নতুন বই</span>
+          </button>
+        </div>
+        {books.length === 0 && (
+          <p className="text-center text-slate-400 text-sm mt-10 font-mixed">
+            এখনো কোনো বই নেই। উপরের + বোতাম চেপে নতুন একটা তৈরি করুন।
+          </p>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const BookEditor = ({ bookId }: { bookId: number }) => {
+  const CACHE_KEY = cacheKeyFor(bookId);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
@@ -300,15 +498,7 @@ const Book = () => {
     left: number;
   } | null>(null);
 
-  // AI panel state
-  const [aiOpen, setAiOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState("");
-  const [aiBusy, setAiBusy] = useState(false);
-  const [aiStatus, setAiStatus] = useState("");
-  const aiPipelineRef = useRef<any>(null);
-  const [aiReady, setAiReady] = useState(false);
-
-  // Experimental features toggle (persisted).
+  // Experimental features toggle (persisted, global).
   const EXP_KEY = "book-experimental-v1";
   const [experimental, setExperimental] = useState(false);
   useEffect(() => {
@@ -446,65 +636,13 @@ const Book = () => {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  // ---- AI (transformers.js) — tiny instruction-tuned model, silent load ----
-  const ensurePipeline = async () => {
-    if (aiPipelineRef.current) return aiPipelineRef.current;
-    const mod = await import("@huggingface/transformers");
-    // LaMini-Flan-T5-77M: ~77M params, one of the smallest instruction-
-    // tuned models that still produces coherent output in the browser.
-    const pipe = await mod.pipeline(
-      "text2text-generation",
-      "Xenova/LaMini-Flan-T5-77M"
-    );
-    aiPipelineRef.current = pipe;
-    return pipe;
-  };
-
-  // Preload silently in the background whenever the AI experimental
-  // feature is enabled. The button only appears once the model is ready.
-  useEffect(() => {
-    if (!experimental) return;
-    if (aiReady) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        await ensurePipeline();
-        if (!cancelled) setAiReady(true);
-      } catch {
-        /* silent — button just won't show */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [experimental, aiReady]);
-
-  // Short "house rules" the tiny model uses as context. Kept minimal to
-  // save tokens on a 77M model.
-  const AI_CONTEXT =
-    "You are helping write a book in Markdown. Rules: use # ## ### for headings; **bold**, *italic*; - for bullets; > for quotes; | tables |; ```lang code```; [[1]] cites footnote [[1==note text]]. Return only the Markdown content, no commentary.";
-
-  const runAI = async () => {
-    const prompt = aiPrompt.trim();
-    if (!prompt || aiBusy) return;
-    setAiBusy(true);
-    setAiStatus("উত্তর তৈরি হচ্ছে...");
+  // ---- Paste from clipboard into the editor at the current caret ----
+  const handlePaste = async () => {
     try {
-      const pipe = await ensurePipeline();
-      const fullPrompt = `${AI_CONTEXT}\n\nTask: ${prompt}`;
-      const out = await pipe(fullPrompt, { max_new_tokens: 220 });
-      const text =
-        Array.isArray(out) && out[0]?.generated_text
-          ? String(out[0].generated_text)
-          : String(out);
-      insertAtCursor((content.length && !content.endsWith("\n") ? "\n\n" : "") + text);
-      setAiPrompt("");
-      setAiStatus("");
-      setAiOpen(false);
-    } catch (e: any) {
-      setAiStatus("ত্রুটি: " + (e?.message || "AI চালানো যায়নি।"));
-    } finally {
-      setAiBusy(false);
+      const text = await navigator.clipboard.readText();
+      if (text) insertAtCursor(text);
+    } catch {
+      alert("ক্লিপবোর্ড থেকে পড়া যায়নি। ব্রাউজার অনুমতি চেক করুন।");
     }
   };
 
@@ -537,16 +675,16 @@ const Book = () => {
   const handleClearAll = () => {
     if (
       !window.confirm(
-        "সব লেখা মুছে ফেলা হবে (শিরোনাম, লেখক ও পুরো বই)। আপনি কি নিশ্চিত?"
+        "এই বইটি সম্পূর্ণভাবে মুছে ফেলা হবে। আপনি কি নিশ্চিত?"
       )
     )
       return;
-    setTitle("");
-    setAuthor("");
-    setContent("");
     try {
       localStorage.removeItem(CACHE_KEY);
+      const ids = loadBookList().filter((x) => x !== bookId);
+      saveBookList(ids);
     } catch {}
+    window.location.hash = "";
   };
 
   const previewHtml = useMemo(
@@ -600,15 +738,19 @@ const Book = () => {
     const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
-      [data-pdf-body] p { margin: 0 0 0.75em 0; padding-bottom: 0.05em; }
+      [data-pdf-body] .num-red { color: #dc2626; }
+      [data-pdf-body] p { margin: 0 0 0.85em 0; padding-bottom: 0.35em; line-height: 1.85; }
+      /* Bangla vowel-signs (ৃ, ূ, ু, ো, ৌ) sit below the baseline and
+         html2canvas will clip them without extra bottom breathing room. */
+      [data-pdf-body] li { line-height: 1.85; padding-bottom: 0.2em; }
       /* Arabic / RTL paragraphs: html2canvas tends to clip descenders
          (ج ح خ ع غ ي) unless we leave real box-space below the last line.
-         We use generous line-height AND explicit top/bottom padding so the
-         glyph bounding box always fits. */
+         Arabic tashkeels (fatha/damma/kasra/shadda/sukun) also sit above
+         the line and can be clipped from the TOP. Give both sides room. */
       [data-pdf-body] [dir="rtl"] {
-        line-height: 2.15 !important;
-        padding-top: 0.25em;
-        padding-bottom: 0.75em;
+        line-height: 2.4 !important;
+        padding-top: 0.6em;
+        padding-bottom: 0.95em;
       }
       [data-pdf-body] p[dir="rtl"],
       [data-pdf-body] li[dir="rtl"],
@@ -700,7 +842,12 @@ const Book = () => {
         color: #334155;
         font-style: italic;
       }
-      [data-pdf-body] hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.2em 0; }
+      [data-pdf-body] hr {
+        border: none;
+        border-top: 2px solid #64748b;
+        margin: 1.4em 0;
+        height: 0;
+      }
       [data-pdf-body] code {
         background: #f1f5f9;
         padding: 0.05em 0.35em;
@@ -761,11 +908,11 @@ const Book = () => {
       [data-pdf-body] th,
       [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 8px 10px;
-        vertical-align: top;
+        padding: 4px 9px 6px 9px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.5;
+        line-height: 1.45;
         box-sizing: border-box;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
@@ -821,10 +968,43 @@ const Book = () => {
         line-height: 1.9 !important;
         padding-bottom: 0.55em;
       }
+
+      /* ---------- Experimental features (opt-in via .exp on body) ---------- */
+      [data-pdf-body].exp h1,
+      [data-pdf-body].exp h2,
+      [data-pdf-body].exp h3 { font-variant: small-caps; letter-spacing: 0.02em; }
+      [data-pdf-body].exp h1::first-letter,
+      [data-pdf-body].exp h2::first-letter,
+      [data-pdf-body].exp h3::first-letter { color: #dc2626; }
+      [data-pdf-body].exp h1 + p::first-letter,
+      [data-pdf-body].exp h2 + p::first-letter,
+      [data-pdf-body].exp h3 + p::first-letter {
+        font-size: 2.6em;
+        float: left;
+        line-height: 0.9;
+        padding: 0.05em 0.12em 0 0;
+        font-weight: 500;
+      }
+      [data-pdf-body].exp pre {
+        counter-reset: pdf-line;
+        padding-left: 3em;
+        position: relative;
+      }
+      [data-pdf-body].exp pre code { display: block; }
+      [data-pdf-body].exp pre code { counter-reset: pdf-line; }
+      [data-pdf-body].exp blockquote {
+        border-left-width: 6px;
+        border-left-color: #dc2626;
+        background: #fef2f2;
+        border-radius: 6px;
+      }
     `;
     container.appendChild(styleEl);
 
-    // Cover section
+    // Cover section — parse each line as inline markdown so bold/italic works
+    // AND explicit newlines in the title/author textareas become <br>.
+    const mlInline = (s: string) =>
+      s.split("\n").map(parseInlineMd).join("<br>");
     const coverHtml = `
       <div data-pdf-section data-pdf-cover style="
         width: 100%;
@@ -846,7 +1026,7 @@ const Book = () => {
           font-variant-ligatures: normal;
           white-space: normal;
           padding: 0.15em 0 0.25em;
-        ">${parseInlineMd(safeTitle)}</h1>
+        ">${mlInline(safeTitle)}</h1>
         ${
           safeAuthor
             ? `<div style="
@@ -858,7 +1038,7 @@ const Book = () => {
                 word-wrap: break-word;
                 overflow-wrap: break-word;
                 white-space: pre-wrap;
-              ">${parseInlineMd(safeAuthor)}</div>`
+              ">${mlInline(safeAuthor)}</div>`
             : ""
         }
         <div data-pdf-cover-footer style="
@@ -870,14 +1050,14 @@ const Book = () => {
           font-size: 9pt;
           color: #475569;
         ">
-          Made using <a href="https://abdullah.ami.bd/book" style="color:#1d4ed8;text-decoration:none;border-bottom:1px solid rgba(29,78,216,0.35);">abdullah.ami.bd/book</a>
+          Compiled by Abdullah Bari Asif.
         </div>
       </div>
     `;
 
     // Body wrapper — natural typography
     const bodyWrap = document.createElement("div");
-    bodyWrap.className = "tiptap";
+    bodyWrap.className = experimental ? "tiptap exp" : "tiptap";
     bodyWrap.setAttribute("data-pdf-body", "");
     bodyWrap.style.fontSize = "11pt";
     bodyWrap.style.lineHeight = "1.65";
@@ -907,7 +1087,8 @@ const Book = () => {
         compress: true,
       });
 
-      const renderScale = 3; // higher quality / sharper PDF
+      const renderScale = 4; // sharper PDF; compressed jsPDF keeps size in check
+      const JPEG_Q = 0.88;   // tuned for quality/size balance
 
       type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
@@ -977,7 +1158,7 @@ const Book = () => {
         const mmPerPx = CONTENT_W / elWidthPx;
         const heightMM = elHeightPx * mmPerPx;
         return {
-          dataUrl: canvas.toDataURL("image/jpeg", 0.95),
+          dataUrl: canvas.toDataURL("image/jpeg", JPEG_Q),
           heightMM,
           elWidthPx,
           elHeightPx,
@@ -1014,7 +1195,7 @@ const Book = () => {
         );
         const mmPerPx = CONTENT_W / section.elWidthPx;
         return {
-          dataUrl: slice.toDataURL("image/jpeg", 0.95),
+          dataUrl: slice.toDataURL("image/jpeg", JPEG_Q),
           heightMM: shPx * mmPerPx,
         };
       };
@@ -1051,6 +1232,14 @@ const Book = () => {
       // --- Body: always start on a new page ---
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
       let bodyPageNum = 0;
+
+      // Extract clean chapter text: strip any footnote markers (<sup class="fn-ref">)
+      // so index entries don't include the little superscript numbers.
+      const cleanChapterText = (el: HTMLElement): string => {
+        const clone = el.cloneNode(true) as HTMLElement;
+        clone.querySelectorAll(".fn-ref").forEach((n) => n.remove());
+        return (clone.textContent || "").trim();
+      };
 
       // Pre-render page-number glyphs to canvas tiles once per number so the
       // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
@@ -1271,7 +1460,7 @@ const Book = () => {
             if (tag === "H1" || tag === "H2" || tag === "H3") {
               chapters.push({
                 level: parseInt(tag.substring(1), 10),
-                text: (child.textContent || "").trim(),
+                text: cleanChapterText(child),
                 page: bodyPageNum,
               });
             }
@@ -1299,7 +1488,7 @@ const Book = () => {
             if (tag === "H1" || tag === "H2" || tag === "H3") {
               chapters.push({
                 level: parseInt(tag.substring(1), 10),
-                text: (child.textContent || "").trim(),
+                text: cleanChapterText(child),
                 page: bodyPageNum,
               });
             }
@@ -1321,7 +1510,7 @@ const Book = () => {
           if (tag === "H1" || tag === "H2" || tag === "H3") {
             chapters.push({
               level: parseInt(tag.substring(1), 10),
-              text: (child.textContent || "").trim(),
+              text: cleanChapterText(child),
               page: bodyPageNum,
             });
           }
@@ -1399,12 +1588,12 @@ const Book = () => {
           .map((ch) => {
             const indent = (ch.level - 1) * 18; // px
             const pgLabel = toNumerals(ch.page, numeralScript);
-            const nameCell = `<td style="padding:6px 4px; ${
+            const nameCell = `<td style="padding:2px 4px; vertical-align:middle; line-height:1.35; ${
               isRTL ? "padding-right:" : "padding-left:"
             }${indent}px;${
               isRTL ? "text-align:right;" : "text-align:left;"
             }">${escapeHtml(ch.text)}</td>`;
-            const pageCell = `<td style="padding:6px 8px; text-align:center; white-space:nowrap; color:#475569; width:16%;">${escapeHtml(pgLabel)}</td>`;
+            const pageCell = `<td style="padding:2px 8px; vertical-align:middle; text-align:center; white-space:nowrap; color:#475569; width:16%; line-height:1.35;">${escapeHtml(pgLabel)}</td>`;
             return `<tr>${
               isRTL ? pageCell + nameCell : nameCell + pageCell
             }</tr>`;
@@ -1527,7 +1716,7 @@ const Book = () => {
         {/* Editor / Preview */}
         {preview ? (
           <div
-            className="font-mixed prose-xl md:prose-2xl max-w-none pdf-preview"
+            className={`font-mixed prose-xl md:prose-2xl max-w-none pdf-preview${experimental ? " exp" : ""}`}
             dir="auto"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
@@ -1579,54 +1768,6 @@ const Book = () => {
         </div>
       )}
 
-      {/* AI panel */}
-      {aiOpen && (
-        <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-4">
-          <div className="w-full max-w-lg bg-white rounded-2xl shadow-2xl border border-slate-200 p-5">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2 text-slate-900 font-medium">
-                <Sparkles size={18} className="text-violet-600" />
-                <span>Local AI Assistant</span>
-              </div>
-              <button
-                onClick={() => !aiBusy && setAiOpen(false)}
-                className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-500"
-                disabled={aiBusy}
-              >
-                <XIcon size={16} />
-              </button>
-            </div>
-            <textarea
-              value={aiPrompt}
-              onChange={(e) => setAiPrompt(e.target.value)}
-              placeholder="AI কে কী করতে বলবেন লিখুন... (যেমন: 'বন্ধুত্ব নিয়ে একটি ছোট অনুচ্ছেদ লেখো')"
-              rows={4}
-              disabled={aiBusy}
-              className="w-full font-mixed text-base bg-slate-50 border border-slate-200 rounded-xl p-3 focus:outline-none focus:border-slate-400 resize-none"
-            />
-            {aiStatus && (
-              <div className="mt-2 text-xs text-slate-500 flex items-center gap-2">
-                {aiBusy && <Loader2 size={12} className="animate-spin" />}
-                <span>{aiStatus}</span>
-              </div>
-            )}
-            <div className="mt-3 flex items-center justify-between gap-2">
-              <p className="text-[11px] text-slate-400">
-                মডেল ব্রাউজারেই চলে — সম্পূর্ণ লোকাল। (Experimental)
-              </p>
-              <button
-                onClick={runAI}
-                disabled={aiBusy || !aiPrompt.trim()}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-slate-900 text-white text-sm font-medium hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {aiBusy ? <Loader2 size={14} className="animate-spin" /> : <SendIcon size={14} />}
-                Send
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Floating action bar — responsive, no overlap on mobile */}
       <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
         {generating ? (
@@ -1649,10 +1790,27 @@ const Book = () => {
           </div>
         ) : (
         <>
+        <a
+          href="#"
+          onClick={(e) => { e.preventDefault(); window.location.hash = ""; }}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="বই-তালিকায় ফিরে যান"
+        >
+          <ArrowLeft size={18} />
+        </a>
+
+        <button
+          onClick={handlePaste}
+          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
+          title="ক্লিপবোর্ড থেকে পেস্ট করুন"
+        >
+          <ClipboardPaste size={18} />
+        </button>
+
         <button
           onClick={handleClearAll}
           className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-rose-600 border border-slate-200 shadow-lg hover:bg-rose-50 transition-all"
-          title="সব লেখা মুছে ফেলুন"
+          title="এই বইটি মুছে ফেলুন"
         >
           <Trash2 size={18} />
         </button>
@@ -1668,16 +1826,6 @@ const Book = () => {
         >
           <FlaskConical size={18} />
         </button>
-
-        {experimental && aiReady && (
-          <button
-            onClick={() => setAiOpen(true)}
-            className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-gradient-to-br from-violet-600 to-fuchsia-600 text-white border border-violet-500 shadow-lg hover:opacity-90 transition-all"
-            title="Local AI (experimental)"
-          >
-            <Sparkles size={18} />
-          </button>
-        )}
 
         <button
           onClick={() => setIncludeIndex((v) => !v)}
@@ -1741,4 +1889,4 @@ function escapeHtml(str: string) {
     .replace(/'/g, "&#39;");
 }
 
-export default Book;
+export default BookRouter;

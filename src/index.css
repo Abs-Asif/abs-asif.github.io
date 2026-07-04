@@ -383,6 +383,29 @@
 }
 .pdf-preview strong { font-weight: 700; }
 .pdf-preview em { font-style: italic; }
+.pdf-preview .num-red { color: #dc2626; }
+
+/* Experimental features preview (mirrors PDF `.exp` styles) */
+.pdf-preview.exp h1,
+.pdf-preview.exp h2,
+.pdf-preview.exp h3 { font-variant: small-caps; letter-spacing: 0.02em; }
+.pdf-preview.exp h1::first-letter,
+.pdf-preview.exp h2::first-letter,
+.pdf-preview.exp h3::first-letter { color: #dc2626; }
+.pdf-preview.exp h1 + p::first-letter,
+.pdf-preview.exp h2 + p::first-letter,
+.pdf-preview.exp h3 + p::first-letter {
+  font-size: 2.6em;
+  float: left;
+  line-height: 0.9;
+  padding: 0.05em 0.15em 0 0;
+  font-weight: 500;
+}
+.pdf-preview.exp blockquote {
+  border-left: 6px solid #dc2626;
+  background: #fef2f2;
+  border-radius: 6px;
+}
 .pdf-preview table {
   border-collapse: collapse;
   width: 100%;
