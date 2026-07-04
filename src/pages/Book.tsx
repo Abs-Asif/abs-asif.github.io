@@ -909,11 +909,11 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       [data-pdf-body] th,
       [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 8px 10px;
-        vertical-align: top;
+        padding: 4px 9px 6px 9px;
+        vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.5;
+        line-height: 1.45;
         box-sizing: border-box;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
