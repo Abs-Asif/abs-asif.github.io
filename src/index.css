@@ -383,6 +383,7 @@
 }
 .pdf-preview strong { font-weight: 700; }
 .pdf-preview em { font-style: italic; }
+.pdf-preview .num-red { color: #dc2626; }
 .pdf-preview table {
   border-collapse: collapse;
   width: 100%;
