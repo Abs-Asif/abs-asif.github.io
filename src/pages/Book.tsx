@@ -739,15 +739,19 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
-      [data-pdf-body] p { margin: 0 0 0.75em 0; padding-bottom: 0.05em; }
+      [data-pdf-body] .num-red { color: #dc2626; }
+      [data-pdf-body] p { margin: 0 0 0.85em 0; padding-bottom: 0.35em; line-height: 1.85; }
+      /* Bangla vowel-signs (ৃ, ূ, ু, ো, ৌ) sit below the baseline and
+         html2canvas will clip them without extra bottom breathing room. */
+      [data-pdf-body] li { line-height: 1.85; padding-bottom: 0.2em; }
       /* Arabic / RTL paragraphs: html2canvas tends to clip descenders
          (ج ح خ ع غ ي) unless we leave real box-space below the last line.
-         We use generous line-height AND explicit top/bottom padding so the
-         glyph bounding box always fits. */
+         Arabic tashkeels (fatha/damma/kasra/shadda/sukun) also sit above
+         the line and can be clipped from the TOP. Give both sides room. */
       [data-pdf-body] [dir="rtl"] {
-        line-height: 2.15 !important;
-        padding-top: 0.25em;
-        padding-bottom: 0.75em;
+        line-height: 2.4 !important;
+        padding-top: 0.6em;
+        padding-bottom: 0.95em;
       }
       [data-pdf-body] p[dir="rtl"],
       [data-pdf-body] li[dir="rtl"],
@@ -839,7 +843,12 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         color: #334155;
         font-style: italic;
       }
-      [data-pdf-body] hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.2em 0; }
+      [data-pdf-body] hr {
+        border: none;
+        border-top: 2px solid #64748b;
+        margin: 1.4em 0;
+        height: 0;
+      }
       [data-pdf-body] code {
         background: #f1f5f9;
         padding: 0.05em 0.35em;
