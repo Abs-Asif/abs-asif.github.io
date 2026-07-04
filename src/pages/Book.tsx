@@ -1431,7 +1431,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             if (tag === "H1" || tag === "H2" || tag === "H3") {
               chapters.push({
                 level: parseInt(tag.substring(1), 10),
-                text: (child.textContent || "").trim(),
+                text: cleanChapterText(child),
                 page: bodyPageNum,
               });
             }
@@ -1459,7 +1459,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             if (tag === "H1" || tag === "H2" || tag === "H3") {
               chapters.push({
                 level: parseInt(tag.substring(1), 10),
-                text: (child.textContent || "").trim(),
+                text: cleanChapterText(child),
                 page: bodyPageNum,
               });
             }
@@ -1481,7 +1481,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           if (tag === "H1" || tag === "H2" || tag === "H3") {
             chapters.push({
               level: parseInt(tag.substring(1), 10),
-              text: (child.textContent || "").trim(),
+              text: cleanChapterText(child),
               page: bodyPageNum,
             });
           }
