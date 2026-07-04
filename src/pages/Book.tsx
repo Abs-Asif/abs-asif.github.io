@@ -1559,12 +1559,12 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           .map((ch) => {
             const indent = (ch.level - 1) * 18; // px
             const pgLabel = toNumerals(ch.page, numeralScript);
-            const nameCell = `<td style="padding:6px 4px; ${
+            const nameCell = `<td style="padding:2px 4px; vertical-align:middle; line-height:1.35; ${
               isRTL ? "padding-right:" : "padding-left:"
             }${indent}px;${
               isRTL ? "text-align:right;" : "text-align:left;"
             }">${escapeHtml(ch.text)}</td>`;
-            const pageCell = `<td style="padding:6px 8px; text-align:center; white-space:nowrap; color:#475569; width:16%;">${escapeHtml(pgLabel)}</td>`;
+            const pageCell = `<td style="padding:2px 8px; vertical-align:middle; text-align:center; white-space:nowrap; color:#475569; width:16%; line-height:1.35;">${escapeHtml(pgLabel)}</td>`;
             return `<tr>${
               isRTL ? pageCell + nameCell : nameCell + pageCell
             }</tr>`;
