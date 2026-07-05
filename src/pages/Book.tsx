@@ -1,20 +1,20 @@
-import React, { useMemo, useRef, useState } from "react";
-import { useEffect } from "react";
+import React, { useMemo, useRef, useState, useEffect } from "react";
 import {
   Download,
   Loader2,
   Eye,
   Pencil,
-  HelpCircle,
   ListTree,
   Trash2,
-  FlaskConical,
   Bold as BoldIcon,
   Italic as ItalicIcon,
   ClipboardPaste,
   Plus,
   Search,
   ArrowLeft,
+  Lock,
+  Unlock,
+  FileLock2,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -22,9 +22,7 @@ import { marked } from "marked";
 import hljs from "highlight.js";
 import "highlight.js/styles/atom-one-dark.css";
 
-// Custom code renderer: syntax-highlight with hljs, and avoid double-escaping
-// (marked v9+ escapes the fenced content BEFORE calling the renderer, which
-// would turn `&` into `&amp;amp;` if we returned hljs-highlighted HTML).
+/* ---------- Markdown / code rendering ---------- */
 const codeRenderer = new marked.Renderer();
 codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
@@ -41,11 +39,8 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
 };
 marked.use({ renderer: codeRenderer });
 
-// Parse a short single-line string as inline markdown (bold/italic/etc).
-// Used for the cover title & author so users can write **bold** / *italic*.
 function parseInlineMd(s: string): string {
   if (!s) return "";
-  // marked.parseInline returns HTML without wrapping in <p>.
   try {
     return marked.parseInline(s, { async: false, gfm: true, breaks: false }) as string;
   } catch {
@@ -53,8 +48,30 @@ function parseInlineMd(s: string): string {
   }
 }
 
-type NumeralScript = "bn" | "ar" | "en";
+/* ---------- Smart quotes ---------- */
+// Idempotent: curly quotes are left untouched, only straight ones are replaced.
+function smartQuotes(s: string): string {
+  if (!s) return s;
+  s = s
+    .replace(/(^|[\s\(\[\{«—–\-])"/g, "$1\u201C")
+    .replace(/"/g, "\u201D");
+  s = s
+    .replace(/(^|[\s\(\[\{«—–\-])'/g, "$1\u2018")
+    .replace(/'/g, "\u2019");
+  return s;
+}
 
+/* ---------- Password hashing (SHA-256) ---------- */
+async function sha256Hex(s: string): Promise<string> {
+  const data = new TextEncoder().encode(s);
+  const hash = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(hash))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+/* ---------- Script detection ---------- */
+type NumeralScript = "bn" | "ar" | "en";
 function detectScript(text: string): NumeralScript {
   for (const ch of text) {
     if (/\s/.test(ch)) continue;
@@ -71,7 +88,6 @@ function detectScript(text: string): NumeralScript {
   }
   return "en";
 }
-
 function toNumerals(n: number, script: NumeralScript): string {
   const s = String(n);
   if (script === "en") return s;
@@ -85,7 +101,7 @@ function toNumerals(n: number, script: NumeralScript): string {
     .join("");
 }
 
-/* ---------- Arabic-only block detection ---------- */
+/* ---------- Arabic-only block detection & alignment ---------- */
 function isArabicOnly(text: string): boolean {
   const stripped = text.replace(/\s+/g, "").replace(/[\p{P}\p{S}\d]/gu, "");
   if (!stripped) return false;
@@ -100,26 +116,18 @@ function isArabicOnly(text: string): boolean {
   }
   return true;
 }
-
 function applyArabicAlignment(html: string): string {
   if (typeof DOMParser === "undefined") return html;
-  const doc = new DOMParser().parseFromString(
-    `<div id="__root">${html}</div>`,
-    "text/html"
-  );
+  const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, "text/html");
   const root = doc.getElementById("__root");
   if (!root) return html;
-  root
-    .querySelectorAll("p, li, blockquote, td, th")
-    .forEach((el) => {
-      const txt = el.textContent || "";
-      if (isArabicOnly(txt)) {
-        el.setAttribute("dir", "rtl");
-        // Keep justification so both edges align; dir=rtl already anchors to right.
-        (el as HTMLElement).style.textAlign = "justify";
-      }
-    });
-  // Headings: only set dir=rtl for Arabic (keep them centered).
+  root.querySelectorAll("p, li, blockquote, td, th").forEach((el) => {
+    const txt = el.textContent || "";
+    if (isArabicOnly(txt)) {
+      el.setAttribute("dir", "rtl");
+      (el as HTMLElement).style.textAlign = "justify";
+    }
+  });
   root.querySelectorAll("h1, h2, h3, h4, h5, h6").forEach((el) => {
     const txt = el.textContent || "";
     if (isArabicOnly(txt)) {
@@ -131,12 +139,10 @@ function applyArabicAlignment(html: string): string {
 }
 
 /* ---------- Bangla / Arabic numbered list preprocessing ---------- */
-// Marked doesn't recognise "১." or "٢." as ordered lists. We detect groups
-// of consecutive such lines and emit raw HTML <ol> with the original markers
-// preserved as <span class="num-marker">.
+// Accept ".", ")" and Bangla danda "।" as list markers.
 function preprocessNumeralLists(md: string): string {
   const lines = md.split("\n");
-  const re = /^(\s*)([০-৯]+|[٠-٩]+)([\.\)])\s+(.*)$/;
+  const re = /^(\s*)([০-৯]+|[٠-٩]+)([.)।])\s+(.*)$/;
   const out: string[] = [];
   let i = 0;
   while (i < lines.length) {
@@ -147,9 +153,7 @@ function preprocessNumeralLists(md: string): string {
         const mm = lines[i].match(re);
         if (!mm) break;
         items.push(
-          `<li><span class="num-marker">${escapeHtml(
-            mm[2] + mm[3]
-          )}</span><span class="num-body">${escapeHtml(mm[4])}</span></li>`
+          `<li><span class="num-marker">${escapeHtml(mm[2] + mm[3])}</span><span class="num-body">${escapeHtml(mm[4])}</span></li>`
         );
         i++;
       }
@@ -164,36 +168,23 @@ function preprocessNumeralLists(md: string): string {
   return out.join("\n");
 }
 
-function renderMarkdown(md: string): string {
-  const pre = preprocessNumeralLists(md || "");
-  const html = marked.parse(pre, {
-    async: false,
-    gfm: true,
-    breaks: true,
-  }) as string;
-  return applyArabicAlignment(html);
-}
-
-/* ---------- Auto-red numbers ---------- */
-// Wrap every run of ASCII/Bangla/Arabic digits in <span class="num-red"> so
-// they render in red inside preview + PDF. Skip anything inside .fn-ref (the
-// footnote markers keep their own color) and inside .num-marker (list markers
-// already carry their own script-aware formatting; also colored via CSS).
+/* ---------- Auto-red numbers (always on) ---------- */
 function colorizeDigits(html: string): string {
   if (typeof DOMParser === "undefined") return html;
   const DIGIT_RE = /[0-9\u09E6-\u09EF\u0660-\u0669]+/;
   const DIGIT_SPLIT = /([0-9\u09E6-\u09EF\u0660-\u0669]+)/g;
-  const doc = new DOMParser().parseFromString(
-    `<div id="__root">${html}</div>`,
-    "text/html"
-  );
+  const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, "text/html");
   const root = doc.getElementById("__root");
   if (!root) return html;
   const skip = (el: Element | null): boolean => {
     while (el && el !== root) {
-      if (el.classList && (el.classList.contains("fn-ref") ||
+      if (
+        el.classList &&
+        (el.classList.contains("fn-ref") ||
           el.classList.contains("fn-num") ||
-          el.classList.contains("num-marker"))) return true;
+          el.classList.contains("num-marker"))
+      )
+        return true;
       const tag = el.tagName?.toLowerCase();
       if (tag === "code" || tag === "pre" || tag === "a") return true;
       el = el.parentElement;
@@ -230,31 +221,18 @@ function colorizeDigits(html: string): string {
 }
 
 /* ---------- Footnotes ---------- */
-// Definition: [[id==footnote body]]   Marker: [[id]]
-function extractFootnoteDefs(md: string): {
-  md: string;
-  defs: Map<string, string>;
-} {
+function extractFootnoteDefs(md: string): { md: string; defs: Map<string, string> } {
   const defs = new Map<string, string>();
-  const stripped = (md || "").replace(
-    /\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g,
-    (_m, id, body) => {
-      defs.set(String(id).trim(), String(body).trim());
-      return "";
-    }
-  );
+  const stripped = (md || "").replace(/\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g, (_m, id, body) => {
+    defs.set(String(id).trim(), String(body).trim());
+    return "";
+  });
   return { md: stripped, defs };
 }
-
 function escapeAttr(s: string) {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
-
-function injectFootnoteMarkers(
-  md: string,
-  script: NumeralScript,
-  validIds: Set<string>
-): string {
+function injectFootnoteMarkers(md: string, script: NumeralScript, validIds: Set<string>): string {
   return md.replace(/\[\[([^\]\s=]+)\]\]/g, (raw, id) => {
     const t = String(id).trim();
     if (!validIds.has(t)) return raw;
@@ -263,11 +241,7 @@ function injectFootnoteMarkers(
     return `<sup class="fn-ref" data-fn-id="${escapeAttr(t)}">${label}</sup>`;
   });
 }
-
-function collectFootnoteOrder(
-  md: string,
-  defs: Map<string, string>
-): string[] {
+function collectFootnoteOrder(md: string, defs: Map<string, string>): string[] {
   const order: string[] = [];
   const seen = new Set<string>();
   md.replace(/\[\[([^\]\s=]+)\]\]/g, (_m, id) => {
@@ -280,27 +254,16 @@ function collectFootnoteOrder(
   });
   return order;
 }
-
 function renderFootnoteBodyHtml(text: string): string {
-  // Footnote body supports markdown but cannot itself contain footnote markers.
-  return marked.parse(text || "", {
-    async: false,
-    gfm: true,
-    breaks: true,
-  }) as string;
+  return marked.parse(text || "", { async: false, gfm: true, breaks: true }) as string;
 }
-
 function renderForPreview(md: string, script: NumeralScript): string {
   const { md: stripped, defs } = extractFootnoteDefs(md);
   const order = collectFootnoteOrder(stripped, defs);
   const validIds = new Set(defs.keys());
   const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
   const pre = preprocessNumeralLists(withMarkers);
-  let html = marked.parse(pre, {
-    async: false,
-    gfm: true,
-    breaks: true,
-  }) as string;
+  let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
   if (order.length > 0) {
     const items = order
@@ -315,39 +278,25 @@ function renderForPreview(md: string, script: NumeralScript): string {
   }
   return colorizeDigits(html);
 }
-
 function indexTitle(script: NumeralScript): string {
   return script === "bn" ? "সূচিপত্র" : script === "ar" ? "الفهرس" : "Index";
 }
-
-function renderForPdfBody(
-  md: string,
-  script: NumeralScript
-): { html: string; defs: Map<string, string> } {
+function renderForPdfBody(md: string, script: NumeralScript): { html: string; defs: Map<string, string> } {
   const { md: stripped, defs } = extractFootnoteDefs(md);
   const validIds = new Set(defs.keys());
   const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
   const pre = preprocessNumeralLists(withMarkers);
-  let html = marked.parse(pre, {
-    async: false,
-    gfm: true,
-    breaks: true,
-  }) as string;
+  let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
   return { html: colorizeDigits(html), defs };
 }
 
-/* =========================================================================
-   Multi-book routing wrapper
-   ---------------------------------------------------------------------
-   /book                → BookLanding (search + list + create)
-   /book#N              → BookEditor for book id N
-   ========================================================================= */
-
+/* ---------- Storage ---------- */
 const LIST_KEY = "book-list-v1";
 const cacheKeyFor = (id: number) => `book-draft-v1:${id}`;
+const lockKeyFor = (id: number) => `book-lock-v1:${id}`; // stores { hash: string }
 
-type BookMeta = { id: number; title: string; author: string };
+type BookMeta = { id: number; title: string; author: string; content: string };
 
 function loadBookList(): number[] {
   try {
@@ -361,7 +310,9 @@ function loadBookList(): number[] {
   }
 }
 function saveBookList(ids: number[]) {
-  try { localStorage.setItem(LIST_KEY, JSON.stringify(ids)); } catch {}
+  try {
+    localStorage.setItem(LIST_KEY, JSON.stringify(ids));
+  } catch {}
 }
 function readBookMeta(id: number): BookMeta {
   try {
@@ -372,12 +323,37 @@ function readBookMeta(id: number): BookMeta {
         id,
         title: typeof p.title === "string" ? p.title : "",
         author: typeof p.author === "string" ? p.author : "",
+        content: typeof p.content === "string" ? p.content : "",
       };
     }
   } catch {}
-  return { id, title: "", author: "" };
+  return { id, title: "", author: "", content: "" };
+}
+function readLockHash(id: number): string | null {
+  try {
+    const raw = localStorage.getItem(lockKeyFor(id));
+    if (!raw) return null;
+    const p = JSON.parse(raw);
+    return typeof p.hash === "string" ? p.hash : null;
+  } catch {
+    return null;
+  }
+}
+function writeLockHash(id: number, hash: string | null) {
+  try {
+    if (hash == null) localStorage.removeItem(lockKeyFor(id));
+    else localStorage.setItem(lockKeyFor(id), JSON.stringify({ hash }));
+  } catch {}
+}
+function deleteBookEntirely(id: number) {
+  try {
+    localStorage.removeItem(cacheKeyFor(id));
+    localStorage.removeItem(lockKeyFor(id));
+    saveBookList(loadBookList().filter((x) => x !== id));
+  } catch {}
 }
 
+/* ---------- Router ---------- */
 const BookRouter = () => {
   const [hash, setHash] = useState<string>(() =>
     typeof window !== "undefined" ? window.location.hash : ""
@@ -393,13 +369,97 @@ const BookRouter = () => {
   return <BookEditor bookId={id} key={id} />;
 };
 
+/* ---------- Password prompt (modal) ---------- */
+const PasswordPrompt: React.FC<{
+  open: boolean;
+  title: string;
+  submitLabel?: string;
+  onCancel: () => void;
+  onSubmit: (pwd: string) => void;
+  error?: string;
+}> = ({ open, title, submitLabel = "OK", onCancel, onSubmit, error }) => {
+  const [pwd, setPwd] = useState("");
+  useEffect(() => {
+    if (open) setPwd("");
+  }, [open]);
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-4">
+      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
+        <h3 className="text-lg font-semibold text-slate-900 mb-3 font-mixed">{title}</h3>
+        <input
+          autoFocus
+          type="password"
+          value={pwd}
+          onChange={(e) => setPwd(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" && pwd) onSubmit(pwd);
+          }}
+          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:border-slate-800"
+          placeholder="Password"
+        />
+        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
+        <div className="mt-4 flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 text-sm"
+          >
+            Cancel
+          </button>
+          <button
+            onClick={() => pwd && onSubmit(pwd)}
+            disabled={!pwd}
+            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-50"
+          >
+            {submitLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+/* ---------- Landing ---------- */
 const BookLanding = () => {
   const [books, setBooks] = useState<BookMeta[]>([]);
+  const [locks, setLocks] = useState<Record<number, string | null>>({});
   const [query, setQuery] = useState("");
 
-  useEffect(() => {
+  // Actions requiring password
+  const [pwdModal, setPwdModal] = useState<
+    | { kind: "open"; id: number; hash: string }
+    | { kind: "delete"; id: number; hash: string }
+    | { kind: "set-lock"; id: number }
+    | { kind: "unlock-remove"; id: number; hash: string }
+    | null
+  >(null);
+  const [pwdError, setPwdError] = useState<string | undefined>();
+
+  const refresh = () => {
+    // Purge empty books first
     const ids = loadBookList();
-    setBooks(ids.map(readBookMeta));
+    const kept: number[] = [];
+    for (const id of ids) {
+      const m = readBookMeta(id);
+      const empty = !m.title.trim() && !m.author.trim() && !m.content.trim();
+      if (empty) {
+        try {
+          localStorage.removeItem(cacheKeyFor(id));
+          localStorage.removeItem(lockKeyFor(id));
+        } catch {}
+      } else {
+        kept.push(id);
+      }
+    }
+    if (kept.length !== ids.length) saveBookList(kept);
+    setBooks(kept.map(readBookMeta));
+    const lockMap: Record<number, string | null> = {};
+    kept.forEach((id) => (lockMap[id] = readLockHash(id)));
+    setLocks(lockMap);
+  };
+
+  useEffect(() => {
+    refresh();
   }, []);
 
   const createBook = () => {
@@ -407,6 +467,65 @@ const BookLanding = () => {
     const next = ids.length ? Math.max(...ids) + 1 : 1;
     saveBookList([...ids, next]);
     window.location.hash = `#${next}`;
+  };
+
+  const openBook = (id: number) => {
+    const h = locks[id];
+    if (h) {
+      setPwdError(undefined);
+      setPwdModal({ kind: "open", id, hash: h });
+    } else {
+      window.location.hash = `#${id}`;
+    }
+  };
+
+  const startDelete = (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const h = locks[id];
+    if (h) {
+      setPwdError(undefined);
+      setPwdModal({ kind: "delete", id, hash: h });
+    } else {
+      if (window.confirm("Delete this book permanently?")) {
+        deleteBookEntirely(id);
+        refresh();
+      }
+    }
+  };
+
+  const toggleLock = (id: number, e: React.MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const h = locks[id];
+    setPwdError(undefined);
+    if (h) setPwdModal({ kind: "unlock-remove", id, hash: h });
+    else setPwdModal({ kind: "set-lock", id });
+  };
+
+  const handlePwdSubmit = async (pwd: string) => {
+    if (!pwdModal) return;
+    const hashed = await sha256Hex(pwd);
+    if (pwdModal.kind === "open") {
+      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      const id = pwdModal.id;
+      setPwdModal(null);
+      window.location.hash = `#${id}`;
+    } else if (pwdModal.kind === "delete") {
+      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      deleteBookEntirely(pwdModal.id);
+      setPwdModal(null);
+      refresh();
+    } else if (pwdModal.kind === "unlock-remove") {
+      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      writeLockHash(pwdModal.id, null);
+      setPwdModal(null);
+      refresh();
+    } else if (pwdModal.kind === "set-lock") {
+      writeLockHash(pwdModal.id, hashed);
+      setPwdModal(null);
+      refresh();
+    }
   };
 
   const filtered = useMemo(() => {
@@ -419,9 +538,14 @@ const BookLanding = () => {
     );
   }, [books, query]);
 
+  const firstLetter = (s: string): string => {
+    const t = (s || "").trim();
+    if (!t) return "";
+    return Array.from(t)[0] || "";
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
-      {/* Sticky (non-scrolling) search bar */}
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 md:px-16 lg:px-28">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-4 py-2.5">
@@ -439,91 +563,128 @@ const BookLanding = () => {
 
       <div className="flex-1 px-5 py-8 md:px-16 lg:px-28">
         <div className="max-w-3xl mx-auto grid grid-cols-2 sm:grid-cols-3 gap-4">
-          {filtered.map((b) => (
-            <a
-              key={b.id}
-              href={`#${b.id}`}
-              className="group aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all p-4 flex flex-col justify-between"
-            >
-              <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                #{b.id}
-              </div>
-              <div>
-                <div className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3">
-                  {b.title || <span className="text-slate-400">শিরোনামহীন</span>}
-                </div>
-                {b.author && (
-                  <div className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2">
-                    {b.author}
+          {filtered.map((b) => {
+            const locked = !!locks[b.id];
+            const letter = firstLetter(b.title || b.content);
+            return (
+              <div
+                key={b.id}
+                onClick={() => openBook(b.id)}
+                className="group relative aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all p-4 flex flex-col justify-between overflow-hidden cursor-pointer"
+              >
+                {letter && (
+                  <div
+                    className="absolute top-1 left-0 right-0 text-center font-mixed text-slate-100 font-medium pointer-events-none select-none leading-none"
+                    style={{ fontSize: "6rem" }}
+                  >
+                    {letter}
                   </div>
                 )}
+                <div className="relative flex items-start justify-between">
+                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
+                    #{b.id}
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button
+                      onClick={(e) => toggleLock(b.id, e)}
+                      title={locked ? "Remove password" : "Set password"}
+                      className={`p-1.5 rounded-md text-slate-500 hover:bg-slate-100 ${
+                        locked ? "text-amber-600" : ""
+                      }`}
+                    >
+                      {locked ? <Lock size={14} /> : <Unlock size={14} />}
+                    </button>
+                  </div>
+                </div>
+                <div className="relative">
+                  <div
+                    className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3"
+                    dangerouslySetInnerHTML={{
+                      __html: b.title
+                        ? parseInlineMd(b.title.split("\n")[0])
+                        : '<span class="text-slate-400">Untitled</span>',
+                    }}
+                  />
+                  {b.author && (
+                    <div
+                      className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2"
+                      dangerouslySetInnerHTML={{
+                        __html: parseInlineMd(b.author.split("\n")[0]),
+                      }}
+                    />
+                  )}
+                </div>
               </div>
-            </a>
-          ))}
+            );
+          })}
           <button
             onClick={createBook}
             className="aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-500 transition-all flex flex-col items-center justify-center gap-2 text-slate-500"
-            title="নতুন বই তৈরি করুন"
+            title="Create new book"
           >
             <Plus size={32} />
-            <span className="text-xs font-medium">নতুন বই</span>
+            <span className="text-xs font-medium">New book</span>
           </button>
         </div>
         {books.length === 0 && (
           <p className="text-center text-slate-400 text-sm mt-10 font-mixed">
-            এখনো কোনো বই নেই। উপরের + বোতাম চেপে নতুন একটা তৈরি করুন।
+            No books yet. Tap + to create one.
           </p>
         )}
       </div>
+
+      <PasswordPrompt
+        open={!!pwdModal}
+        title={
+          pwdModal?.kind === "open"
+            ? "Enter password to open"
+            : pwdModal?.kind === "delete"
+            ? "Enter password to delete"
+            : pwdModal?.kind === "unlock-remove"
+            ? "Enter password to remove lock"
+            : "Set a password (cannot be reset)"
+        }
+        submitLabel={pwdModal?.kind === "set-lock" ? "Lock" : "Unlock"}
+        error={pwdError}
+        onCancel={() => setPwdModal(null)}
+        onSubmit={handlePwdSubmit}
+      />
     </div>
   );
 };
 
+/* ---------- Editor ---------- */
 const BookEditor = ({ bookId }: { bookId: number }) => {
   const CACHE_KEY = cacheKeyFor(bookId);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
+  const [pdfPassword, setPdfPassword] = useState<string>("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [includeIndex, setIncludeIndex] = useState(false);
-  const [progress, setProgress] = useState(0); // 0..1
+  const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [hydrated, setHydrated] = useState(false);
+  const [pdfPwdModal, setPdfPwdModal] = useState(false);
 
-  // Refs for editor + selection toolbar
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
-  const [selToolbar, setSelToolbar] = useState<{
-    top: number;
-    left: number;
-  } | null>(null);
+  const [selToolbar, setSelToolbar] = useState<{ top: number; left: number } | null>(null);
 
-  // Experimental features toggle (persisted, global).
-  const EXP_KEY = "book-experimental-v1";
-  const [experimental, setExperimental] = useState(false);
-  useEffect(() => {
-    try {
-      const v = localStorage.getItem(EXP_KEY);
-      if (v === "1") setExperimental(true);
-    } catch {}
-  }, []);
-  useEffect(() => {
-    try {
-      localStorage.setItem(EXP_KEY, experimental ? "1" : "0");
-    } catch {}
-  }, [experimental]);
+  const setTitleSmart = (v: string) => setTitle(smartQuotes(v));
+  const setAuthorSmart = (v: string) => setAuthor(smartQuotes(v));
+  const setContentSmart = (v: string) => setContent(smartQuotes(v));
 
   const insertAtCursor = (text: string) => {
     const ta = contentRef.current;
     if (!ta) {
-      setContent((c) => c + text);
+      setContentSmart(content + text);
       return;
     }
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const next = content.slice(0, start) + text + content.slice(end);
-    setContent(next);
-    // Restore caret after React re-render.
+    setContentSmart(next);
     requestAnimationFrame(() => {
       ta.focus();
       const pos = start + text.length;
@@ -538,9 +699,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     const end = ta.selectionEnd;
     if (start === end) return;
     const selected = content.slice(start, end);
-    const next =
-      content.slice(0, start) + marker + selected + marker + content.slice(end);
-    setContent(next);
+    const next = content.slice(0, start) + marker + selected + marker + content.slice(end);
+    setContentSmart(next);
     requestAnimationFrame(() => {
       ta.focus();
       ta.setSelectionRange(start + marker.length, end + marker.length);
@@ -548,69 +708,36 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     });
   };
 
-  // Mirror-div trick to compute caret coordinates inside a textarea.
   const measureCaretRect = (ta: HTMLTextAreaElement, index: number) => {
     const style = window.getComputedStyle(ta);
     const div = document.createElement("div");
-    // Copy relevant styles.
     const props = [
-      "boxSizing",
-      "width",
-      "height",
-      "overflowX",
-      "overflowY",
-      "borderTopWidth",
-      "borderRightWidth",
-      "borderBottomWidth",
-      "borderLeftWidth",
-      "paddingTop",
-      "paddingRight",
-      "paddingBottom",
-      "paddingLeft",
-      "fontStyle",
-      "fontVariant",
-      "fontWeight",
-      "fontStretch",
-      "fontSize",
-      "fontSizeAdjust",
-      "lineHeight",
-      "fontFamily",
-      "textAlign",
-      "textTransform",
-      "textIndent",
-      "textDecoration",
-      "letterSpacing",
-      "wordSpacing",
-      "tabSize",
-      "MozTabSize" as any,
-      "whiteSpace",
-      "wordWrap",
+      "boxSizing", "width", "height", "overflowX", "overflowY",
+      "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+      "paddingTop", "paddingRight", "paddingBottom", "paddingLeft",
+      "fontStyle", "fontVariant", "fontWeight", "fontStretch", "fontSize",
+      "fontSizeAdjust", "lineHeight", "fontFamily", "textAlign", "textTransform",
+      "textIndent", "textDecoration", "letterSpacing", "wordSpacing",
+      "tabSize", "MozTabSize" as any, "whiteSpace", "wordWrap",
     ];
-    props.forEach((p) => {
-      // @ts-ignore
-      div.style[p] = (style as any)[p];
-    });
+    props.forEach((p) => { (div.style as any)[p] = (style as any)[p]; });
     div.style.position = "absolute";
     div.style.visibility = "hidden";
     div.style.whiteSpace = "pre-wrap";
     div.style.wordWrap = "break-word";
     div.style.top = "0";
     div.style.left = "-9999px";
-    const value = ta.value.slice(0, index);
-    div.textContent = value;
+    div.textContent = ta.value.slice(0, index);
     const span = document.createElement("span");
     span.textContent = ta.value.slice(index) || ".";
     div.appendChild(span);
     document.body.appendChild(div);
     const rect = span.getBoundingClientRect();
     const taRect = ta.getBoundingClientRect();
-    const lineH = parseFloat(style.lineHeight) || parseFloat(style.fontSize) * 1.2;
-    // Position relative to viewport
     const top = taRect.top + (rect.top - div.getBoundingClientRect().top) - ta.scrollTop;
-    const left =
-      taRect.left + (rect.left - div.getBoundingClientRect().left) - ta.scrollLeft;
+    const left = taRect.left + (rect.left - div.getBoundingClientRect().left) - ta.scrollLeft;
     document.body.removeChild(div);
-    return { top, left, lineHeight: lineH };
+    return { top, left };
   };
 
   const updateSelToolbar = () => {
@@ -619,12 +746,10 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     if (start === end) return setSelToolbar(null);
-    // Anchor to selection start (works well for a small floating toolbar).
     const { top, left } = measureCaretRect(ta, start);
     setSelToolbar({ top: top - 44, left });
   };
 
-  // Hide toolbar when clicking outside the textarea and toolbar.
   useEffect(() => {
     const onDown = (e: MouseEvent) => {
       const t = e.target as HTMLElement;
@@ -636,17 +761,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  // ---- Paste from clipboard into the editor at the current caret ----
   const handlePaste = async () => {
     try {
       const text = await navigator.clipboard.readText();
       if (text) insertAtCursor(text);
     } catch {
-      alert("ক্লিপবোর্ড থেকে পড়া যায়নি। ব্রাউজার অনুমতি চেক করুন।");
+      alert("Clipboard read failed. Check browser permissions.");
     }
   };
 
-  // Load cached draft on mount.
   useEffect(() => {
     try {
       const raw = localStorage.getItem(CACHE_KEY);
@@ -656,34 +779,32 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         if (typeof p.author === "string") setAuthor(p.author);
         if (typeof p.content === "string") setContent(p.content);
         if (typeof p.includeIndex === "boolean") setIncludeIndex(p.includeIndex);
+        if (typeof p.pdfPassword === "string") setPdfPassword(p.pdfPassword);
       }
     } catch {}
     setHydrated(true);
   }, []);
 
-  // Persist on any edit (after hydration to avoid overwriting stored draft with empty state).
   useEffect(() => {
     if (!hydrated) return;
     try {
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify({ title, author, content, includeIndex })
+        JSON.stringify({ title, author, content, includeIndex, pdfPassword })
       );
     } catch {}
-  }, [title, author, content, includeIndex, hydrated]);
+  }, [title, author, content, includeIndex, pdfPassword, hydrated]);
+
+  const goBack = () => {
+    // Purge if empty
+    const empty = !title.trim() && !author.trim() && !content.trim();
+    if (empty) deleteBookEntirely(bookId);
+    window.location.hash = "";
+  };
 
   const handleClearAll = () => {
-    if (
-      !window.confirm(
-        "এই বইটি সম্পূর্ণভাবে মুছে ফেলা হবে। আপনি কি নিশ্চিত?"
-      )
-    )
-      return;
-    try {
-      localStorage.removeItem(CACHE_KEY);
-      const ids = loadBookList().filter((x) => x !== bookId);
-      saveBookList(ids);
-    } catch {}
+    if (!window.confirm("Delete this book permanently?")) return;
+    deleteBookEntirely(bookId);
     window.location.hash = "";
   };
 
@@ -695,25 +816,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const handleDownloadPDF = async () => {
     setGenerating(true);
     setProgress(0);
-    setProgressLabel("প্রস্তুতি...");
+    setProgressLabel("Preparing...");
 
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
     const numeralScript = detectScript(safeTitle || content);
-    const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(
-      content,
-      numeralScript
-    );
+    const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(content, numeralScript);
 
-    // A5 page dimensions (mm)
     const PAGE_W = 148;
     const PAGE_H = 210;
     const MARGIN = 14;
-    const CONTENT_W = PAGE_W - MARGIN * 2; // 120mm
-    const CONTENT_H = PAGE_H - MARGIN * 2; // 182mm
-    const SECTION_GAP = 2; // mm between body sections
+    const CONTENT_W = PAGE_W - MARGIN * 2;
+    const CONTENT_H = PAGE_H - MARGIN * 2;
+    const SECTION_GAP = 2;
 
-    // Build offscreen container. We keep it on-screen-but-invisible so html2canvas captures correctly.
     const container = document.createElement("div");
     container.style.position = "fixed";
     container.style.top = "0";
@@ -725,28 +841,17 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     container.style.color = "#0f172a";
     container.style.fontFamily =
       "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
-    container.style.fontFeatureSettings = "normal";
-    // Use a CSS pixel width that matches CONTENT_W mm at the browser's standard 96dpi.
-    // 1mm = 3.7795275591 px. We use a larger base so text isn't squeezed; we'll scale via scaleFactor.
     const PX_PER_MM = 3.7795275591;
     const widthPx = Math.round(CONTENT_W * PX_PER_MM);
     container.style.width = `${widthPx}px`;
     container.className = "font-mixed";
 
-    // Inject styles so markdown-rendered elements (tables, lists, quotes,
-    // headings, code) look natural in the captured PDF.
     const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
       [data-pdf-body] .num-red { color: #dc2626; }
       [data-pdf-body] p { margin: 0 0 0.85em 0; padding-bottom: 0.35em; line-height: 1.85; }
-      /* Bangla vowel-signs (ৃ, ূ, ু, ো, ৌ) sit below the baseline and
-         html2canvas will clip them without extra bottom breathing room. */
       [data-pdf-body] li { line-height: 1.85; padding-bottom: 0.2em; }
-      /* Arabic / RTL paragraphs: html2canvas tends to clip descenders
-         (ج ح خ ع غ ي) unless we leave real box-space below the last line.
-         Arabic tashkeels (fatha/damma/kasra/shadda/sukun) also sit above
-         the line and can be clipped from the TOP. Give both sides room. */
       [data-pdf-body] [dir="rtl"] {
         line-height: 2.4 !important;
         padding-top: 0.6em;
@@ -757,27 +862,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       [data-pdf-body] blockquote[dir="rtl"] {
         font-family: 'Scheherazade New', 'Noto Naskh Arabic', 'TimesNR', serif;
       }
-      [data-pdf-body] h1,
-      [data-pdf-body] h2,
-      [data-pdf-body] h3,
-      [data-pdf-body] h4,
-      [data-pdf-body] h5,
-      [data-pdf-body] h6 {
-        font-family: inherit;
-        font-weight: 400;
-        text-align: center;
-        margin: 1em 0 0.55em;
-        line-height: 1.55;
-        padding: 0.2em 0 0.45em;
+      [data-pdf-body] h1, [data-pdf-body] h2, [data-pdf-body] h3,
+      [data-pdf-body] h4, [data-pdf-body] h5, [data-pdf-body] h6 {
+        font-family: inherit; font-weight: 400; text-align: center;
+        margin: 1em 0 0.55em; line-height: 1.55; padding: 0.2em 0 0.45em;
       }
-      [data-pdf-body] h1[dir="rtl"],
-      [data-pdf-body] h2[dir="rtl"],
-      [data-pdf-body] h3[dir="rtl"],
-      [data-pdf-body] h4[dir="rtl"],
-      [data-pdf-body] h5[dir="rtl"],
-      [data-pdf-body] h6[dir="rtl"] {
-        line-height: 1.9;
-        padding: 0.25em 0 0.8em;
+      [data-pdf-body] h1[dir="rtl"], [data-pdf-body] h2[dir="rtl"],
+      [data-pdf-body] h3[dir="rtl"], [data-pdf-body] h4[dir="rtl"],
+      [data-pdf-body] h5[dir="rtl"], [data-pdf-body] h6[dir="rtl"] {
+        line-height: 1.9; padding: 0.25em 0 0.8em;
       }
       [data-pdf-body] h1 { font-size: 22pt; }
       [data-pdf-body] h2 { font-size: 18pt; }
@@ -785,279 +878,148 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       [data-pdf-body] h4 { font-size: 13pt; }
       [data-pdf-body] h5 { font-size: 12pt; }
       [data-pdf-body] h6 { font-size: 11.5pt; }
-      /* Manual list markers so html2canvas aligns dots with the text baseline */
       [data-pdf-body] ul, [data-pdf-body] ol {
-        margin: 0 0 0.75em 0;
-        padding-left: 0;
-        list-style: none;
+        margin: 0 0 0.75em 0; padding-left: 0; list-style: none;
       }
       [data-pdf-body] ol { counter-reset: pdf-ol; }
-      [data-pdf-body] ul > li,
-      [data-pdf-body] ol > li {
-        position: relative;
-        padding-left: 1.4em;
-        margin: 0.1em 0;
-        line-height: 1.6;
+      [data-pdf-body] ul > li, [data-pdf-body] ol > li {
+        position: relative; padding-left: 1.4em; margin: 0.1em 0; line-height: 1.6;
       }
       [data-pdf-body] ul > li::before {
-        content: "•";
-        position: absolute;
-        left: 0.45em;
-        top: 0;
-        line-height: 1.6;
-        color: #0f172a;
+        content: "•"; position: absolute; left: 0.45em; top: 0; line-height: 1.6; color: #0f172a;
       }
-      [data-pdf-body] ol > li {
-        counter-increment: pdf-ol;
-      }
+      [data-pdf-body] ol > li { counter-increment: pdf-ol; }
       [data-pdf-body] ol > li::before {
-        content: counter(pdf-ol) ".";
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 1.2em;
-        text-align: right;
-        line-height: 1.6;
+        content: counter(pdf-ol) "."; position: absolute; left: 0; top: 0;
+        width: 1.2em; text-align: right; line-height: 1.6;
       }
       [data-pdf-body] li > p { margin: 0; }
-      /* Numeral-aware OL (Bangla / Arabic) */
-      [data-pdf-body] ol.numeral-ol > li {
-        padding-left: 2em;
-        line-height: 1.6;
-      }
+      [data-pdf-body] ol.numeral-ol > li { padding-left: 2em; line-height: 1.6; }
       [data-pdf-body] ol.numeral-ol > li::before { content: none; }
       [data-pdf-body] ol.numeral-ol .num-marker {
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 1.7em;
-        text-align: right;
-        line-height: 1.6;
-        padding-right: 0.3em;
+        position: absolute; left: 0; top: 0; width: 1.7em; text-align: right;
+        line-height: 1.6; padding-right: 0.3em;
       }
+      /* Blockquote — always red-accented */
       [data-pdf-body] blockquote {
-        margin: 0.5em 0 1em;
-        padding: 0.2em 1em;
-        border-left: 3px solid #94a3b8;
-        color: #334155;
-        font-style: italic;
+        margin: 0.6em 0 1em; padding: 0.3em 1em;
+        border-left: 4px solid #dc2626;
+        background: #fef2f2; border-radius: 6px;
+        color: #334155; font-style: italic;
       }
       [data-pdf-body] hr {
-        border: none;
-        border-top: 2px solid #64748b;
-        margin: 1.4em 0;
-        height: 0;
+        border: none; border-top: 2px solid #64748b; margin: 1.4em 0; height: 0;
       }
       [data-pdf-body] code {
-        background: #f1f5f9;
-        padding: 0.05em 0.35em;
-        border-radius: 4px;
-        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 0.9em;
+        background: #f1f5f9; padding: 0.05em 0.35em; border-radius: 4px;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em;
       }
       [data-pdf-body] pre {
-        background: #282c34;
-        color: #abb2bf;
-        padding: 0.9em 1em;
-        border-radius: 8px;
-        overflow: visible;
-        white-space: pre-wrap;
+        background: #282c34; color: #abb2bf; padding: 0.9em 1em; border-radius: 8px;
+        overflow: visible; white-space: pre-wrap;
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-        font-size: 9.5pt;
-        line-height: 1.5;
-        margin: 0 0 1em 0;
+        font-size: 9.5pt; line-height: 1.5; margin: 0 0 1em 0;
       }
       [data-pdf-body] pre code { background: transparent; padding: 0; color: inherit; }
-      /* highlight.js (atom-one-dark) token colors */
-      [data-pdf-body] .hljs-keyword,
-      [data-pdf-body] .hljs-selector-tag,
-      [data-pdf-body] .hljs-built_in { color: #c678dd; }
-      [data-pdf-body] .hljs-string,
-      [data-pdf-body] .hljs-attr { color: #98c379; }
-      [data-pdf-body] .hljs-number,
-      [data-pdf-body] .hljs-literal { color: #d19a66; }
-      [data-pdf-body] .hljs-comment,
-      [data-pdf-body] .hljs-quote { color: #5c6370; font-style: italic; }
-      [data-pdf-body] .hljs-function,
-      [data-pdf-body] .hljs-title { color: #61afef; }
-      [data-pdf-body] .hljs-variable,
-      [data-pdf-body] .hljs-name,
-      [data-pdf-body] .hljs-tag { color: #e06c75; }
-      [data-pdf-body] .hljs-type,
-      [data-pdf-body] .hljs-class .hljs-title { color: #e5c07b; }
-      [data-pdf-body] .hljs-meta,
-      [data-pdf-body] .hljs-symbol { color: #56b6c2; }
-      [data-pdf-body] a {
-        color: #1d4ed8;
-        text-decoration: none;
-        border-bottom: none;
-      }
+      [data-pdf-body] .hljs-keyword, [data-pdf-body] .hljs-selector-tag, [data-pdf-body] .hljs-built_in { color: #c678dd; }
+      [data-pdf-body] .hljs-string, [data-pdf-body] .hljs-attr { color: #98c379; }
+      [data-pdf-body] .hljs-number, [data-pdf-body] .hljs-literal { color: #d19a66; }
+      [data-pdf-body] .hljs-comment, [data-pdf-body] .hljs-quote { color: #5c6370; font-style: italic; }
+      [data-pdf-body] .hljs-function, [data-pdf-body] .hljs-title { color: #61afef; }
+      [data-pdf-body] .hljs-variable, [data-pdf-body] .hljs-name, [data-pdf-body] .hljs-tag { color: #e06c75; }
+      [data-pdf-body] .hljs-type, [data-pdf-body] .hljs-class .hljs-title { color: #e5c07b; }
+      [data-pdf-body] .hljs-meta, [data-pdf-body] .hljs-symbol { color: #56b6c2; }
+      [data-pdf-body] a { color: #1d4ed8; text-decoration: none; border-bottom: none; }
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
-      /* Tables — uniform padding on all sides, top-aligned so text sits at
-         the top of the cell instead of being pushed down by vertical-align:
-         middle when other cells in the row wrap to multiple lines. */
+
+      /* Minimal table — only top + bottom horizontal rules, no vertical lines. */
       [data-pdf-body] table {
-        border-collapse: collapse;
-        width: 100%;
-        margin: 0.7em 0 1em;
-        table-layout: auto;
-        word-wrap: break-word;
-        font-size: 10pt;
+        border-collapse: collapse; width: 100%; margin: 0.9em 0 1.1em;
+        table-layout: auto; word-wrap: break-word; font-size: 10pt;
+        border-top: 1.4px solid #334155;
+        border-bottom: 1.4px solid #334155;
       }
-      [data-pdf-body] th,
-      [data-pdf-body] td {
-        border: 1px solid #94a3b8;
-        padding: 4px 9px 6px 9px;
+      [data-pdf-body] thead tr { border-bottom: 0.8px solid #64748b; }
+      [data-pdf-body] th, [data-pdf-body] td {
+        border: none;
+        padding: 7px 10px;
         vertical-align: middle;
         text-align: left;
         font-size: 10pt;
-        line-height: 1.45;
+        line-height: 1.55;
         box-sizing: border-box;
       }
-      [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
-      [data-pdf-body] td > p:only-child,
-      [data-pdf-body] th > p:only-child { margin: 0; padding: 0; }
-      [data-pdf-body] td[dir="rtl"],
-      [data-pdf-body] th[dir="rtl"] {
-        text-align: right;
-        line-height: 2.0;
-        padding: 8px 10px 14px 10px;
+      [data-pdf-body] th { font-weight: 600; background: transparent; }
+      [data-pdf-body] td > p:only-child, [data-pdf-body] th > p:only-child { margin: 0; padding: 0; }
+      [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] {
+        text-align: right; line-height: 2.0; padding: 9px 10px 14px 10px;
       }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
-      [data-pdf-body] ul[data-type="taskList"] { list-style: none; padding-left: 0.2em; }
-      [data-pdf-body] ul[data-type="taskList"] li { display: flex; gap: 0.4em; }
-      [data-pdf-body] ul[data-type="taskList"] li > label { margin-top: 0.1em; }
-      [data-pdf-body] ul[data-type="taskList"] li::before { content: none; }
+
       [data-pdf-body] .fn-ref {
-        font-size: 0.7em;
-        vertical-align: super;
-        line-height: 0;
-        color: #1d4ed8;
-        margin: 0 0.05em;
+        font-size: 0.7em; vertical-align: super; line-height: 0;
+        color: #1d4ed8; margin: 0 0.05em;
       }
-      /* Footnotes — tight vertical rhythm, but still enough bottom space
-         so descenders (Bangla ৃ, য়, Arabic ج, English g,y,p) aren't clipped. */
       [data-pdf-body] .fn-item {
-        display: flex;
-        gap: 0.5em;
-        align-items: flex-start;
-        margin: 0;
-        padding: 0 0 0.15em 0;
-        line-height: 1.4;
+        display: flex; gap: 0.5em; align-items: flex-start;
+        margin: 0; padding: 0 0 0.15em 0; line-height: 1.4;
       }
       [data-pdf-body] .fn-item .fn-num {
-        font-weight: 600;
-        min-width: 1.6em;
-        text-align: right;
-        color: #1d4ed8;
-        line-height: 1.4;
+        font-weight: 600; min-width: 1.6em; text-align: right;
+        color: #1d4ed8; line-height: 1.4;
       }
       [data-pdf-body] .fn-item .fn-body {
-        flex: 1;
-        text-align: justify;
-        line-height: 1.4;
-        padding-bottom: 0.2em;
+        flex: 1; text-align: justify; line-height: 1.4; padding-bottom: 0.2em;
       }
       [data-pdf-body] .fn-item .fn-body > p {
-        margin: 0;
-        padding-bottom: 0.12em;
-        line-height: 1.4;
+        margin: 0; padding-bottom: 0.12em; line-height: 1.4;
       }
       [data-pdf-body] .fn-item .fn-body [dir="rtl"] {
-        line-height: 1.9 !important;
-        padding-bottom: 0.55em;
+        line-height: 1.9 !important; padding-bottom: 0.55em;
       }
 
-      /* ---------- Experimental features (opt-in via .exp on body) ---------- */
-      [data-pdf-body].exp h1,
-      [data-pdf-body].exp h2,
-      [data-pdf-body].exp h3 { font-variant: small-caps; letter-spacing: 0.02em; }
-      [data-pdf-body].exp h1::first-letter,
-      [data-pdf-body].exp h2::first-letter,
-      [data-pdf-body].exp h3::first-letter { color: #dc2626; }
-      [data-pdf-body].exp h1 + p::first-letter,
-      [data-pdf-body].exp h2 + p::first-letter,
-      [data-pdf-body].exp h3 + p::first-letter {
-        font-size: 2.6em;
-        float: left;
-        line-height: 0.9;
-        padding: 0.05em 0.12em 0 0;
-        font-weight: 500;
+      /* Index list — dotted leader */
+      [data-pdf-index] .idx-row {
+        display: flex; align-items: flex-end; gap: 6px;
+        margin: 0.35em 0; font-size: 11pt; line-height: 1.5;
       }
-      [data-pdf-body].exp pre {
-        counter-reset: pdf-line;
-        padding-left: 3em;
-        position: relative;
+      [data-pdf-index] .idx-name { flex: 0 0 auto; padding-bottom: 2px; }
+      [data-pdf-index] .idx-dots {
+        flex: 1 1 auto; min-width: 20px;
+        border-bottom: 1.5px dotted #94a3b8;
+        transform: translateY(-4px);
       }
-      [data-pdf-body].exp pre code { display: block; }
-      [data-pdf-body].exp pre code { counter-reset: pdf-line; }
-      [data-pdf-body].exp blockquote {
-        border-left-width: 6px;
-        border-left-color: #dc2626;
-        background: #fef2f2;
-        border-radius: 6px;
+      [data-pdf-index] .idx-page {
+        flex: 0 0 auto; color: #334155; padding-bottom: 2px;
+        font-variant-numeric: tabular-nums;
       }
     `;
     container.appendChild(styleEl);
 
-    // Cover section — parse each line as inline markdown so bold/italic works
-    // AND explicit newlines in the title/author textareas become <br>.
-    const mlInline = (s: string) =>
-      s.split("\n").map(parseInlineMd).join("<br>");
+    const mlInline = (s: string) => s.split("\n").map(parseInlineMd).join("<br>");
     const coverHtml = `
       <div data-pdf-section data-pdf-cover style="
-        width: 100%;
-        box-sizing: border-box;
-        padding-top: 8mm;
-        text-align: center;
-        position: relative;
-        min-height: ${CONTENT_H}mm;
-      ">
+        width: 100%; box-sizing: border-box; padding-top: 8mm;
+        text-align: center; position: relative; min-height: ${CONTENT_H}mm;">
         <h1 style="
-          font-size: 26pt;
-          font-weight: 400;
-          line-height: 1.35;
-          margin: 0 0 14mm 0;
-          letter-spacing: normal;
-          word-break: keep-all;
-          overflow-wrap: break-word;
-          font-feature-settings: normal;
-          font-variant-ligatures: normal;
-          white-space: normal;
-          padding: 0.15em 0 0.25em;
+          font-size: 26pt; font-weight: 400; line-height: 1.35;
+          margin: 0 0 14mm 0; padding: 0.15em 0 0.25em;
+          word-break: keep-all; overflow-wrap: break-word;
+          font-feature-settings: normal; font-variant-ligatures: normal; white-space: normal;
         ">${mlInline(safeTitle)}</h1>
         ${
           safeAuthor
-            ? `<div style="
-                font-size: 12pt;
-                font-weight: 400;
-                line-height: 1.4;
-                margin: 0;
-                color: #334155;
-                word-wrap: break-word;
-                overflow-wrap: break-word;
-                white-space: pre-wrap;
-              ">${mlInline(safeAuthor)}</div>`
+            ? `<div style="font-size: 12pt; line-height: 1.4; color: #334155; white-space: pre-wrap;">${mlInline(safeAuthor)}</div>`
             : ""
         }
-        <div data-pdf-cover-footer style="
-          position: absolute;
-          left: 0;
-          right: 0;
-          bottom: 6mm;
-          text-align: center;
-          font-size: 9pt;
-          color: #475569;
-        ">
-          Compiled by Abdullah Bari Asif.
-        </div>
+        <div style="position: absolute; left: 0; right: 0; bottom: 6mm; text-align: center;
+          font-size: 9pt; color: #475569;">Compiled by Abdullah Bari Asif.</div>
       </div>
     `;
 
-    // Body wrapper — natural typography
     const bodyWrap = document.createElement("div");
-    bodyWrap.className = experimental ? "tiptap exp" : "tiptap";
+    bodyWrap.className = "tiptap";
     bodyWrap.setAttribute("data-pdf-body", "");
     bodyWrap.style.fontSize = "11pt";
     bodyWrap.style.lineHeight = "1.65";
@@ -1070,46 +1032,40 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     container.appendChild(bodyWrap);
     document.body.appendChild(container);
 
-    // Wait for fonts to be ready so captured text uses the right faces.
     try {
-      if ((document as any).fonts?.ready) {
-        await (document as any).fonts.ready;
-      }
+      if ((document as any).fonts?.ready) await (document as any).fonts.ready;
     } catch {}
-    // Tiny tick to allow layout flush
     await new Promise((r) => setTimeout(r, 50));
 
     try {
-      const pdf = new jsPDF({
+      const pdfOpts: any = {
         orientation: "portrait",
         unit: "mm",
         format: "a5",
         compress: true,
-      });
+      };
+      if (pdfPassword) {
+        pdfOpts.encryption = {
+          userPassword: pdfPassword,
+          ownerPassword: pdfPassword,
+          userPermissions: ["print", "copy"],
+        };
+      }
+      const pdf = new jsPDF(pdfOpts);
 
-      const renderScale = 4; // sharper PDF; compressed jsPDF keeps size in check
-      const JPEG_Q = 0.88;   // tuned for quality/size balance
+      // Balanced quality/size — noticeably smaller than scale 4 @ 0.88.
+      const renderScale = 3;
+      const JPEG_Q = 0.78;
 
       type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
-        dataUrl: string;
-        heightMM: number;
-        elWidthPx: number;
-        elHeightPx: number;
-        links: LinkRect[];
-        canvas: HTMLCanvasElement;
+        dataUrl: string; heightMM: number;
+        elWidthPx: number; elHeightPx: number;
+        links: LinkRect[]; canvas: HTMLCanvasElement;
       };
 
-      const captureElement = async (
-        el: HTMLElement,
-        opts: { pad?: boolean } = {}
-      ): Promise<CaptureResult> => {
+      const captureElement = async (el: HTMLElement, opts: { pad?: boolean } = {}): Promise<CaptureResult> => {
         const pad = opts.pad !== false;
-        // Add a tiny amount of breathing room to prevent html2canvas from
-        // clipping ascenders/descenders — but ONLY if the element doesn't
-        // already have generous padding (e.g. <pre>, <table>). Overriding
-        // native padding with 2px was causing code blocks to visually clip
-        // their bottom line.
         const prevPadTop = el.style.paddingTop;
         const prevPadBot = el.style.paddingBottom;
         let padApplied = false;
@@ -1123,8 +1079,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             padApplied = true;
           }
         }
-
-        // Capture link rects in CSS pixels relative to the element box.
         const baseRect = el.getBoundingClientRect();
         const links: LinkRect[] = [];
         el.querySelectorAll("a[href]").forEach((a) => {
@@ -1132,22 +1086,12 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           if (!href) return;
           const rects = (a as HTMLAnchorElement).getClientRects();
           for (const r of Array.from(rects)) {
-            links.push({
-              x: r.left - baseRect.left,
-              y: r.top - baseRect.top,
-              w: r.width,
-              h: r.height,
-              href,
-            });
+            links.push({ x: r.left - baseRect.left, y: r.top - baseRect.top, w: r.width, h: r.height, href });
           }
         });
-
         const canvas = await html2canvas(el, {
-          scale: renderScale,
-          useCORS: true,
-          backgroundColor: "#ffffff",
-          logging: false,
-          windowWidth: widthPx,
+          scale: renderScale, useCORS: true, backgroundColor: "#ffffff",
+          logging: false, windowWidth: widthPx,
         });
         if (padApplied) {
           el.style.paddingTop = prevPadTop;
@@ -1159,93 +1103,49 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         const heightMM = elHeightPx * mmPerPx;
         return {
           dataUrl: canvas.toDataURL("image/jpeg", JPEG_Q),
-          heightMM,
-          elWidthPx,
-          elHeightPx,
-          links,
-          canvas,
+          heightMM, elWidthPx, elHeightPx, links, canvas,
         };
       };
 
-      // Slice a captured section vertically. Returns image dataUrl + heightMM for a
-      // contiguous range of source pixels [sy, sy+sh) of the original canvas.
-      const sliceSection = (
-        section: CaptureResult,
-        syPx: number,
-        shPx: number
-      ): { dataUrl: string; heightMM: number } => {
+      const sliceSection = (section: CaptureResult, syPx: number, shPx: number) => {
         const src = section.canvas;
-        const scale = src.width / section.elWidthPx; // = renderScale
+        const scale = src.width / section.elWidthPx;
         const slice = document.createElement("canvas");
         slice.width = src.width;
         slice.height = Math.round(shPx * scale);
         const ctx = slice.getContext("2d")!;
         ctx.fillStyle = "#ffffff";
         ctx.fillRect(0, 0, slice.width, slice.height);
-        ctx.drawImage(
-          src,
-          0,
-          Math.round(syPx * scale),
-          src.width,
-          slice.height,
-          0,
-          0,
-          src.width,
-          slice.height
-        );
+        ctx.drawImage(src, 0, Math.round(syPx * scale), src.width, slice.height, 0, 0, src.width, slice.height);
         const mmPerPx = CONTENT_W / section.elWidthPx;
-        return {
-          dataUrl: slice.toDataURL("image/jpeg", JPEG_Q),
-          heightMM: shPx * mmPerPx,
-        };
+        return { dataUrl: slice.toDataURL("image/jpeg", JPEG_Q), heightMM: shPx * mmPerPx };
       };
 
-      const addLinkAnnotations = (
-        section: CaptureResult,
-        xOffsetMM: number,
-        yOffsetMM: number,
-        drawW: number,
-        drawH: number
-      ) => {
+      const addLinkAnnotations = (section: CaptureResult, xOffsetMM: number, yOffsetMM: number, drawW: number, drawH: number) => {
         const sx = drawW / section.elWidthPx;
         const sy = drawH / section.elHeightPx;
         for (const lk of section.links) {
-          pdf.link(
-            xOffsetMM + lk.x * sx,
-            yOffsetMM + lk.y * sy,
-            lk.w * sx,
-            lk.h * sy,
-            { url: lk.href }
-          );
+          pdf.link(xOffsetMM + lk.x * sx, yOffsetMM + lk.y * sy, lk.w * sx, lk.h * sy, { url: lk.href });
         }
       };
 
-      // --- Cover page ---
-      const coverEl = container.querySelector(
-        "[data-pdf-cover]"
-      ) as HTMLElement;
+      // --- Cover ---
+      const coverEl = container.querySelector("[data-pdf-cover]") as HTMLElement;
       const cover = await captureElement(coverEl);
       const coverDrawH = Math.min(cover.heightMM, CONTENT_H);
       pdf.addImage(cover.dataUrl, "JPEG", MARGIN, MARGIN, CONTENT_W, coverDrawH);
       addLinkAnnotations(cover, MARGIN, MARGIN, CONTENT_W, coverDrawH);
 
-      // --- Body: always start on a new page ---
       const bodyChildren = Array.from(bodyWrap.children) as HTMLElement[];
       let bodyPageNum = 0;
-
-      // Extract clean chapter text: strip any footnote markers (<sup class="fn-ref">)
-      // so index entries don't include the little superscript numbers.
-      const cleanChapterText = (el: HTMLElement): string => {
+      const cleanChapterText = (el: HTMLElement) => {
         const clone = el.cloneNode(true) as HTMLElement;
         clone.querySelectorAll(".fn-ref").forEach((n) => n.remove());
         return (clone.textContent || "").trim();
       };
 
-      // Pre-render page-number glyphs to canvas tiles once per number so the
-      // correct font (Kalpurush / Scheherazade / TimesNR) is used. jsPDF's built-in
-      // fonts can't render Bangla / Arabic.
       const numberCache = new Map<number, { dataUrl: string; wMM: number; hMM: number }>();
-      const PAGE_NUM_PT = 9; // visible final size in PDF
+      const PAGE_NUM_PT = 9;
       const renderNumberTile = async (n: number) => {
         const cached = numberCache.get(n);
         if (cached) return cached;
@@ -1254,26 +1154,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         numDiv.style.position = "fixed";
         numDiv.style.left = "-9999px";
         numDiv.style.top = "0";
-        numDiv.style.padding = "10px 6px"; // generous padding so html2canvas never clips ascenders/descenders
+        numDiv.style.padding = "10px 6px";
         numDiv.style.margin = "0";
         numDiv.style.display = "inline-block";
         numDiv.style.background = "#ffffff";
         numDiv.style.color = "#475569";
-        numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`; // render large, downscale for crispness
-        numDiv.style.lineHeight = "1.6"; // room for descenders (e.g. Bangla ৭, ৯)
+        numDiv.style.fontSize = `${PAGE_NUM_PT * 3}pt`;
+        numDiv.style.lineHeight = "1.6";
         numDiv.style.whiteSpace = "nowrap";
         numDiv.style.fontFamily =
           "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
         numDiv.textContent = label;
         document.body.appendChild(numDiv);
         try {
-          const c = await html2canvas(numDiv, {
-            scale: 2,
-            backgroundColor: "#ffffff",
-            logging: false,
-          });
-          // Canvas was rendered at 3× the final pt size and 2× device scale.
-          // Convert back to mm by downscaling by 3 — preserves aspect, keeps full glyph (including descenders).
+          const c = await html2canvas(numDiv, { scale: 2, backgroundColor: "#ffffff", logging: false });
           const wMM = (c.width / 2) * (25.4 / 96) / 3;
           const hMM = (c.height / 2) * (25.4 / 96) / 3;
           const tile = { dataUrl: c.toDataURL("image/png"), wMM, hMM };
@@ -1286,16 +1180,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       const stampPageNumber = async () => {
         bodyPageNum += 1;
         const tile = await renderNumberTile(bodyPageNum);
-        // Real-book layout: odd pages on the right, even pages on the left.
-        // Position uses the tile's full padded height so glyphs are never clipped.
-        const edgePad = 8; // mm from outer page edge
-        const y = 2; // tile carries its own internal padding, so flush near top edge is safe
+        const edgePad = 8;
+        const y = 2;
         const isOdd = bodyPageNum % 2 === 1;
         const x = isOdd ? PAGE_W - edgePad - tile.wMM : edgePad;
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
       };
 
-      // ----- Pre-render footnote tiles for every referenced id -----
+      // Footnote tiles
       type FnTile = { id: string; cap: CaptureResult };
       const fnTiles = new Map<string, FnTile>();
       const allRefIds: string[] = (() => {
@@ -1303,10 +1195,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         const order: string[] = [];
         bodyWrap.querySelectorAll(".fn-ref").forEach((r) => {
           const id = r.getAttribute("data-fn-id");
-          if (id && footnoteDefs.has(id) && !seen.has(id)) {
-            seen.add(id);
-            order.push(id);
-          }
+          if (id && footnoteDefs.has(id) && !seen.has(id)) { seen.add(id); order.push(id); }
         });
         return order;
       })();
@@ -1320,10 +1209,10 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         for (const id of allRefIds) {
           const n = parseInt(id, 10);
           const label = !isNaN(n) ? toNumerals(n, numeralScript) : id;
-          const bodyHtml = renderFootnoteBodyHtml(footnoteDefs.get(id) || "");
+          const bodyHtmlF = renderFootnoteBodyHtml(footnoteDefs.get(id) || "");
           const item = document.createElement("div");
           item.className = "fn-item";
-          item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtml}</div>`;
+          item.innerHTML = `<span class="fn-num">${escapeHtml(label)}.</span><div class="fn-body">${bodyHtmlF}</div>`;
           fnWrap.appendChild(item);
           const cap = await captureElement(item, { pad: true });
           fnTiles.set(id, { id, cap });
@@ -1331,10 +1220,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         fnWrap.remove();
       }
 
-      // ----- Per-page footnote tracking -----
-      const DIV_GAP_TOP = 2.5; // mm above divider
-      const DIV_GAP_BOT = 1.8; // mm below divider
-      const FN_ITEM_GAP = 0.4; // mm between footnotes
+      const DIV_GAP_TOP = 2.5;
+      const DIV_GAP_BOT = 1.8;
+      const FN_ITEM_GAP = 0.4;
       let pageFnIds: string[] = [];
       const pageFnHeight = () => {
         if (pageFnIds.length === 0) return 0;
@@ -1363,7 +1251,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         pageFnIds = [];
       };
 
-      const idsInChild = (child: HTMLElement): string[] => {
+      const idsInChild = (child: HTMLElement) => {
         const out: string[] = [];
         child.querySelectorAll(".fn-ref").forEach((r) => {
           const id = r.getAttribute("data-fn-id");
@@ -1374,54 +1262,32 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
       type Chapter = { level: number; text: string; page: number };
       const chapters: Chapter[] = [];
-      const coverPages = 1; // we'll insert index pages later before body
+      const coverPages = 1;
 
       if (bodyChildren.length > 0) {
         pdf.addPage();
         await stampPageNumber();
         let currentY = MARGIN;
-        const totalChildren = bodyChildren.length;
-        setProgressLabel("পাতা তৈরি হচ্ছে...");
+        setProgressLabel("Rendering pages...");
         for (let ci = 0; ci < bodyChildren.length; ci++) {
           const child = bodyChildren[ci];
-          setProgress(0.1 + 0.8 * (ci / Math.max(1, totalChildren)));
-          const isEmpty =
-            !child.textContent?.trim() &&
-            child.querySelectorAll("img").length === 0;
-          if (isEmpty) {
-            currentY += 4;
-            continue;
-          }
+          setProgress(0.1 + 0.8 * (ci / Math.max(1, bodyChildren.length)));
+          const isEmpty = !child.textContent?.trim() && child.querySelectorAll("img").length === 0;
+          if (isEmpty) { currentY += 4; continue; }
 
           const section = await captureElement(child);
           const mmPerPx = CONTENT_W / section.elWidthPx;
 
-          // Record headings (H1/H2/H3) → chapter index entries.
           const tag = (child.tagName || "").toUpperCase();
-          const isHeading =
-            tag === "H1" || tag === "H2" || tag === "H3" ||
-            tag === "H4" || tag === "H5" || tag === "H6";
+          const isHeading = tag === "H1" || tag === "H2" || tag === "H3" || tag === "H4" || tag === "H5" || tag === "H6";
 
-          // Widow-heading rule: a heading may not be the last thing on a page.
-          // Push heading to the next page if either (a) less than ~3 body
-          // lines (≈ 22mm) remain after it, or (b) the following non-empty
-          // block wouldn't fit even one line on the current page.
           if (isHeading && currentY > MARGIN) {
-            const remainingAfter =
-              PAGE_H - MARGIN - currentY - section.heightMM;
+            const remainingAfter = PAGE_H - MARGIN - currentY - section.heightMM;
             let breakBefore = remainingAfter < 32;
             if (!breakBefore) {
-              // Peek next non-empty sibling; if it exists and is taller than
-              // remainingAfter (i.e. its first line can't be printed here),
-              // we'd still orphan the heading — so break preemptively.
               for (let j = ci + 1; j < bodyChildren.length; j++) {
                 const nx = bodyChildren[j];
-                if (
-                  !nx.textContent?.trim() &&
-                  nx.querySelectorAll("img").length === 0
-                )
-                  continue;
-                // Minimum "first line" reservation ≈ 8mm; if even that won't fit, break.
+                if (!nx.textContent?.trim() && nx.querySelectorAll("img").length === 0) continue;
                 if (remainingAfter < 8) breakBefore = true;
                 break;
               }
@@ -1434,10 +1300,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             }
           }
 
-          // Footnotes referenced by this section (those not yet on the page).
           const childIds = idsInChild(child);
-
-          const reservedFor = (ids: string[]): number => {
+          const reservedFor = (ids: string[]) => {
             if (ids.length === 0) return 0;
             let h = DIV_GAP_TOP + DIV_GAP_BOT;
             ids.forEach((id, i) => {
@@ -1447,38 +1311,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             return h;
           };
 
-          // ---- Try to place the whole section on the current page ----
-          const tentativeIdsWhole = [
-            ...pageFnIds,
-            ...childIds.filter((id) => !pageFnIds.includes(id)),
-          ];
-          const wholeAvail =
-            PAGE_H - MARGIN - reservedFor(tentativeIdsWhole) - currentY;
+          const tentativeIdsWhole = [...pageFnIds, ...childIds.filter((id) => !pageFnIds.includes(id))];
+          const wholeAvail = PAGE_H - MARGIN - reservedFor(tentativeIdsWhole) - currentY;
 
           if (section.heightMM <= wholeAvail) {
-            // Fits as-is on current page.
             if (tag === "H1" || tag === "H2" || tag === "H3") {
-              chapters.push({
-                level: parseInt(tag.substring(1), 10),
-                text: cleanChapterText(child),
-                page: bodyPageNum,
-              });
+              chapters.push({ level: parseInt(tag.substring(1), 10), text: cleanChapterText(child), page: bodyPageNum });
             }
-            pdf.addImage(
-              section.dataUrl,
-              "JPEG",
-              MARGIN,
-              currentY,
-              CONTENT_W,
-              section.heightMM
-            );
+            pdf.addImage(section.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, section.heightMM);
             addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
             currentY += section.heightMM + SECTION_GAP;
             for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
             continue;
           }
 
-          // ---- Doesn't fit whole. If it fits on a fresh page entirely, break. ----
           const freshAvail = CONTENT_H - reservedFor(childIds);
           if (section.heightMM <= freshAvail && currentY > MARGIN) {
             flushFootnotes();
@@ -1486,86 +1332,46 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             await stampPageNumber();
             currentY = MARGIN;
             if (tag === "H1" || tag === "H2" || tag === "H3") {
-              chapters.push({
-                level: parseInt(tag.substring(1), 10),
-                text: cleanChapterText(child),
-                page: bodyPageNum,
-              });
+              chapters.push({ level: parseInt(tag.substring(1), 10), text: cleanChapterText(child), page: bodyPageNum });
             }
-            pdf.addImage(
-              section.dataUrl,
-              "JPEG",
-              MARGIN,
-              currentY,
-              CONTENT_W,
-              section.heightMM
-            );
+            pdf.addImage(section.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, section.heightMM);
             addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
             currentY += section.heightMM + SECTION_GAP;
             for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
             continue;
           }
 
-          // ---- Section is too tall: slice across pages ----
           if (tag === "H1" || tag === "H2" || tag === "H3") {
-            chapters.push({
-              level: parseInt(tag.substring(1), 10),
-              text: cleanChapterText(child),
-              page: bodyPageNum,
-            });
+            chapters.push({ level: parseInt(tag.substring(1), 10), text: cleanChapterText(child), page: bodyPageNum });
           }
           let remainingPx = section.elHeightPx;
           let srcYpx = 0;
-          // For very long sections we don't try to keep footnotes on the SAME
-          // page as the marker; they go to the page where the slice containing
-          // them ends. This keeps text uncompressed and readable.
           for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
 
           while (remainingPx > 0) {
-            const availMM =
-              PAGE_H - MARGIN - reservedFor(pageFnIds) - currentY;
+            const availMM = PAGE_H - MARGIN - reservedFor(pageFnIds) - currentY;
             const availPx = availMM / mmPerPx;
-
             if (availPx < 30 / mmPerPx) {
-              // Less than ~30mm left — start a fresh page.
               flushFootnotes();
               pdf.addPage();
               await stampPageNumber();
               currentY = MARGIN;
               continue;
             }
-
             const takePx = Math.min(remainingPx, availPx);
             const slice = sliceSection(section, srcYpx, takePx);
-            pdf.addImage(
-              slice.dataUrl,
-              "JPEG",
-              MARGIN,
-              currentY,
-              CONTENT_W,
-              slice.heightMM
-            );
-            // Link annotations on partitioned blocks: only emit links whose rects
-            // fall fully within this slice.
+            pdf.addImage(slice.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, slice.heightMM);
             const sliceTopPx = srcYpx;
             const sliceBotPx = srcYpx + takePx;
             for (const lk of section.links) {
               if (lk.y >= sliceTopPx && lk.y + lk.h <= sliceBotPx) {
                 const localY = lk.y - sliceTopPx;
-                pdf.link(
-                  MARGIN + lk.x * mmPerPx,
-                  currentY + localY * mmPerPx,
-                  lk.w * mmPerPx,
-                  lk.h * mmPerPx,
-                  { url: lk.href }
-                );
+                pdf.link(MARGIN + lk.x * mmPerPx, currentY + localY * mmPerPx, lk.w * mmPerPx, lk.h * mmPerPx, { url: lk.href });
               }
             }
-
             currentY += slice.heightMM;
             srcYpx += takePx;
             remainingPx -= takePx;
-
             if (remainingPx > 0) {
               flushFootnotes();
               pdf.addPage();
@@ -1576,48 +1382,29 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             }
           }
         }
-        // Final flush for the last page.
         flushFootnotes();
       }
 
-      // ----- Optional: build & insert index pages between cover and body -----
+      // --- Index: dotted-leader style ---
       if (includeIndex && chapters.length > 0) {
         const idxTitle = indexTitle(numeralScript);
-        const isRTL = numeralScript === "ar";
+        const arabicRe = /[\u0600-\u06ff\ufb50-\ufdff\ufe70-\ufeff]/;
+        // RTL if every chapter contains at least one Arabic character.
+        const isRTL = chapters.every((c) => arabicRe.test(c.text));
         const rows = chapters
           .map((ch) => {
-            const indent = (ch.level - 1) * 18; // px
             const pgLabel = toNumerals(ch.page, numeralScript);
-            const nameCell = `<td style="padding:2px 4px; vertical-align:middle; line-height:1.35; ${
-              isRTL ? "padding-right:" : "padding-left:"
-            }${indent}px;${
-              isRTL ? "text-align:right;" : "text-align:left;"
-            }">${escapeHtml(ch.text)}</td>`;
-            const pageCell = `<td style="padding:2px 8px; vertical-align:middle; text-align:center; white-space:nowrap; color:#475569; width:16%; line-height:1.35;">${escapeHtml(pgLabel)}</td>`;
-            return `<tr>${
-              isRTL ? pageCell + nameCell : nameCell + pageCell
-            }</tr>`;
+            return `<div class="idx-row" dir="${isRTL ? "rtl" : "ltr"}">
+              <span class="idx-name">${escapeHtml(ch.text)}</span>
+              <span class="idx-dots"></span>
+              <span class="idx-page">${escapeHtml(pgLabel)}</span>
+            </div>`;
           })
           .join("");
         const indexHtml = `
-          <div data-pdf-body data-pdf-index dir="${isRTL ? "rtl" : "ltr"}" style="
-            box-sizing: border-box;
-            font-size: 11pt;
-            line-height: 1.55;
-          ">
-            <h1 style="
-              font-family: inherit;
-              font-weight: 400;
-              text-align: center;
-              font-size: 22pt;
-              margin: 0 0 10mm 0;
-            ">${escapeHtml(idxTitle)}</h1>
-            <table style="
-              border-collapse: collapse;
-              width: 100%;
-              table-layout: auto;
-              font-size: 11pt;
-            ">${rows}</table>
+          <div data-pdf-body data-pdf-index dir="${isRTL ? "rtl" : "ltr"}" style="box-sizing: border-box; font-size: 11pt; line-height: 1.55;">
+            <h1 style="font-family: inherit; font-weight: 400; text-align: center; font-size: 22pt; margin: 0 0 10mm 0;">${escapeHtml(idxTitle)}</h1>
+            ${rows}
           </div>`;
         const idxWrap = document.createElement("div");
         idxWrap.style.width = `${widthPx}px`;
@@ -1627,35 +1414,26 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         const cap = await captureElement(idxEl);
         container.removeChild(idxWrap);
 
-        // Paginate index content (may be > 1 page) and insert pages after cover.
         const idxMmPerPx = CONTENT_W / cap.elWidthPx;
         let remPx = cap.elHeightPx;
         let yPx = 0;
-        let insertAt = coverPages + 1; // page index where we insert (after cover)
+        let insertAt = coverPages + 1;
         while (remPx > 0) {
           const availPx = CONTENT_H / idxMmPerPx;
           const takePx = Math.min(remPx, availPx);
           const slice = sliceSection(cap, yPx, takePx);
           pdf.insertPage(insertAt);
           pdf.setPage(insertAt);
-          pdf.addImage(
-            slice.dataUrl,
-            "JPEG",
-            MARGIN,
-            MARGIN,
-            CONTENT_W,
-            slice.heightMM
-          );
+          pdf.addImage(slice.dataUrl, "JPEG", MARGIN, MARGIN, CONTENT_W, slice.heightMM);
           yPx += takePx;
           remPx -= takePx;
           insertAt += 1;
         }
       }
 
-      const filename =
-        safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
+      const filename = safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
       setProgress(0.98);
-      setProgressLabel("সংরক্ষণ হচ্ছে...");
+      setProgressLabel("Saving...");
       pdf.save(`${filename}.pdf`);
       setProgress(1);
     } finally {
@@ -1668,55 +1446,42 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     }
   };
 
+  // --- PDF password modal ---
+  const [pdfPwdError, setPdfPwdError] = useState<string | undefined>();
+  const handlePdfPwdSubmit = (pwd: string) => {
+    setPdfPassword(pwd);
+    setPdfPwdModal(false);
+  };
+
   return (
-    <div className="min-h-screen bg-white px-6 pt-10 md:px-20 md:pt-20 lg:px-32 lg:pt-24 pb-40 flex flex-col items-center">
+    <div className="min-h-screen bg-white px-6 pt-10 md:px-20 md:pt-20 lg:px-32 lg:pt-24 pb-40 md:pl-24 flex flex-col items-center">
       <div className="w-full max-w-5xl space-y-10">
-        {/* Title + Author */}
         <div className="space-y-4 border-b border-slate-100 pb-10">
           <textarea
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="বইয়ের শিরোনাম"
+            onChange={(e) => setTitleSmart(e.target.value)}
+            placeholder="Book title"
             rows={1}
-            ref={(el) => {
-              if (el) {
-                el.style.height = "auto";
-                el.style.height = el.scrollHeight + "px";
-              }
-            }}
-            onInput={(e) => {
-              const el = e.currentTarget;
-              el.style.height = "auto";
-              el.style.height = el.scrollHeight + "px";
-            }}
+            ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+            onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }}
             className="w-full font-mixed text-4xl md:text-5xl font-medium tracking-tight bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none overflow-hidden leading-tight"
             dir="auto"
           />
           <textarea
             value={author}
-            onChange={(e) => setAuthor(e.target.value)}
-            placeholder="লেখকের নাম (নতুন লাইনের জন্য Enter চাপুন)"
+            onChange={(e) => setAuthorSmart(e.target.value)}
+            placeholder="Author name (Enter for new line)"
             rows={1}
-            ref={(el) => {
-              if (el) {
-                el.style.height = "auto";
-                el.style.height = el.scrollHeight + "px";
-              }
-            }}
-            onInput={(e) => {
-              const el = e.currentTarget;
-              el.style.height = "auto";
-              el.style.height = el.scrollHeight + "px";
-            }}
+            ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
+            onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }}
             className="w-full font-mixed text-lg md:text-xl text-slate-600 bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none overflow-hidden leading-snug"
             dir="auto"
           />
         </div>
 
-        {/* Editor / Preview */}
         {preview ? (
           <div
-            className={`font-mixed prose-xl md:prose-2xl max-w-none pdf-preview${experimental ? " exp" : ""}`}
+            className="font-mixed prose-xl md:prose-2xl max-w-none pdf-preview"
             dir="auto"
             dangerouslySetInnerHTML={{ __html: previewHtml }}
           />
@@ -1725,14 +1490,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             ref={contentRef}
             value={content}
             onChange={(e) => {
-              setContent(e.target.value);
+              setContentSmart(e.target.value);
               requestAnimationFrame(updateSelToolbar);
             }}
             onSelect={updateSelToolbar}
             onMouseUp={updateSelToolbar}
             onKeyUp={updateSelToolbar}
             onBlur={() => setTimeout(() => setSelToolbar(null), 150)}
-            placeholder="এখানে আপনার বই লেখা শুরু করুন... (Markdown সমর্থিত)"
+            placeholder="Start writing your book here... (Markdown supported)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
             style={{ whiteSpace: "pre-wrap" }}
@@ -1740,145 +1505,96 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         )}
       </div>
 
-      {/* Floating selection toolbar (Bold / Italic) */}
       {selToolbar && !preview && (
         <div
           data-selection-toolbar
           className="fixed z-50 flex items-center gap-1 bg-slate-900 text-white rounded-xl shadow-2xl px-1 py-1 animate-in fade-in-0 zoom-in-95"
-          style={{
-            top: Math.max(8, selToolbar.top),
-            left: Math.max(8, selToolbar.left),
-          }}
+          style={{ top: Math.max(8, selToolbar.top), left: Math.max(8, selToolbar.left) }}
           onMouseDown={(e) => e.preventDefault()}
         >
-          <button
-            onClick={() => wrapSelection("**")}
-            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-            title="Bold (**text**)"
-          >
+          <button onClick={() => wrapSelection("**")} className="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Bold">
             <BoldIcon size={16} />
           </button>
-          <button
-            onClick={() => wrapSelection("*")}
-            className="p-2 hover:bg-slate-700 rounded-lg transition-colors"
-            title="Italic (*text*)"
-          >
+          <button onClick={() => wrapSelection("*")} className="p-2 hover:bg-slate-700 rounded-lg transition-colors" title="Italic">
             <ItalicIcon size={16} />
           </button>
         </div>
       )}
 
-      {/* Floating action bar — responsive, no overlap on mobile */}
-      <div className="fixed bottom-4 right-4 left-4 sm:left-auto sm:bottom-8 sm:right-8 flex justify-end items-center gap-2 sm:gap-3 pointer-events-none">
+      {/* Fixed square button cluster — bottom on mobile, left on desktop */}
+      <div
+        className="fixed z-40 pointer-events-none
+                   bottom-3 left-3 right-3 flex justify-center
+                   md:bottom-auto md:right-auto md:top-1/2 md:-translate-y-1/2 md:left-3 md:flex-col md:justify-start"
+      >
         {generating ? (
-          <div className="pointer-events-auto w-full sm:w-96 bg-white border border-slate-200 shadow-xl rounded-2xl px-5 py-4">
+          <div className="pointer-events-auto w-full max-w-sm md:max-w-[14rem] bg-white border border-slate-200 shadow-xl rounded-xl px-4 py-3">
             <div className="flex items-center justify-between mb-2 gap-3">
               <div className="flex items-center gap-2 text-slate-800 text-sm font-medium">
-                <Loader2 size={16} className="animate-spin" />
-                <span>{progressLabel || "প্রক্রিয়াধীন..."}</span>
+                <Loader2 size={14} className="animate-spin" />
+                <span className="text-xs">{progressLabel || "Working..."}</span>
               </div>
-              <span className="text-xs text-slate-500 tabular-nums">
-                {Math.round(progress * 100)}%
-              </span>
+              <span className="text-xs text-slate-500 tabular-nums">{Math.round(progress * 100)}%</span>
             </div>
-            <div className="h-2 w-full bg-slate-100 rounded-full overflow-hidden">
-              <div
-                className="h-full bg-slate-900 transition-all duration-200"
-                style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }}
-              />
+            <div className="h-1.5 w-full bg-slate-100 rounded-full overflow-hidden">
+              <div className="h-full bg-slate-900 transition-all duration-200" style={{ width: `${Math.max(2, Math.round(progress * 100))}%` }} />
             </div>
           </div>
         ) : (
-        <>
-        <a
-          href="#"
-          onClick={(e) => { e.preventDefault(); window.location.hash = ""; }}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-          title="বই-তালিকায় ফিরে যান"
-        >
-          <ArrowLeft size={18} />
-        </a>
-
-        <button
-          onClick={handlePaste}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-          title="ক্লিপবোর্ড থেকে পেস্ট করুন"
-        >
-          <ClipboardPaste size={18} />
-        </button>
-
-        <button
-          onClick={handleClearAll}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full bg-white text-rose-600 border border-slate-200 shadow-lg hover:bg-rose-50 transition-all"
-          title="এই বইটি মুছে ফেলুন"
-        >
-          <Trash2 size={18} />
-        </button>
-
-        <button
-          onClick={() => setExperimental((v) => !v)}
-          className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-4 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
-            experimental
-              ? "bg-amber-500 text-white border-amber-500 hover:bg-amber-600"
-              : "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
-          }`}
-          title={`Experimental features: ${experimental ? "ON" : "OFF"}`}
-        >
-          <FlaskConical size={18} />
-        </button>
-
-        <button
-          onClick={() => setIncludeIndex((v) => !v)}
-          className={`pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full border shadow-lg transition-all ${
-            includeIndex
-              ? "bg-slate-900 text-white border-slate-900 hover:bg-slate-800"
-              : "bg-white text-slate-900 border-slate-200 hover:bg-slate-50"
-          }`}
-          title={`Index page is ${includeIndex ? "ON" : "OFF"} — auto-generated from #, ##, ### headings`}
-        >
-          <ListTree size={18} />
-          <span className="text-sm font-medium hidden sm:inline">
-            Index{includeIndex ? ": On" : ": Off"}
-          </span>
-        </button>
-
-        <button
-          onClick={() => setPreview((p) => !p)}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-          title={preview ? "Back to editor" : "Preview with markdown"}
-        >
-          {preview ? <Pencil size={18} /> : <Eye size={18} />}
-          <span className="text-sm font-medium hidden sm:inline">
-            {preview ? "Edit" : "Preview"}
-          </span>
-        </button>
-
-        <a
-          href="/book/help"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-white text-slate-900 border border-slate-200 shadow-lg hover:bg-slate-50 transition-all"
-          title="Markdown guide (in Bangla) — opens in a new tab"
-        >
-          <HelpCircle size={18} />
-          <span className="text-sm font-medium hidden sm:inline">Help</span>
-        </a>
-
-        <button
-          onClick={handleDownloadPDF}
-          disabled={generating}
-          className="pointer-events-auto flex items-center gap-2 px-3 sm:px-5 py-2.5 sm:py-3 rounded-full bg-slate-900 text-white shadow-lg hover:bg-slate-800 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-          title="Download as PDF"
-        >
-          <Download size={18} />
-          <span className="text-sm font-medium hidden sm:inline">Download</span>
-        </button>
-        </>
+          <div className="pointer-events-auto flex md:flex-col gap-1 bg-white border border-slate-200 shadow-lg rounded-xl p-1 max-w-full overflow-x-auto md:overflow-visible">
+            <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
+            <SquareBtn onClick={handlePaste} title="Paste from clipboard"><ClipboardPaste size={18} /></SquareBtn>
+            <SquareBtn onClick={handleClearAll} title="Delete this book" className="text-rose-600"><Trash2 size={18} /></SquareBtn>
+            <SquareBtn
+              onClick={() => setIncludeIndex((v) => !v)}
+              title={`Index page: ${includeIndex ? "ON" : "OFF"}`}
+              className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+            >
+              <ListTree size={18} />
+            </SquareBtn>
+            <SquareBtn
+              onClick={() => { setPdfPwdError(undefined); setPdfPwdModal(true); }}
+              title={pdfPassword ? "PDF password set (click to change)" : "Set PDF password"}
+              className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
+            >
+              <FileLock2 size={18} />
+            </SquareBtn>
+            <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
+              {preview ? <Pencil size={18} /> : <Eye size={18} />}
+            </SquareBtn>
+            <SquareBtn
+              onClick={handleDownloadPDF}
+              title="Download PDF"
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              <Download size={18} />
+            </SquareBtn>
+          </div>
         )}
       </div>
+
+      <PasswordPrompt
+        open={pdfPwdModal}
+        title={pdfPassword ? "Update PDF password (leave input to clear on Cancel)" : "Set a password for the exported PDF"}
+        submitLabel="Save"
+        error={pdfPwdError}
+        onCancel={() => setPdfPwdModal(false)}
+        onSubmit={handlePdfPwdSubmit}
+      />
     </div>
   );
 };
+
+const SquareBtn: React.FC<
+  React.ButtonHTMLAttributes<HTMLButtonElement> & { className?: string }
+> = ({ className = "", children, ...rest }) => (
+  <button
+    {...rest}
+    className={`shrink-0 flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg text-slate-800 hover:bg-slate-100 transition-colors ${className}`}
+  >
+    {children}
+  </button>
+);
 
 function escapeHtml(str: string) {
   return str

@@ -1,414 +1,297 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, FlaskConical } from "lucide-react";
-import { marked } from "marked";
-import { markedHighlight } from "marked-highlight";
-import hljs from "highlight.js";
-import "highlight.js/styles/atom-one-dark.css";
+import { ArrowLeft } from "lucide-react";
 
-marked.use(
-  markedHighlight({
-    langPrefix: "hljs language-",
-    highlight(code, lang) {
-      const language = lang && hljs.getLanguage(lang) ? lang : "plaintext";
-      try {
-        return hljs.highlight(code, { language, ignoreIllegals: true }).value;
-      } catch {
-        return code;
-      }
-    },
-  })
-);
+/*
+ * /book/help — Design & authoring reference.
+ *
+ * This page is written to be consumed by an AI assistant as a design brief.
+ * The audience is expert: no live examples, no beginner hand-holding.
+ * Every rule below is authoritative for content that will be exported as PDF.
+ */
 
-/* Small footnote renderer (mirrors /book preview behavior). */
-function renderWithFootnotes(md: string): string {
-  const defs = new Map<string, string>();
-  const stripped = (md || "").replace(
-    /\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g,
-    (_m, id, body) => {
-      defs.set(String(id).trim(), String(body).trim());
-      return "";
-    }
-  );
-  const order: string[] = [];
-  const seen = new Set<string>();
-  stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (_m, id) => {
-    const t = String(id).trim();
-    if (defs.has(t) && !seen.has(t)) {
-      seen.add(t);
-      order.push(t);
-    }
-    return _m;
-  });
-  const bnDigits = ["০","১","২","৩","৪","৫","৬","৭","৮","৯"];
-  const arDigits = ["٠","١","٢","٣","٤","٥","٦","٧","٨","٩"];
-  const firstCh = (md || "").trim().codePointAt(0) ?? 0;
-  const script: "bn" | "ar" | "en" =
-    firstCh >= 0x0980 && firstCh <= 0x09ff
-      ? "bn"
-      : (firstCh >= 0x0600 && firstCh <= 0x06ff) ||
-        (firstCh >= 0xfb50 && firstCh <= 0xfdff)
-      ? "ar"
-      : "en";
-  const toNum = (n: number) =>
-    String(n)
-      .split("")
-      .map((d) =>
-        /\d/.test(d)
-          ? script === "bn"
-            ? bnDigits[+d]
-            : script === "ar"
-            ? arDigits[+d]
-            : d
-          : d
-      )
-      .join("");
-  const withMarkers = stripped.replace(/\[\[([^\]\s=]+)\]\]/g, (raw, id) => {
-    const t = String(id).trim();
-    if (!defs.has(t)) return raw;
-    const n = parseInt(t, 10);
-    const label = !isNaN(n) ? toNum(n) : t;
-    return `<sup class="fn-ref">${label}</sup>`;
-  });
-  let html = marked.parse(withMarkers, {
-    async: false,
-    gfm: true,
-    breaks: true,
-  }) as string;
-  if (order.length > 0) {
-    const items = order
-      .map((id) => {
-        const n = parseInt(id, 10);
-        const label = !isNaN(n) ? toNum(n) : id;
-        const body = marked.parse(defs.get(id) || "", {
-          async: false,
-          gfm: true,
-          breaks: true,
-        }) as string;
-        return `<div class="fn-item"><span class="fn-num">${label}.</span><div class="fn-body">${body}</div></div>`;
-      })
-      .join("");
-    html += `<div class="fn-list">${items}</div>`;
-  }
-  return html;
-}
+type Rule = { title: string; body: React.ReactNode };
 
-type Section = {
-  title: string;
-  desc: React.ReactNode;
-  example: string;
-};
-
-const sections: Section[] = [
+const rules: Rule[] = [
   {
-    title: "শিরোনাম",
-    desc: (
+    title: "Document model",
+    body: (
       <>
-        লাইনের শুরুতে <code>#</code> বসিয়ে শিরোনাম লিখুন। যত বেশি{" "}
-        <code>#</code>, শিরোনাম তত ছোট। PDF-এ প্রতিটি শিরোনাম মাঝখানে বসবে।
+        A book has three plain-text fields: <code>title</code>, <code>author</code>,
+        and <code>content</code>. Only <code>content</code> is Markdown. The cover
+        page renders <code>title</code> and <code>author</code> with inline
+        Markdown (<code>**bold**</code>, <code>*italic*</code>) — no block syntax.
+        Line breaks in title/author are literal <code>&lt;br&gt;</code>.
       </>
     ),
-    example: `# অধ্যায় এক\n## একটি ছোট ভাগ\n### আরও ছোট ভাগ`,
   },
   {
-    title: "নতুন প্যারাগ্রাফ",
-    desc: (
+    title: "Headings",
+    body: (
       <>
-        নতুন প্যারাগ্রাফ চাইলে দুই লাইনের মাঝে একটা ফাঁকা লাইন রাখুন। শুধু
-        Enter চাপলে একই প্যারাগ্রাফের ভেতরেই লাইন ভাঙবে।
+        Use <code>#</code> through <code>######</code>. Headings are centered in
+        the PDF. <code>#</code>, <code>##</code>, and <code>###</code> also
+        populate the auto-generated Index. Headings never appear as the last
+        block on a page — the generator moves widow headings to the next page.
       </>
     ),
-    example: `প্রথম প্যারাগ্রাফ।\n\nদ্বিতীয় প্যারাগ্রাফ।`,
   },
   {
-    title: "মোটা, হেলানো ও কাটা লেখা",
-    desc: (
+    title: "Paragraphs & line breaks",
+    body: (
       <>
-        মোটা — <code>**এভাবে**</code>, হেলানো — <code>*এভাবে*</code>, কাটা —{" "}
-        <code>~~এভাবে~~</code>। মাঝখানে কোনো স্পেস দেবেন না।
+        Blank line = new paragraph. Single <code>\n</code> inside a paragraph is
+        rendered as a hard line break (GFM <code>breaks: true</code>). Body text
+        is justified in all scripts.
       </>
     ),
-    example: `এটি **মোটা**, এটি *হেলানো*, এটি ~~কাটা~~ লেখা।`,
   },
   {
-    title: "বুলেট তালিকা",
-    desc: (
+    title: "Emphasis",
+    body: (
       <>
-        প্রতিটি লাইনের শুরুতে <code>-</code> দিন। ভেতরে আরেকটা তালিকা চাইলে
-        চারটি স্পেস দিয়ে ভেতরে নিয়ে যান।
+        <code>**bold**</code>, <code>*italic*</code>, <code>~~strike~~</code>.
+        No spaces between the marker and the text.
       </>
     ),
-    example: `- চা\n- কফি\n    - দুধ চা\n    - রং চা\n- পানি`,
   },
   {
-    title: "সংখ্যার তালিকা — বাংলা ও আরবিতেও",
-    desc: (
+    title: "Bulleted lists",
+    body: (
       <>
-        শুধু <code>1.</code> না, <code>১.</code> বা <code>١.</code> দিয়েও
-        তালিকা বানানো যাবে। যেই সংখ্যায় শুরু করবেন, পুরো তালিকা সেই সংখ্যায়ই
-        চলবে।
+        Prefix each item with <code>-</code>. Indent nested items with four
+        spaces. Bullets are drawn manually to keep glyph baselines aligned
+        across scripts.
       </>
     ),
-    example: `১. সকালে উঠা\n২. নাশতা করা\n৩. বের হওয়া`,
   },
   {
-    title: "উদ্ধৃতি",
-    desc: (
+    title: "Numbered lists (multi-script)",
+    body: (
       <>
-        লাইনের শুরুতে <code>&gt;</code> বসান। একাধিক লাইনের উদ্ধৃতি দিতে চাইলে
-        প্রতিটি লাইনের শুরুতেই <code>&gt;</code> লাগাবেন।
+        Accepted markers: Western <code>1.</code>, Bangla <code>১.</code> or{" "}
+        <code>১।</code>, Arabic-Indic <code>١.</code>. Any of <code>.</code>,{" "}
+        <code>)</code>, or <code>।</code> counts as a terminator. The renderer
+        preserves the script the author used — do not mix scripts inside a
+        single list.
       </>
     ),
-    example: `> পড়ো, তোমার প্রভুর নামে যিনি সৃষ্টি করেছেন।`,
   },
   {
-    title: "লিঙ্ক",
-    desc: (
+    title: "Blockquotes",
+    body: (
       <>
-        গঠনটা সহজ — <code>[যা দেখাবে](ঠিকানা)</code>। PDF-এও এই লিঙ্কগুলো
-        ক্লিক করা যাবে।
+        Standard <code>&gt;</code> prefix. Blockquotes always render with a red
+        left border and a very light red background — this is a permanent
+        design decision, not a toggle. Use them for pull quotes and cited
+        passages; do not use them for regular emphasis.
       </>
     ),
-    example: `আমার সাইট: [abdullah.ami.bd](https://abdullah.ami.bd)`,
   },
   {
-    title: "ছবি",
-    desc: (
+    title: "Links & images",
+    body: (
       <>
-        লিঙ্কের মতোই, শুধু আগে একটা <code>!</code> বসান:{" "}
-        <code>![বিকল্প লেখা](ছবির ঠিকানা)</code>।
+        Standard Markdown: <code>[label](url)</code> and{" "}
+        <code>![alt](url)</code>. Link rectangles are preserved in the PDF and
+        remain clickable. Link text carries no underline — colour alone
+        signals interactivity. Images are constrained to content width.
       </>
     ),
-    example: `![নমুনা ছবি](https://picsum.photos/400/200)`,
   },
   {
-    title: "টেবিল",
-    desc: (
+    title: "Tables",
+    body: (
       <>
-        কলামগুলো <code>|</code> দিয়ে আলাদা করুন। প্রথম লাইনে শিরোনাম, পরের
-        লাইনে <code>---</code> দিয়ে আলাদা করতে হবে।
+        GFM tables. The PDF strips all vertical rules and internal borders —
+        only a top and bottom horizontal rule remain, plus a thin rule under
+        the header row. Keep cells short; long text still wraps but the
+        minimal style favours short, scannable rows.
       </>
     ),
-    example: `| নাম | বয়স |\n|------|------|\n| রহিম | ২২ |\n| করিম | ২৫ |`,
   },
   {
-    title: "কোড",
-    desc: (
+    title: "Code",
+    body: (
       <>
-        একটামাত্র শব্দ কোড করতে চাইলে দুপাশে একটা করে ব্যাকটিক দিন। বড় কোড
-        ব্লকের জন্য তিনটা ব্যাকটিক দিয়ে শুরু-শেষ করুন; প্রথম লাইনে ভাষার নাম
-        লিখলে রং দিয়ে highlight হবে।
+        Inline: single backticks. Blocks: triple backticks with an optional
+        language tag (any hljs-supported language). Highlighting uses
+        atom-one-dark tokens. Long lines wrap.
       </>
     ),
-    example: "`print()` একটি ফাংশন।\n\n```python\nprint(\"হ্যালো\")\n```",
   },
   {
-    title: "লম্বা রেখা",
-    desc: (
+    title: "Horizontal rule",
+    body: (
       <>
-        একটা আলাদা লাইনে শুধু <code>---</code> লিখুন — পাতা জুড়ে একটা পাতলা
-        রেখা বসবে। অধ্যায় ভাগ করার জন্য বেশ কাজের।
+        A line with only <code>---</code>. Rendered as a 2px slate rule with
+        generous vertical margin. Use to divide sections within a chapter.
       </>
     ),
-    example: `আগের অংশ শেষ।\n\n---\n\nনতুন অংশ শুরু।`,
   },
   {
-    title: "পুরোপুরি আরবি লাইন",
-    desc: (
+    title: "Auto smart-quotes",
+    body: (
       <>
-        কোনো লাইন যদি শুরু থেকে শেষ পর্যন্ত পুরোপুরি আরবি হয়, সেটা নিজে থেকেই
-        ডান দিক ঘেঁষে বসবে। আপনাকে আলাদা কিছু করতে হবে না।
+        Straight <code>"</code> and <code>'</code> typed anywhere in title,
+        author, or content are auto-replaced with curly forms
+        (<code>“ ” ‘ ’</code>). The rule is context-sensitive: after a
+        whitespace, bracket, or start-of-input the opening form is used;
+        otherwise the closing form. Already-curly quotes are never re-written.
       </>
     ),
-    example: `بسم الله الرحمن الرحيم`,
   },
   {
-    title: "পৃষ্ঠা নম্বর সম্পর্কে",
-    desc: (
+    title: "Auto-red numerals",
+    body: (
       <>
-        প্রচ্ছদের পরের পাতা থেকে নম্বর শুরু হবে। বিজোড় পাতা (১, ৩, ৫…) উপরে
-        ডানে, জোড় পাতা (২, ৪, ৬…) উপরে বাঁয়ে — আসল বইয়ের মতো। শিরোনামের প্রথম
-        অক্ষর কোন ভাষার, সেটা দেখে নম্বরও সেই ভাষার সংখ্যায় বসবে।
+        Every run of digits — Western, Bangla, and Arabic-Indic — is
+        colourised red in preview and PDF. Footnote markers, list markers,
+        code, and link text are excluded. This is permanent.
       </>
     ),
-    example: `# আমার বই\n(শিরোনাম বাংলা → পৃষ্ঠা নম্বরও বাংলায়)`,
   },
   {
-    title: "ফুটনোট",
-    desc: (
+    title: "Script-aware direction",
+    body: (
       <>
-        মূল লেখায় যেখানে নম্বর বসাতে চান, সেখানে <code>[[1]]</code> লিখুন —
-        এটা ছোট করে উপরে <sup>১</sup> হয়ে বসবে। আর সেই নম্বরের ব্যাখ্যা
-        লিখতে যেকোনো জায়গায় <code>[[1==এখানে ব্যাখ্যা]]</code> দিন। প্রিভিউ ও
-        PDF-এ ব্যাখ্যাটা পাতার নিচে, একটা ছোট রেখার পরে আলাদা করে দেখানো হবে।
-        PDF-এ যেই পাতায় নম্বর আছে, ঠিক সেই পাতার নিচেই ফুটনোটটা বসবে।
-        ফুটনোটের ভেতরেও সাধারণ markdown (মোটা, হেলানো, লিঙ্ক) কাজ করবে।
+        A paragraph, list item, blockquote, or table cell whose visible
+        content is <em>entirely</em> Arabic (ignoring punctuation, digits,
+        whitespace) is set to <code>dir="rtl"</code> with right-anchored
+        justification. Headings that are entirely Arabic remain centered but
+        use RTL text flow. Mixed-script blocks stay LTR.
       </>
     ),
-    example: `ইমাম শাফেয়ী রাহিমাহুল্লাহ একজন বড় ফকীহ ছিলেন। [[1]] তাঁর বই *আল-উম্ম* আজও পড়া হয়। [[2]]\n\n[[1==জন্ম ১৫০ হিজরী, মৃত্যু ২০৪ হিজরী।]]\n[[2==মূল আরবি গ্রন্থ, একাধিক খণ্ডে।]]`,
+  },
+  {
+    title: "Footnotes",
+    body: (
+      <>
+        Marker syntax: <code>[[id]]</code>. Definition syntax:{" "}
+        <code>[[id==body]]</code>. The same <code>id</code> may be referenced
+        multiple times but is defined exactly once. In the PDF, every page
+        that contains at least one marker also renders every referenced
+        footnote body at the bottom of that page, separated from body text by
+        a short horizontal rule anchored to the left margin. Footnote bodies
+        support inline Markdown. <code>id</code> should be a number so it can
+        be transliterated into the numeral system of the book’s primary
+        script.
+      </>
+    ),
+  },
+  {
+    title: "Page numbers",
+    body: (
+      <>
+        Body pagination starts at 1 on the first content page. Odd pages
+        stamp the number top-right, even pages top-left, mirroring a bound
+        book. Numerals follow the script detected from the first non-space
+        character of the title (or content, if the title is empty).
+      </>
+    ),
+  },
+  {
+    title: "Auto-generated index",
+    body: (
+      <>
+        When the Index toggle is on, an Index is inserted immediately after
+        the cover, listing every <code>#</code>/<code>##</code>/
+        <code>###</code> heading with its resolved page number. The layout is
+        a dotted leader — chapter name, gray dot-line, page number — all
+        chapter names start at the same margin regardless of heading level.
+        Direction is RTL only when every listed chapter contains at least
+        one Arabic character; otherwise LTR. Users cannot edit the index; it
+        is derived at export time.
+      </>
+    ),
+  },
+  {
+    title: "Book-level password (open/delete gate)",
+    body: (
+      <>
+        Each book tile on <code>/book</code> has a lock/unlock toggle. Setting
+        a password stores its SHA-256 hash locally under{" "}
+        <code>book-lock-v1:&lt;id&gt;</code>. A locked book requires the
+        password to open and to delete. Removing the lock also requires the
+        password. There is no reset mechanism — a lost password means the
+        book stays locked forever.
+      </>
+    ),
+  },
+  {
+    title: "PDF-level password (viewer gate)",
+    body: (
+      <>
+        The editor exposes a separate PDF-password button. When set, the next
+        export encrypts the PDF with that password (both user and owner) and
+        restricts permissions to print and copy. The password is stored per
+        book alongside its draft and is independent of the book-level lock.
+      </>
+    ),
+  },
+  {
+    title: "Storage & lifecycle",
+    body: (
+      <>
+        Drafts persist to <code>localStorage</code> under{" "}
+        <code>book-draft-v1:&lt;id&gt;</code>. The list of book ids lives at{" "}
+        <code>book-list-v1</code>. On returning to the library, any book
+        whose <code>title</code>, <code>author</code>, and <code>content</code>{" "}
+        are all empty is deleted — untitled placeholder books never
+        accumulate.
+      </>
+    ),
+  },
+  {
+    title: "Compression trade-off",
+    body: (
+      <>
+        Body pages are rasterised at scale 3 and encoded as JPEG at quality
+        0.78 inside a jsPDF stream with <code>compress: true</code>. This
+        keeps typographic fidelity while producing substantially smaller
+        files than a scale-4/quality-0.88 baseline.
+      </>
+    ),
   },
 ];
 
-/* Sections shown only when experimental features are enabled.
-   Turn everything on together with the flask button on /book. */
-const experimentalSections: Section[] = [
-  {
-    title: "স্মল-ক্যাপস শিরোনাম",
-    desc: (
-      <>
-        শিরোনামগুলো small-caps স্টাইলে বসবে — বড় হাতের অক্ষরের মতো কিন্তু
-        উচ্চতা একটু কম, বইয়ের ছাপা টাইপোগ্রাফির মতো।
-      </>
-    ),
-    example: `# Chapter One\n## A quiet morning`,
-  },
-  {
-    title: "শিরোনামের প্রথম অক্ষর লাল",
-    desc: (
-      <>
-        প্রতিটি শিরোনামের প্রথম অক্ষর লাল রঙে আলাদা হয়ে দেখা যাবে — সংক্ষিপ্ত
-        উচ্চারণচিহ্নের মতো কাজ করে।
-      </>
-    ),
-    example: `# অধ্যায় এক\n## ছোট একটি ভাগ`,
-  },
-  {
-    title: "ড্রপ ক্যাপ",
-    desc: (
-      <>
-        যে প্যারাগ্রাফ কোনো শিরোনামের ঠিক পরে আসে, তার প্রথম অক্ষরটা বড় হয়ে
-        বাম দিকে ভাসবে — পুরনো বইয়ের ‘drop cap’-এর মতো।
-      </>
-    ),
-    example: `# ভূমিকা\n\nএই বইটির শুরুতে কিছু কথা বলা প্রয়োজন — যেন পাঠক পুরো ছবিটা ধরতে পারেন।`,
-  },
-  {
-    title: "লাল-ধারাবাহ উদ্ধৃতি",
-    desc: (
-      <>
-        সব উদ্ধৃতির (<code>&gt;</code>) বাম দিকের দাগ লাল রঙের হবে এবং হালকা
-        গোলাপি পটভূমি বসবে — গুরুত্বপূর্ণ বাক্য চোখে পড়বে সহজে।
-      </>
-    ),
-    example: `> পড়ো, তোমার প্রভুর নামে।`,
-  },
-  {
-    title: "নম্বর লাল রঙে",
-    desc: (
-      <>
-        মূল টেক্সটের সব সংখ্যা — বাংলা, ইংরেজি বা আরবি — লাল রঙে দেখা যাবে
-        (ফুটনোট নম্বর এই নিয়মের বাইরে)। বইয়ে নম্বর বেশি থাকলে চোখে পড়ে
-        সহজে। এটা এখন <strong>সব সময়ই</strong> চালু আছে, পরীক্ষা হিসাবে
-        দেওয়া।
-      </>
-    ),
-    example: `২০২৪ সালে সে ১২ বার এসেছিল, কিন্তু ১৩ বার যেতে পারেনি।`,
-  },
-];
+const BookHelp: React.FC = () => (
+  <div className="min-h-screen bg-white px-5 pt-8 md:px-16 md:pt-14 lg:px-28 pb-24">
+    <div className="w-full max-w-3xl mx-auto">
+      <Link
+        to="/book"
+        className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 mb-8"
+      >
+        <ArrowLeft size={16} /> Back to library
+      </Link>
 
-const MiniTry: React.FC<{ initial: string }> = ({ initial }) => {
-  const [text, setText] = useState(initial);
-  const html = useMemo(
-    () => renderWithFootnotes(text),
-    [text]
-  );
-  return (
-    <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-0 border border-slate-200 rounded-xl overflow-hidden">
-      <textarea
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        spellCheck={false}
-        dir="auto"
-        className="w-full min-h-[140px] p-3 font-mono text-[13px] leading-relaxed bg-slate-50 focus:outline-none resize-y"
-      />
-      <div
-        className="font-mixed pdf-preview p-3 min-h-[140px] text-base overflow-auto bg-white border-t md:border-t-0 md:border-l border-slate-100"
-        dir="auto"
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
-    </div>
-  );
-};
+      <header className="mb-10">
+        <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 leading-tight">
+          Book authoring — design specification
+        </h1>
+        <p className="mt-3 text-base md:text-lg text-slate-600 leading-relaxed">
+          Authoritative reference for the Markdown dialect and rendering rules
+          used by the <code>/book</code> editor and its PDF exporter. Intended
+          audience: expert human authors and AI assistants generating source
+          text on their behalf. Every rule below is enforced by the exporter;
+          content that ignores a rule will still render but may look wrong.
+        </p>
+      </header>
 
-const BookHelp = () => {
-  const [experimental, setExperimental] = useState(false);
-  useEffect(() => {
-    try {
-      setExperimental(localStorage.getItem("book-experimental-v1") === "1");
-    } catch {}
-  }, []);
-  return (
-    <div className="min-h-screen bg-white px-5 pt-8 md:px-16 md:pt-14 lg:px-28 pb-24">
-      <div className="w-full max-w-3xl mx-auto">
-        <Link
-          to="/book"
-          className="inline-flex items-center gap-2 text-sm text-slate-600 hover:text-slate-900 mb-8"
-        >
-          <ArrowLeft size={16} /> বইয়ের পাতায় ফিরে যান
-        </Link>
-
-        <header className="mb-10 font-mixed">
-          <h1 className="text-3xl md:text-4xl font-semibold tracking-tight text-slate-900 leading-tight">
-            লেখার গাইড
-          </h1>
-          <p className="mt-3 text-base md:text-lg text-slate-600 leading-relaxed">
-            বইয়ের পাতায় কীভাবে শিরোনাম, তালিকা, টেবিল, ছবি — এসব সাজাবেন,
-            সেটাই এখানে ছোট ছোট ভাগে বলা আছে। প্রতিটার নিচে একটা ছোট
-            এডিটরও আছে — সেখানে নিজে হাত দিয়ে দেখে নিতে পারবেন কেমন দেখায়।
-          </p>
-        </header>
-
-        <section className="space-y-10 font-mixed">
-          {sections.map((s, i) => (
-            <article key={i} className="border-b border-slate-100 pb-8">
-              <h2 className="text-xl md:text-2xl font-semibold text-slate-900 mb-2">
-                {i + 1}. {s.title}
-              </h2>
-              <p className="text-base text-slate-700 leading-relaxed">
-                {s.desc}
-              </p>
-              <MiniTry initial={s.example} />
-            </article>
-          ))}
-        </section>
-
-        {experimental && experimentalSections.length > 0 && (
-          <section className="mt-14 font-mixed">
-            <div className="flex items-center gap-2 mb-6">
-              <FlaskConical size={20} className="text-amber-600" />
-              <h2 className="text-xl md:text-2xl font-semibold text-slate-900">
-                পরীক্ষামূলক ফিচার
-              </h2>
-              <span className="ml-2 text-[11px] uppercase tracking-wider px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">
-                Experimental
-              </span>
-            </div>
-            <p className="text-sm text-slate-500 mb-6">
-              এই ফিচারগুলো এখনো পরীক্ষার পর্যায়ে আছে — যেকোনো সময় বদলাতে বা
-              সরিয়ে ফেলতে পারি। বইয়ের পাতায় নিচের বার-এ ফ্লাস্ক বোতাম আছে,
-              সেটা দিয়ে চালু/বন্ধ করা যাবে।
+      <section className="space-y-8">
+        {rules.map((r, i) => (
+          <article key={i} className="border-b border-slate-100 pb-6">
+            <h2 className="text-lg md:text-xl font-semibold text-slate-900 mb-2">
+              {i + 1}. {r.title}
+            </h2>
+            <p className="text-base text-slate-700 leading-relaxed">
+              {r.body}
             </p>
-            <div className="space-y-10">
-              {experimentalSections.map((s, i) => (
-                <article key={i} className="border-b border-slate-100 pb-8">
-                  <h3 className="text-lg md:text-xl font-semibold text-slate-900 mb-2 flex items-center gap-2">
-                    {s.title}
-                    <span className="text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded bg-amber-100 text-amber-700 border border-amber-200">
-                      Experimental
-                    </span>
-                  </h3>
-                  <p className="text-base text-slate-700 leading-relaxed">
-                    {s.desc}
-                  </p>
-                  <MiniTry initial={s.example} />
-                </article>
-              ))}
-            </div>
-          </section>
-        )}
-      </div>
+          </article>
+        ))}
+      </section>
     </div>
-  );
-};
+  </div>
+);
 
 export default BookHelp;
