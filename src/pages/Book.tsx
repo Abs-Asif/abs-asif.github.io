@@ -4,7 +4,6 @@ import {
   Loader2,
   Eye,
   Pencil,
-  ListTree,
   Trash2,
   Bold as BoldIcon,
   Italic as ItalicIcon,
@@ -15,6 +14,10 @@ import {
   Lock,
   Unlock,
   FileLock2,
+  MoreHorizontal,
+  Image as ImageIcon,
+  ImageOff,
+  X,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -30,10 +33,7 @@ codeRenderer.code = function ({ text, lang }: { text: string; lang?: string }) {
   try {
     highlighted = hljs.highlight(text, { language, ignoreIllegals: true }).value;
   } catch {
-    highlighted = text
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+    highlighted = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
   }
   return `<pre><code class="hljs language-${language}">${highlighted}</code></pre>`;
 };
@@ -48,29 +48,19 @@ function parseInlineMd(s: string): string {
   }
 }
 
-/* ---------- Smart quotes ---------- */
-// Idempotent: curly quotes are left untouched, only straight ones are replaced.
 function smartQuotes(s: string): string {
   if (!s) return s;
-  s = s
-    .replace(/(^|[\s\(\[\{«—–\-])"/g, "$1\u201C")
-    .replace(/"/g, "\u201D");
-  s = s
-    .replace(/(^|[\s\(\[\{«—–\-])'/g, "$1\u2018")
-    .replace(/'/g, "\u2019");
+  s = s.replace(/(^|[\s\(\[\{«—–\-])"/g, "$1\u201C").replace(/"/g, "\u201D");
+  s = s.replace(/(^|[\s\(\[\{«—–\-])'/g, "$1\u2018").replace(/'/g, "\u2019");
   return s;
 }
 
-/* ---------- Password hashing (SHA-256) ---------- */
 async function sha256Hex(s: string): Promise<string> {
   const data = new TextEncoder().encode(s);
   const hash = await crypto.subtle.digest("SHA-256", data);
-  return Array.from(new Uint8Array(hash))
-    .map((b) => b.toString(16).padStart(2, "0"))
-    .join("");
+  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/* ---------- Script detection ---------- */
 type NumeralScript = "bn" | "ar" | "en";
 function detectScript(text: string): NumeralScript {
   for (const ch of text) {
@@ -95,13 +85,9 @@ function toNumerals(n: number, script: NumeralScript): string {
     script === "bn"
       ? ["০", "১", "২", "৩", "৪", "৫", "৬", "৭", "৮", "৯"]
       : ["٠", "١", "٢", "٣", "٤", "٥", "٦", "٧", "٨", "٩"];
-  return s
-    .split("")
-    .map((d) => (/\d/.test(d) ? map[+d] : d))
-    .join("");
+  return s.split("").map((d) => (/\d/.test(d) ? map[+d] : d)).join("");
 }
 
-/* ---------- Arabic-only block detection & alignment ---------- */
 function isArabicOnly(text: string): boolean {
   const stripped = text.replace(/\s+/g, "").replace(/[\p{P}\p{S}\d]/gu, "");
   if (!stripped) return false;
@@ -138,8 +124,6 @@ function applyArabicAlignment(html: string): string {
   return root.innerHTML;
 }
 
-/* ---------- Bangla / Arabic numbered list preprocessing ---------- */
-// Accept ".", ")" and Bangla danda "।" as list markers.
 function preprocessNumeralLists(md: string): string {
   const lines = md.split("\n");
   const re = /^(\s*)([০-৯]+|[٠-٩]+)([.)।])\s+(.*)$/;
@@ -168,7 +152,6 @@ function preprocessNumeralLists(md: string): string {
   return out.join("\n");
 }
 
-/* ---------- Auto-red numbers (always on) ---------- */
 function colorizeDigits(html: string): string {
   if (typeof DOMParser === "undefined") return html;
   const DIGIT_RE = /[0-9\u09E6-\u09EF\u0660-\u0669]+/;
@@ -220,7 +203,6 @@ function colorizeDigits(html: string): string {
   return root.innerHTML;
 }
 
-/* ---------- Footnotes ---------- */
 function extractFootnoteDefs(md: string): { md: string; defs: Map<string, string> } {
   const defs = new Map<string, string>();
   const stripped = (md || "").replace(/\[\[([^\]\s=]+)==([\s\S]*?)\]\]/g, (_m, id, body) => {
@@ -291,12 +273,77 @@ function renderForPdfBody(md: string, script: NumeralScript): { html: string; de
   return { html: colorizeDigits(html), defs };
 }
 
-/* ---------- Storage ---------- */
 const LIST_KEY = "book-list-v1";
+const DEFAULT_SEED_KEY = "book-default-seeded-v1";
 const cacheKeyFor = (id: number) => `book-draft-v1:${id}`;
-const lockKeyFor = (id: number) => `book-lock-v1:${id}`; // stores { hash: string }
+const lockKeyFor = (id: number) => `book-lock-v1:${id}`;
+const unlockSessionKey = (id: number) => `book-unlocked:${id}`;
 
-type BookMeta = { id: number; title: string; author: string; content: string };
+type BookMeta = {
+  id: number;
+  title: string;
+  author: string;
+  content: string;
+  coverImage?: string;
+};
+
+const DEFAULT_BOOK_CONTENT =
+  "# পরিচিতি\n\n" +
+  "এটি একটি *demo* বই। **Preview** (চোখ) বাটনে চাপ দিয়ে দেখুন কীভাবে প্রতিটি উপাদান PDF-এ রেন্ডার হয়, Edit বাটনে ফিরে এসে source দেখতে পারবেন। এই বইটি ইচ্ছেমত মুছে ফেলা যাবে।\n\n" +
+  "---\n\n" +
+  "# ১. Headings — শিরোনাম — العناوين\n\n" +
+  "`#`, `##`, `###` দিয়ে chapter, section ও sub-section। সবগুলো PDF-এ কেন্দ্রীভূত থাকে।\n\n" +
+  "## Section (H2)\n\n" +
+  "### Sub-section (H3)\n\n" +
+  "#### H4 — smaller\n\n" +
+  "# ২. Emphasis\n\n" +
+  "**Bold text**, *italic text*, ~~strikethrough~~ — inline সব মিলিয়ে ব্যবহার করা যায়।\n\n" +
+  "# ৩. Bullets — তালিকা\n\n" +
+  "- প্রথম item\n" +
+  "- দ্বিতীয় item\n" +
+  "    - Nested item\n" +
+  "- তৃতীয় item\n\n" +
+  "# ৪. Numbered lists (multi-script)\n\n" +
+  "1. English one\n" +
+  "2. English two\n" +
+  "3. English three\n\n" +
+  "১. বাংলা এক\n" +
+  "২. বাংলা দুই\n" +
+  "৩. বাংলা তিন\n\n" +
+  "١. عربي واحد\n" +
+  "٢. عربي اثنان\n" +
+  "٣. عربي ثلاثة\n\n" +
+  "# ৫. Blockquote\n\n" +
+  "> এই ধরনের উদ্ধৃতির বাম দিকে সবসময় একটি লাল রেখা থাকে — এটি permanent design।\n\n" +
+  "# ৬. Table — টেবিল\n\n" +
+  "| Name | Language | Year |\n" +
+  "| --- | --- | --- |\n" +
+  "| Foo | English | 2024 |\n" +
+  "| বই | বাংলা | ২০২৫ |\n" +
+  "| كتاب | عربي | ٢٠٢٦ |\n\n" +
+  "# ৭. Code\n\n" +
+  "Inline `const x = 42;` অথবা block:\n\n" +
+  "```js\n" +
+  "function hello(name) {\n" +
+  "  return \"Hello, \" + name;\n" +
+  "}\n" +
+  "```\n\n" +
+  "# ৮. Horizontal rule\n\n" +
+  "উপরে ও নিচে জায়গা রেখে একটি রেখা:\n\n" +
+  "---\n\n" +
+  "# ৯. Links\n\n" +
+  "ভিজিট করুন [Lovable](https://lovable.dev)। Link-এর নিচে কোনো underline নেই — শুধু রঙই signal।\n\n" +
+  "# ১০. Footnotes — টীকা\n\n" +
+  "একই id একাধিকবার cite করা যায় [[1]], কিন্তু body একবারই লেখা হয় [[2]]। আবার প্রথমটি [[1]]।\n\n" +
+  "[[1==এটি প্রথম footnote। ভেতরে **markdown** সমর্থিত।]]\n" +
+  "[[2==দ্বিতীয় footnote। সংখ্যা ১২৩ স্বয়ংক্রিয়ভাবে লাল।]]\n\n" +
+  "# ১১. Auto-red numbers\n\n" +
+  "সংখ্যা যেই script-এই থাকুক — 2025, ২০২৫, ٢٠٢٥ — সব স্বয়ংক্রিয়ভাবে লাল হয়ে যায়।\n\n" +
+  "# القسم العربي\n\n" +
+  "هذه فقرة عربية كاملة، مكتوبة من اليمين إلى اليسار مع ضبط تلقائي للاتجاه. الأرقام ٢٠٢٥ تظهر بلون أحمر.\n\n" +
+  "> اقتباس عربي مع خط أحمر على اليمين.\n\n" +
+  "# English section\n\n" +
+  "This paragraph is entirely in English. Numbers like 2026 are automatically coloured red. Long paragraphs will be split across pages automatically without breaking the layout.\n";
 
 function loadBookList(): number[] {
   try {
@@ -324,10 +371,18 @@ function readBookMeta(id: number): BookMeta {
         title: typeof p.title === "string" ? p.title : "",
         author: typeof p.author === "string" ? p.author : "",
         content: typeof p.content === "string" ? p.content : "",
+        coverImage: typeof p.coverImage === "string" ? p.coverImage : undefined,
       };
     }
   } catch {}
   return { id, title: "", author: "", content: "" };
+}
+function writeBookMeta(id: number, meta: Partial<BookMeta>) {
+  try {
+    const existing = readBookMeta(id);
+    const merged = { ...existing, ...meta };
+    localStorage.setItem(cacheKeyFor(id), JSON.stringify(merged));
+  } catch {}
 }
 function readLockHash(id: number): string | null {
   try {
@@ -349,11 +404,26 @@ function deleteBookEntirely(id: number) {
   try {
     localStorage.removeItem(cacheKeyFor(id));
     localStorage.removeItem(lockKeyFor(id));
+    sessionStorage.removeItem(unlockSessionKey(id));
     saveBookList(loadBookList().filter((x) => x !== id));
   } catch {}
 }
+function seedDefaultBookIfNeeded() {
+  try {
+    if (localStorage.getItem(DEFAULT_SEED_KEY)) return;
+    const ids = loadBookList();
+    if (!ids.includes(0)) {
+      writeBookMeta(0, {
+        title: "Demo Book — ডেমো বই",
+        author: "Book Editor",
+        content: DEFAULT_BOOK_CONTENT,
+      });
+      saveBookList([0, ...ids]);
+    }
+    localStorage.setItem(DEFAULT_SEED_KEY, "1");
+  } catch {}
+}
 
-/* ---------- Router ---------- */
 const BookRouter = () => {
   const [hash, setHash] = useState<string>(() =>
     typeof window !== "undefined" ? window.location.hash : ""
@@ -366,27 +436,97 @@ const BookRouter = () => {
   const m = hash.match(/^#(\d+)$/);
   if (!m) return <BookLanding />;
   const id = parseInt(m[1], 10);
-  return <BookEditor bookId={id} key={id} />;
+  return <BookGate bookId={id} key={id} />;
 };
 
-/* ---------- Password prompt (modal) ---------- */
-const PasswordPrompt: React.FC<{
+const BookGate: React.FC<{ bookId: number }> = ({ bookId }) => {
+  const lockHash = readLockHash(bookId);
+  const initial = !lockHash || sessionStorage.getItem(unlockSessionKey(bookId)) === "1";
+  const [unlocked, setUnlocked] = useState<boolean>(initial);
+  const [error, setError] = useState<string | undefined>();
+
+  if (unlocked) return <BookEditor bookId={bookId} />;
+
+  const onSubmit = async (pwd: string) => {
+    const h = await sha256Hex(pwd);
+    if (h === lockHash) {
+      sessionStorage.setItem(unlockSessionKey(bookId), "1");
+      setUnlocked(true);
+    } else {
+      setError("ভুল পাসওয়ার্ড।");
+    }
+  };
+  const onCancel = () => {
+    window.location.hash = "";
+  };
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-white flex items-center justify-center px-4">
+      <PrettyPasswordPrompt
+        open
+        icon="lock"
+        title="বইটি লকড"
+        description="এই বই খোলার জন্য পাসওয়ার্ড প্রয়োজন। ভুলে গেলে পুনরুদ্ধারের কোনো উপায় নেই।"
+        submitLabel="খুলুন"
+        error={error}
+        onCancel={onCancel}
+        onSubmit={onSubmit}
+      />
+    </div>
+  );
+};
+
+type PromptAction = { label: string; onClick: () => void; tone?: "primary" | "danger" | "ghost" };
+const PrettyPasswordPrompt: React.FC<{
   open: boolean;
+  icon?: "lock" | "unlock" | "file";
   title: string;
+  description?: string;
   submitLabel?: string;
+  cancelLabel?: string;
   onCancel: () => void;
   onSubmit: (pwd: string) => void;
+  extraActions?: PromptAction[];
   error?: string;
-}> = ({ open, title, submitLabel = "OK", onCancel, onSubmit, error }) => {
+}> = ({
+  open,
+  icon = "lock",
+  title,
+  description,
+  submitLabel = "ঠিক আছে",
+  cancelLabel = "বাতিল",
+  onCancel,
+  onSubmit,
+  extraActions,
+  error,
+}) => {
   const [pwd, setPwd] = useState("");
   useEffect(() => {
     if (open) setPwd("");
   }, [open]);
   if (!open) return null;
+  const Icon = icon === "unlock" ? Unlock : icon === "file" ? FileLock2 : Lock;
   return (
-    <div className="fixed inset-0 z-[100] bg-black/40 flex items-center justify-center px-4">
-      <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6">
-        <h3 className="text-lg font-semibold text-slate-900 mb-3 font-mixed">{title}</h3>
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95">
+        <div className="flex items-start gap-4 mb-5">
+          <div className="shrink-0 w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center shadow-md">
+            <Icon size={20} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-slate-900 leading-tight">{title}</h3>
+            {description && (
+              <p className="mt-1 text-sm text-slate-600 leading-relaxed">{description}</p>
+            )}
+          </div>
+          <button
+            onClick={onCancel}
+            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+            aria-label="Close"
+          >
+            <X size={16} />
+          </button>
+        </div>
         <input
           autoFocus
           type="password"
@@ -395,21 +535,38 @@ const PasswordPrompt: React.FC<{
           onKeyDown={(e) => {
             if (e.key === "Enter" && pwd) onSubmit(pwd);
           }}
-          className="w-full border border-slate-300 rounded-lg px-3 py-2 text-base focus:outline-none focus:border-slate-800"
-          placeholder="Password"
+          className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors"
+          placeholder="পাসওয়ার্ড লিখুন"
         />
-        {error && <p className="mt-2 text-sm text-rose-600">{error}</p>}
-        <div className="mt-4 flex justify-end gap-2">
+        {error && (
+          <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
+            {error}
+          </p>
+        )}
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
+          {extraActions?.map((a, i) => (
+            <button
+              key={i}
+              onClick={a.onClick}
+              className={
+                a.tone === "danger"
+                  ? "px-4 py-2 rounded-xl text-sm font-medium bg-rose-50 text-rose-700 hover:bg-rose-100"
+                  : "px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+              }
+            >
+              {a.label}
+            </button>
+          ))}
           <button
             onClick={onCancel}
-            className="px-3 py-1.5 rounded-lg text-slate-600 hover:bg-slate-100 text-sm"
+            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
           >
-            Cancel
+            {cancelLabel}
           </button>
           <button
             onClick={() => pwd && onSubmit(pwd)}
             disabled={!pwd}
-            className="px-3 py-1.5 rounded-lg bg-slate-900 text-white text-sm disabled:opacity-50"
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {submitLabel}
           </button>
@@ -419,13 +576,105 @@ const PasswordPrompt: React.FC<{
   );
 };
 
-/* ---------- Landing ---------- */
+const ConfirmModal: React.FC<{
+  open: boolean;
+  title: string;
+  description?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  tone?: "danger" | "primary";
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({
+  open,
+  title,
+  description,
+  confirmLabel = "নিশ্চিত করুন",
+  cancelLabel = "বাতিল",
+  tone = "danger",
+  onConfirm,
+  onCancel,
+}) => {
+  if (!open) return null;
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95">
+        <div className="flex items-start gap-4 mb-5">
+          <div
+            className={`shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center shadow-md ${
+              tone === "danger"
+                ? "bg-gradient-to-br from-rose-600 to-rose-500 text-white"
+                : "bg-gradient-to-br from-slate-900 to-slate-700 text-white"
+            }`}
+          >
+            <Trash2 size={20} />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-semibold text-slate-900 leading-tight">{title}</h3>
+            {description && (
+              <p className="mt-1 text-sm text-slate-600 leading-relaxed">{description}</p>
+            )}
+          </div>
+        </div>
+        <div className="flex justify-end gap-2">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            {cancelLabel}
+          </button>
+          <button
+            onClick={onConfirm}
+            className={
+              tone === "danger"
+                ? "px-4 py-2 rounded-xl text-sm font-medium bg-rose-600 text-white hover:bg-rose-700"
+                : "px-4 py-2 rounded-xl text-sm font-medium bg-slate-900 text-white hover:bg-slate-800"
+            }
+          >
+            {confirmLabel}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+async function cropToA5DataUrl(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((res, rej) => {
+    const r = new FileReader();
+    r.onload = () => res(String(r.result));
+    r.onerror = rej;
+    r.readAsDataURL(file);
+  });
+  const img = await new Promise<HTMLImageElement>((res, rej) => {
+    const i = new Image();
+    i.onload = () => res(i);
+    i.onerror = rej;
+    i.src = dataUrl;
+  });
+  const targetRatio = 148 / 210;
+  const outH = Math.min(2100, img.naturalHeight);
+  const outW = Math.round(outH * targetRatio);
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d")!;
+  ctx.fillStyle = "#ffffff";
+  ctx.fillRect(0, 0, outW, outH);
+  const scale = outH / img.naturalHeight;
+  const drawW = img.naturalWidth * scale;
+  const drawH = outH;
+  const dx = (outW - drawW) / 2;
+  ctx.drawImage(img, dx, 0, drawW, drawH);
+  return canvas.toDataURL("image/jpeg", 0.85);
+}
+
 const BookLanding = () => {
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [locks, setLocks] = useState<Record<number, string | null>>({});
   const [query, setQuery] = useState("");
+  const [expandedId, setExpandedId] = useState<number | null>(null);
 
-  // Actions requiring password
   const [pwdModal, setPwdModal] = useState<
     | { kind: "open"; id: number; hash: string }
     | { kind: "delete"; id: number; hash: string }
@@ -434,14 +683,17 @@ const BookLanding = () => {
     | null
   >(null);
   const [pwdError, setPwdError] = useState<string | undefined>();
+  const [confirmDelete, setConfirmDelete] = useState<number | null>(null);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const [coverTargetId, setCoverTargetId] = useState<number | null>(null);
 
   const refresh = () => {
-    // Purge empty books first
+    seedDefaultBookIfNeeded();
     const ids = loadBookList();
     const kept: number[] = [];
     for (const id of ids) {
       const m = readBookMeta(id);
-      const empty = !m.title.trim() && !m.author.trim() && !m.content.trim();
+      const empty = !m.title.trim() && !m.author.trim() && !m.content.trim() && !m.coverImage;
       if (empty) {
         try {
           localStorage.removeItem(cacheKeyFor(id));
@@ -462,6 +714,13 @@ const BookLanding = () => {
     refresh();
   }, []);
 
+  useEffect(() => {
+    if (!expandedId) return;
+    const onDown = () => setExpandedId(null);
+    window.addEventListener("click", onDown);
+    return () => window.removeEventListener("click", onDown);
+  }, [expandedId]);
+
   const createBook = () => {
     const ids = loadBookList();
     const next = ids.length ? Math.max(...ids) + 1 : 1;
@@ -471,7 +730,7 @@ const BookLanding = () => {
 
   const openBook = (id: number) => {
     const h = locks[id];
-    if (h) {
+    if (h && sessionStorage.getItem(unlockSessionKey(id)) !== "1") {
       setPwdError(undefined);
       setPwdModal({ kind: "open", id, hash: h });
     } else {
@@ -479,46 +738,62 @@ const BookLanding = () => {
     }
   };
 
-  const startDelete = (id: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const startDelete = (id: number) => {
     const h = locks[id];
     if (h) {
       setPwdError(undefined);
       setPwdModal({ kind: "delete", id, hash: h });
     } else {
-      if (window.confirm("Delete this book permanently?")) {
-        deleteBookEntirely(id);
-        refresh();
-      }
+      setConfirmDelete(id);
     }
   };
 
-  const toggleLock = (id: number, e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
+  const toggleLock = (id: number) => {
     const h = locks[id];
     setPwdError(undefined);
     if (h) setPwdModal({ kind: "unlock-remove", id, hash: h });
     else setPwdModal({ kind: "set-lock", id });
   };
 
+  const startCover = (id: number) => {
+    setCoverTargetId(id);
+    coverInputRef.current?.click();
+  };
+  const removeCover = (id: number) => {
+    writeBookMeta(id, { coverImage: undefined });
+    refresh();
+  };
+  const onCoverFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (!file || coverTargetId == null) return;
+    try {
+      const cropped = await cropToA5DataUrl(file);
+      writeBookMeta(coverTargetId, { coverImage: cropped });
+      refresh();
+    } catch {
+      alert("ছবি প্রক্রিয়া করা যায়নি।");
+    }
+  };
+
   const handlePwdSubmit = async (pwd: string) => {
     if (!pwdModal) return;
     const hashed = await sha256Hex(pwd);
     if (pwdModal.kind === "open") {
-      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      if (hashed !== pwdModal.hash) return setPwdError("ভুল পাসওয়ার্ড।");
       const id = pwdModal.id;
+      sessionStorage.setItem(unlockSessionKey(id), "1");
       setPwdModal(null);
       window.location.hash = `#${id}`;
     } else if (pwdModal.kind === "delete") {
-      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      if (hashed !== pwdModal.hash) return setPwdError("ভুল পাসওয়ার্ড।");
       deleteBookEntirely(pwdModal.id);
       setPwdModal(null);
       refresh();
     } else if (pwdModal.kind === "unlock-remove") {
-      if (hashed !== pwdModal.hash) return setPwdError("Wrong password.");
+      if (hashed !== pwdModal.hash) return setPwdError("ভুল পাসওয়ার্ড।");
       writeLockHash(pwdModal.id, null);
+      sessionStorage.removeItem(unlockSessionKey(pwdModal.id));
       setPwdModal(null);
       refresh();
     } else if (pwdModal.kind === "set-lock") {
@@ -544,8 +819,25 @@ const BookLanding = () => {
     return Array.from(t)[0] || "";
   };
 
+  const cornerFor = (id: number) => {
+    const opts = [
+      { top: "-45%", left: "-25%" },
+      { top: "-45%", left: "60%" },
+      { top: "40%", left: "-25%" },
+      { top: "40%", left: "60%" },
+    ];
+    return opts[Math.abs(id) % opts.length];
+  };
+
   return (
     <div className="min-h-screen bg-white flex flex-col">
+      <input
+        ref={coverInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={onCoverFile}
+      />
       <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 md:px-16 lg:px-28">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
           <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-4 py-2.5">
@@ -566,103 +858,222 @@ const BookLanding = () => {
           {filtered.map((b) => {
             const locked = !!locks[b.id];
             const letter = firstLetter(b.title || b.content);
+            const expanded = expandedId === b.id;
+            const corner = cornerFor(b.id);
             return (
               <div
                 key={b.id}
                 onClick={() => openBook(b.id)}
-                className="group relative aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all p-4 flex flex-col justify-between overflow-hidden cursor-pointer"
+                className="group relative aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all overflow-hidden cursor-pointer"
               >
-                {letter && (
-                  <div
-                    className="absolute top-1 left-0 right-0 text-center font-mixed text-slate-100 font-medium pointer-events-none select-none leading-none"
-                    style={{ fontSize: "6rem" }}
-                  >
-                    {letter}
+                {b.coverImage ? (
+                  <img
+                    src={b.coverImage}
+                    alt=""
+                    className="absolute inset-0 w-full h-full object-cover pointer-events-none select-none"
+                  />
+                ) : letter ? (
+                  <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
+                    <div
+                      className="absolute font-mixed text-slate-100 font-semibold leading-none"
+                      style={{
+                        fontSize: "20rem",
+                        top: corner.top,
+                        left: corner.left,
+                      }}
+                    >
+                      {letter}
+                    </div>
                   </div>
-                )}
-                <div className="relative flex items-start justify-between">
-                  <div className="text-[10px] font-mono uppercase tracking-wider text-slate-400">
-                    #{b.id}
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={(e) => toggleLock(b.id, e)}
-                      title={locked ? "Remove password" : "Set password"}
-                      className={`p-1.5 rounded-md text-slate-500 hover:bg-slate-100 ${
-                        locked ? "text-amber-600" : ""
+                ) : null}
+                <div className="absolute inset-0 p-3 flex flex-col justify-between">
+                  <div className="relative flex items-start justify-between">
+                    <div
+                      className={`text-[10px] font-mono uppercase tracking-wider ${
+                        b.coverImage ? "text-white/90 drop-shadow" : "text-slate-400"
                       }`}
                     >
-                      {locked ? <Lock size={14} /> : <Unlock size={14} />}
-                    </button>
+                      #{b.id}
+                    </div>
+                    <div className="flex items-center gap-1">
+                      {locked && (
+                        <div
+                          title="Locked"
+                          className={`p-1.5 rounded-md ${
+                            b.coverImage ? "text-rose-100 bg-black/30" : "text-rose-600"
+                          }`}
+                        >
+                          <Lock size={14} />
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedId(expanded ? null : b.id);
+                        }}
+                        title="Options"
+                        className={`p-1.5 rounded-md ${
+                          b.coverImage
+                            ? "text-white bg-black/30 hover:bg-black/50"
+                            : "text-slate-500 hover:bg-slate-100"
+                        }`}
+                      >
+                        <MoreHorizontal size={14} />
+                      </button>
+                    </div>
                   </div>
-                </div>
-                <div className="relative">
-                  <div
-                    className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3"
-                    dangerouslySetInnerHTML={{
-                      __html: b.title
-                        ? parseInlineMd(b.title.split("\n")[0])
-                        : '<span class="text-slate-400">Untitled</span>',
-                    }}
-                  />
-                  {b.author && (
-                    <div
-                      className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2"
-                      dangerouslySetInnerHTML={{
-                        __html: parseInlineMd(b.author.split("\n")[0]),
-                      }}
-                    />
+                  {!b.coverImage && (
+                    <div className="relative">
+                      <div
+                        className="font-mixed text-base md:text-lg font-medium text-slate-900 leading-snug line-clamp-3"
+                        dangerouslySetInnerHTML={{
+                          __html: b.title
+                            ? parseInlineMd(b.title.split("\n")[0])
+                            : '<span class="text-slate-400">Untitled</span>',
+                        }}
+                      />
+                      {b.author && (
+                        <div
+                          className="mt-2 font-mixed text-xs md:text-sm text-slate-500 line-clamp-2"
+                          dangerouslySetInnerHTML={{
+                            __html: parseInlineMd(b.author.split("\n")[0]),
+                          }}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
+                {expanded && (
+                  <div
+                    onClick={(e) => e.stopPropagation()}
+                    className="absolute right-2 top-10 z-10 bg-white border border-slate-200 rounded-xl shadow-xl p-1 flex flex-col gap-0.5 min-w-[10rem] font-mixed animate-in fade-in-0 zoom-in-95"
+                  >
+                    <MenuBtn
+                      icon={locked ? <Unlock size={14} /> : <Lock size={14} />}
+                      label={locked ? "লক সরান" : "লক করুন"}
+                      onClick={() => {
+                        setExpandedId(null);
+                        toggleLock(b.id);
+                      }}
+                    />
+                    <MenuBtn
+                      icon={<ImageIcon size={14} />}
+                      label={b.coverImage ? "কভার পরিবর্তন" : "কভার যোগ"}
+                      onClick={() => {
+                        setExpandedId(null);
+                        startCover(b.id);
+                      }}
+                    />
+                    {b.coverImage && (
+                      <MenuBtn
+                        icon={<ImageOff size={14} />}
+                        label="কভার সরান"
+                        onClick={() => {
+                          setExpandedId(null);
+                          removeCover(b.id);
+                        }}
+                      />
+                    )}
+                    <MenuBtn
+                      icon={<Trash2 size={14} />}
+                      label="মুছে ফেলুন"
+                      danger
+                      onClick={() => {
+                        setExpandedId(null);
+                        startDelete(b.id);
+                      }}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}
           <button
             onClick={createBook}
             className="aspect-[3/4] rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50 hover:bg-slate-100 hover:border-slate-500 transition-all flex flex-col items-center justify-center gap-2 text-slate-500"
-            title="Create new book"
+            title="নতুন বই"
           >
             <Plus size={32} />
-            <span className="text-xs font-medium">New book</span>
+            <span className="text-xs font-medium font-mixed">নতুন বই</span>
           </button>
         </div>
         {books.length === 0 && (
           <p className="text-center text-slate-400 text-sm mt-10 font-mixed">
-            No books yet. Tap + to create one.
+            কোনো বই নেই। + চেপে নতুন বই তৈরি করুন।
           </p>
         )}
       </div>
 
-      <PasswordPrompt
+      <PrettyPasswordPrompt
         open={!!pwdModal}
+        icon={pwdModal?.kind === "set-lock" ? "lock" : "unlock"}
         title={
           pwdModal?.kind === "open"
-            ? "Enter password to open"
+            ? "বই খুলতে পাসওয়ার্ড দিন"
             : pwdModal?.kind === "delete"
-            ? "Enter password to delete"
+            ? "মুছে ফেলার জন্য পাসওয়ার্ড দিন"
             : pwdModal?.kind === "unlock-remove"
-            ? "Enter password to remove lock"
-            : "Set a password (cannot be reset)"
+            ? "লক সরাতে পাসওয়ার্ড দিন"
+            : "নতুন পাসওয়ার্ড দিন"
         }
-        submitLabel={pwdModal?.kind === "set-lock" ? "Lock" : "Unlock"}
+        description={
+          pwdModal?.kind === "set-lock"
+            ? "এই বইটি লক হবে। ভুলে গেলে পুনরুদ্ধারের কোনো উপায় নেই — সাবধানে পাসওয়ার্ড সংরক্ষণ করুন।"
+            : pwdModal?.kind === "open"
+            ? "সঠিক পাসওয়ার্ড দিলে বইটি এই সেশনে খোলা থাকবে।"
+            : pwdModal?.kind === "delete"
+            ? "লকড বই মুছতে পাসওয়ার্ড লাগে। মুছে ফেললে আর ফিরে পাওয়া যাবে না।"
+            : "লক সরানোর পর যেকেউ এই বই খুলতে পারবে।"
+        }
+        submitLabel={pwdModal?.kind === "set-lock" ? "লক করুন" : "নিশ্চিত করুন"}
         error={pwdError}
         onCancel={() => setPwdModal(null)}
         onSubmit={handlePwdSubmit}
+      />
+
+      <ConfirmModal
+        open={confirmDelete != null}
+        title="বইটি মুছে ফেলবেন?"
+        description="এই কাজটি অপরিবর্তনীয় — সমস্ত লেখা, কভার ও সেটিংস স্থায়ীভাবে মুছে যাবে।"
+        confirmLabel="মুছে ফেলুন"
+        onConfirm={() => {
+          if (confirmDelete != null) deleteBookEntirely(confirmDelete);
+          setConfirmDelete(null);
+          refresh();
+        }}
+        onCancel={() => setConfirmDelete(null)}
       />
     </div>
   );
 };
 
-/* ---------- Editor ---------- */
+const MenuBtn: React.FC<{
+  icon: React.ReactNode;
+  label: string;
+  onClick: () => void;
+  danger?: boolean;
+}> = ({ icon, label, onClick, danger }) => (
+  <button
+    onClick={onClick}
+    className={`flex items-center gap-2 px-3 py-2 rounded-lg text-sm text-left ${
+      danger ? "text-rose-600 hover:bg-rose-50" : "text-slate-700 hover:bg-slate-100"
+    }`}
+  >
+    <span className="shrink-0">{icon}</span>
+    <span className="flex-1">{label}</span>
+  </button>
+);
+
 const BookEditor = ({ bookId }: { bookId: number }) => {
   const CACHE_KEY = cacheKeyFor(bookId);
   const [title, setTitle] = useState("");
   const [author, setAuthor] = useState("");
   const [content, setContent] = useState("");
+  const [coverImage, setCoverImage] = useState<string | undefined>(undefined);
   const [pdfPassword, setPdfPassword] = useState<string>("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [includeIndex, setIncludeIndex] = useState(false);
+  const [includeIndex] = useState(true);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [hydrated, setHydrated] = useState(false);
@@ -766,7 +1177,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       const text = await navigator.clipboard.readText();
       if (text) insertAtCursor(text);
     } catch {
-      alert("Clipboard read failed. Check browser permissions.");
+      alert("ক্লিপবোর্ড পড়া যায়নি। ব্রাউজারের অনুমতি পরীক্ষা করুন।");
     }
   };
 
@@ -778,8 +1189,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         if (typeof p.title === "string") setTitle(p.title);
         if (typeof p.author === "string") setAuthor(p.author);
         if (typeof p.content === "string") setContent(p.content);
-        if (typeof p.includeIndex === "boolean") setIncludeIndex(p.includeIndex);
         if (typeof p.pdfPassword === "string") setPdfPassword(p.pdfPassword);
+        if (typeof p.coverImage === "string") setCoverImage(p.coverImage);
       }
     } catch {}
     setHydrated(true);
@@ -790,21 +1201,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     try {
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify({ title, author, content, includeIndex, pdfPassword })
+        JSON.stringify({ title, author, content, pdfPassword, coverImage })
       );
     } catch {}
-  }, [title, author, content, includeIndex, pdfPassword, hydrated]);
+  }, [title, author, content, pdfPassword, coverImage, hydrated]);
 
   const goBack = () => {
-    // Purge if empty
-    const empty = !title.trim() && !author.trim() && !content.trim();
+    const empty = !title.trim() && !author.trim() && !content.trim() && !coverImage;
     if (empty) deleteBookEntirely(bookId);
-    window.location.hash = "";
-  };
-
-  const handleClearAll = () => {
-    if (!window.confirm("Delete this book permanently?")) return;
-    deleteBookEntirely(bookId);
     window.location.hash = "";
   };
 
@@ -816,7 +1220,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const handleDownloadPDF = async () => {
     setGenerating(true);
     setProgress(0);
-    setProgressLabel("Preparing...");
+    setProgressLabel("প্রস্তুতি...");
 
     const safeTitle = (title || "Untitled").trim();
     const safeAuthor = author.trim();
@@ -900,7 +1304,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         position: absolute; left: 0; top: 0; width: 1.7em; text-align: right;
         line-height: 1.6; padding-right: 0.3em;
       }
-      /* Blockquote — always red-accented */
       [data-pdf-body] blockquote {
         margin: 0.6em 0 1em; padding: 0.3em 1em;
         border-left: 4px solid #dc2626;
@@ -933,27 +1336,24 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       [data-pdf-body] strong { font-weight: 700; }
       [data-pdf-body] em { font-style: italic; }
 
-      /* Minimal table — only top + bottom horizontal rules, no vertical lines. */
+      /* Full markdown table — matches the on-screen preview */
       [data-pdf-body] table {
-        border-collapse: collapse; width: 100%; margin: 0.9em 0 1.1em;
-        table-layout: auto; word-wrap: break-word; font-size: 10pt;
-        border-top: 1.4px solid #334155;
-        border-bottom: 1.4px solid #334155;
-      }
-      [data-pdf-body] thead tr { border-bottom: 0.8px solid #64748b; }
-      [data-pdf-body] th, [data-pdf-body] td {
-        border: none;
-        padding: 7px 10px;
-        vertical-align: middle;
-        text-align: left;
+        border-collapse: collapse; width: 100%;
+        margin: 0.6em 0 1.2em; table-layout: fixed; word-wrap: break-word;
         font-size: 10pt;
-        line-height: 1.55;
+      }
+      [data-pdf-body] th, [data-pdf-body] td {
+        border: 1px solid #94a3b8;
+        padding: 6px 9px;
+        vertical-align: top;
+        text-align: left;
+        line-height: 1.5;
         box-sizing: border-box;
       }
-      [data-pdf-body] th { font-weight: 600; background: transparent; }
+      [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
       [data-pdf-body] td > p:only-child, [data-pdf-body] th > p:only-child { margin: 0; padding: 0; }
       [data-pdf-body] td[dir="rtl"], [data-pdf-body] th[dir="rtl"] {
-        text-align: right; line-height: 2.0; padding: 9px 10px 14px 10px;
+        text-align: right; line-height: 1.9; padding: 8px 9px 12px 9px;
       }
       [data-pdf-body] img { max-width: 100%; height: auto; display: block; margin: 0.5em auto; }
 
@@ -979,10 +1379,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         line-height: 1.9 !important; padding-bottom: 0.55em;
       }
 
-      /* Index list — dotted leader */
+      /* Index list — dotted leader; Arabic rows kept tight */
       [data-pdf-index] .idx-row {
         display: flex; align-items: flex-end; gap: 6px;
-        margin: 0.35em 0; font-size: 11pt; line-height: 1.5;
+        margin: 0.28em 0; font-size: 11pt; line-height: 1.35;
+      }
+      [data-pdf-index] .idx-row[dir="rtl"] {
+        line-height: 1.4; margin: 0.22em 0;
+        font-family: 'Scheherazade New', 'Noto Naskh Arabic', 'TimesNR', serif;
       }
       [data-pdf-index] .idx-name { flex: 0 0 auto; padding-bottom: 2px; }
       [data-pdf-index] .idx-dots {
@@ -1053,7 +1457,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       }
       const pdf = new jsPDF(pdfOpts);
 
-      // Balanced quality/size — noticeably smaller than scale 4 @ 0.88.
       const renderScale = 3;
       const JPEG_Q = 0.78;
 
@@ -1129,7 +1532,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         }
       };
 
-      // --- Cover ---
+      let firstPageUsed = false;
+      if (coverImage) {
+        try {
+          pdf.addImage(coverImage, "JPEG", 0, 0, PAGE_W, PAGE_H);
+          firstPageUsed = true;
+        } catch {}
+      }
+
+      if (firstPageUsed) pdf.addPage();
       const coverEl = container.querySelector("[data-pdf-cover]") as HTMLElement;
       const cover = await captureElement(coverEl);
       const coverDrawH = Math.min(cover.heightMM, CONTENT_H);
@@ -1187,7 +1598,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
       };
 
-      // Footnote tiles
       type FnTile = { id: string; cap: CaptureResult };
       const fnTiles = new Map<string, FnTile>();
       const allRefIds: string[] = (() => {
@@ -1262,13 +1672,13 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
       type Chapter = { level: number; text: string; page: number };
       const chapters: Chapter[] = [];
-      const coverPages = 1;
+      const coverPages = 1 + (firstPageUsed ? 1 : 0);
 
       if (bodyChildren.length > 0) {
         pdf.addPage();
         await stampPageNumber();
         let currentY = MARGIN;
-        setProgressLabel("Rendering pages...");
+        setProgressLabel("পৃষ্ঠা রেন্ডার...");
         for (let ci = 0; ci < bodyChildren.length; ci++) {
           const child = bodyChildren[ci];
           setProgress(0.1 + 0.8 * (ci / Math.max(1, bodyChildren.length)));
@@ -1385,11 +1795,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         flushFootnotes();
       }
 
-      // --- Index: dotted-leader style ---
       if (includeIndex && chapters.length > 0) {
         const idxTitle = indexTitle(numeralScript);
         const arabicRe = /[\u0600-\u06ff\ufb50-\ufdff\ufe70-\ufeff]/;
-        // RTL if every chapter contains at least one Arabic character.
         const isRTL = chapters.every((c) => arabicRe.test(c.text));
         const rows = chapters
           .map((ch) => {
@@ -1433,7 +1841,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
       const filename = safeTitle.replace(/[^a-z0-9\u0980-\u09FF\s-]/gi, "").trim() || "book";
       setProgress(0.98);
-      setProgressLabel("Saving...");
+      setProgressLabel("সংরক্ষণ...");
       pdf.save(`${filename}.pdf`);
       setProgress(1);
     } finally {
@@ -1446,10 +1854,13 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     }
   };
 
-  // --- PDF password modal ---
-  const [pdfPwdError, setPdfPwdError] = useState<string | undefined>();
+  const [pdfPwdError] = useState<string | undefined>();
   const handlePdfPwdSubmit = (pwd: string) => {
     setPdfPassword(pwd);
+    setPdfPwdModal(false);
+  };
+  const removePdfPwd = () => {
+    setPdfPassword("");
     setPdfPwdModal(false);
   };
 
@@ -1460,7 +1871,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           <textarea
             value={title}
             onChange={(e) => setTitleSmart(e.target.value)}
-            placeholder="Book title"
+            placeholder="বইয়ের নাম"
             rows={1}
             ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
             onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }}
@@ -1470,7 +1881,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           <textarea
             value={author}
             onChange={(e) => setAuthorSmart(e.target.value)}
-            placeholder="Author name (Enter for new line)"
+            placeholder="লেখকের নাম (Enter দিয়ে নতুন লাইন)"
             rows={1}
             ref={(el) => { if (el) { el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; } }}
             onInput={(e) => { const el = e.currentTarget; el.style.height = "auto"; el.style.height = el.scrollHeight + "px"; }}
@@ -1497,7 +1908,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             onMouseUp={updateSelToolbar}
             onKeyUp={updateSelToolbar}
             onBlur={() => setTimeout(() => setSelToolbar(null), 150)}
-            placeholder="Start writing your book here... (Markdown supported)"
+            placeholder="এখানে লিখা শুরু করুন... (Markdown সমর্থিত)"
             dir="auto"
             className="w-full font-mixed text-xl md:text-2xl bg-transparent border-none focus:outline-none placeholder:text-slate-300 resize-none leading-relaxed min-h-[70vh]"
             style={{ whiteSpace: "pre-wrap" }}
@@ -1521,7 +1932,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         </div>
       )}
 
-      {/* Fixed square button cluster — bottom on mobile, left on desktop */}
       <div
         className="fixed z-40 pointer-events-none
                    bottom-3 left-3 right-3 flex justify-center
@@ -1532,7 +1942,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             <div className="flex items-center justify-between mb-2 gap-3">
               <div className="flex items-center gap-2 text-slate-800 text-sm font-medium">
                 <Loader2 size={14} className="animate-spin" />
-                <span className="text-xs">{progressLabel || "Working..."}</span>
+                <span className="text-xs font-mixed">{progressLabel || "কাজ চলছে..."}</span>
               </div>
               <span className="text-xs text-slate-500 tabular-nums">{Math.round(progress * 100)}%</span>
             </div>
@@ -1544,17 +1954,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           <div className="pointer-events-auto flex md:flex-col gap-1 bg-white border border-slate-200 shadow-lg rounded-xl p-1 max-w-full overflow-x-auto md:overflow-visible">
             <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
             <SquareBtn onClick={handlePaste} title="Paste from clipboard"><ClipboardPaste size={18} /></SquareBtn>
-            <SquareBtn onClick={handleClearAll} title="Delete this book" className="text-rose-600"><Trash2 size={18} /></SquareBtn>
             <SquareBtn
-              onClick={() => setIncludeIndex((v) => !v)}
-              title={`Index page: ${includeIndex ? "ON" : "OFF"}`}
-              className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
-            >
-              <ListTree size={18} />
-            </SquareBtn>
-            <SquareBtn
-              onClick={() => { setPdfPwdError(undefined); setPdfPwdModal(true); }}
-              title={pdfPassword ? "PDF password set (click to change)" : "Set PDF password"}
+              onClick={() => setPdfPwdModal(true)}
+              title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
               className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
             >
               <FileLock2 size={18} />
@@ -1573,13 +1975,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         )}
       </div>
 
-      <PasswordPrompt
+      <PrettyPasswordPrompt
         open={pdfPwdModal}
-        title={pdfPassword ? "Update PDF password (leave input to clear on Cancel)" : "Set a password for the exported PDF"}
-        submitLabel="Save"
+        icon="file"
+        title={pdfPassword ? "PDF পাসওয়ার্ড পরিবর্তন" : "PDF-এর জন্য পাসওয়ার্ড"}
+        description="এই পাসওয়ার্ড দিয়ে exported PDF এনক্রিপ্ট হবে। প্রিন্ট ও কপি অনুমোদিত থাকবে।"
+        submitLabel="সংরক্ষণ"
         error={pdfPwdError}
         onCancel={() => setPdfPwdModal(false)}
         onSubmit={handlePdfPwdSubmit}
+        extraActions={
+          pdfPassword
+            ? [{ label: "পাসওয়ার্ড সরান", onClick: removePdfPwd, tone: "danger" }]
+            : undefined
+        }
       />
     </div>
   );
