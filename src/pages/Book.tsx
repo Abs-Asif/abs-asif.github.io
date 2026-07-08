@@ -282,7 +282,7 @@ function renderFootnoteBodyHtml(text: string): string {
   return marked.parse(text || "", { async: false, gfm: true, breaks: true }) as string;
 }
 function preprocessPageBreaks(md: string): string {
-  return md.replace(/^-\[\*\]-\s*$/gm, '<hr class="page-break-marker" />');
+  return md.replace(/^-\[\*\]-\s*$/gm, '\n\n<hr class="page-break-marker" />\n\n');
 }
 
 function renderForPreview(md: string, script: NumeralScript): string {
@@ -1282,39 +1282,41 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   );
 
   const handleDownloadPDF = async () => {
-    setGenerating(true);
-    setProgress(0);
-    setProgressLabel("প্রস্তুতি...");
+    try {
+      setGenerating(true);
+      setProgress(0);
+      setProgressLabel("প্রস্তুতি...");
 
-    const safeTitle = (title || "Untitled").trim();
-    const safeAuthor = author.trim();
-    const numeralScript = detectScript(safeTitle || content);
-    const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(content, numeralScript);
+      const safeTitle = (title || "Untitled").trim();
+      const safeAuthor = author.trim();
+      const numeralScript = detectScript(safeTitle || content);
+      const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(content, numeralScript);
 
-    const PAGE_W = 148;
-    const PAGE_H = 210;
-    const MARGIN = 14;
-    const CONTENT_W = PAGE_W - MARGIN * 2;
-    const CONTENT_H = PAGE_H - MARGIN * 2;
-    const SECTION_GAP = 2;
+      const PAGE_W = 148;
+      const PAGE_H = 210;
+      const MARGIN = 14;
+      const CONTENT_W = PAGE_W - MARGIN * 2;
+      const CONTENT_H = PAGE_H - MARGIN * 2;
+      const SECTION_GAP = 2;
 
-    const container = document.createElement("div");
-    container.style.position = "fixed";
-    container.style.top = "0";
-    container.style.left = "0";
-    container.style.opacity = "0";
-    container.style.pointerEvents = "none";
-    container.style.zIndex = "-1";
-    container.style.background = "#ffffff";
-    container.style.color = "#0f172a";
-    container.style.fontFamily =
-      "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
-    const PX_PER_MM = 3.7795275591;
-    const widthPx = Math.round(CONTENT_W * PX_PER_MM);
-    container.style.width = `${widthPx}px`;
-    container.className = "font-mixed";
+      const container = document.createElement("div");
+      container.setAttribute("data-pdf-container-root", "");
+      container.style.position = "fixed";
+      container.style.top = "0";
+      container.style.left = "-9999px";
+      container.style.opacity = "1";
+      container.style.pointerEvents = "none";
+      container.style.zIndex = "-1";
+      container.style.background = "#ffffff";
+      container.style.color = "#0f172a";
+      container.style.fontFamily =
+        "'TimesNR', 'Times New Roman', 'Kalpurush', 'Scheherazade New', 'Noto Naskh Arabic', Times, serif";
+      const PX_PER_MM = 3.7795275591;
+      const widthPx = Math.round(CONTENT_W * PX_PER_MM);
+      container.style.width = `${widthPx}px`;
+      container.className = "font-mixed";
 
-    const styleEl = document.createElement("style");
+      const styleEl = document.createElement("style");
     styleEl.textContent = `
       [data-pdf-body] { color: #0f172a; text-align: justify; hyphens: none; }
       [data-pdf-body] .num-red { color: #dc2626; }
@@ -1466,68 +1468,75 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         font-variant-numeric: tabular-nums;
       }
     `;
-    container.appendChild(styleEl);
+      container.appendChild(styleEl);
 
-    const mlInline = (s: string) => s.split("\n").map(parseInlineMd).join("<br>");
-    const coverHtml = `
-      <div data-pdf-section data-pdf-cover style="
-        width: 100%; box-sizing: border-box; padding-top: 8mm;
-        text-align: center; position: relative; min-height: ${CONTENT_H}mm;">
-        <h1 style="
-          font-size: 26pt; font-weight: 400; line-height: 1.35;
-          margin: 0 0 14mm 0; padding: 0.15em 0 0.25em;
-          word-break: keep-all; overflow-wrap: break-word;
-          font-feature-settings: normal; font-variant-ligatures: normal; white-space: normal;
-        ">${mlInline(safeTitle)}</h1>
-        ${
-          safeAuthor
-            ? `<div style="font-size: 12pt; line-height: 1.4; color: #334155; white-space: pre-wrap;">${mlInline(safeAuthor)}</div>`
-            : ""
-        }
-        <div style="position: absolute; left: 0; right: 0; bottom: 6mm; text-align: center;
-          font-size: 9pt; color: #475569;">Compiled by Abdullah Bari Asif.</div>
-      </div>
-    `;
+      const mlInline = (s: string) => s.split("\n").map(parseInlineMd).join("<br>");
+      const coverHtml = `
+        <div data-pdf-section data-pdf-cover style="
+          width: 100%; box-sizing: border-box; padding-top: 8mm;
+          text-align: center; position: relative; min-height: ${CONTENT_H}mm;">
+          <h1 style="
+            font-size: 26pt; font-weight: 400; line-height: 1.35;
+            margin: 0 0 14mm 0; padding: 0.15em 0 0.25em;
+            word-break: keep-all; overflow-wrap: break-word;
+            font-feature-settings: normal; font-variant-ligatures: normal; white-space: normal;
+          ">${mlInline(safeTitle)}</h1>
+          ${
+            safeAuthor
+              ? `<div style="font-size: 12pt; line-height: 1.4; color: #334155; white-space: pre-wrap;">${mlInline(safeAuthor)}</div>`
+              : ""
+          }
+          <div style="position: absolute; left: 0; right: 0; bottom: 6mm; text-align: center;
+            font-size: 9pt; color: #475569;">Compiled by Abdullah Bari Asif.</div>
+        </div>
+      `;
 
-    const bodyWrap = document.createElement("div");
-    bodyWrap.className = "tiptap";
-    bodyWrap.setAttribute("data-pdf-body", "");
-    bodyWrap.style.fontSize = "11pt";
-    bodyWrap.style.lineHeight = "1.65";
-    bodyWrap.style.textAlign = "justify";
-    bodyWrap.innerHTML = bodyHtml;
+      const bodyWrap = document.createElement("div");
+      bodyWrap.className = "tiptap";
+      bodyWrap.setAttribute("data-pdf-body", "");
+      bodyWrap.style.fontSize = "11pt";
+      bodyWrap.style.lineHeight = "1.65";
+      bodyWrap.style.textAlign = "justify";
+      bodyWrap.innerHTML = bodyHtml;
 
-    const coverWrap = document.createElement("div");
-    coverWrap.innerHTML = coverHtml;
-    container.appendChild(coverWrap);
-    container.appendChild(bodyWrap);
-    document.body.appendChild(container);
+      const coverWrap = document.createElement("div");
+      coverWrap.innerHTML = coverHtml;
+      container.appendChild(coverWrap);
+      container.appendChild(bodyWrap);
+      document.body.appendChild(container);
 
-    try {
-      if ((document as any).fonts?.ready) await (document as any).fonts.ready;
-    } catch {}
-    await new Promise((r) => setTimeout(r, 50));
+      try {
+        if ((document as any).fonts?.ready) await (document as any).fonts.ready;
+      } catch {}
+      await new Promise((r) => setTimeout(r, 50));
 
-    try {
       const pdfOpts: any = {
         orientation: "portrait",
         unit: "mm",
         format: "a5",
         compress: true,
       };
-      if (pdfPassword) {
-        pdfOpts.encryption = {
-          userPassword: pdfPassword,
-          ownerPassword: pdfPassword,
-          userPermissions: ["print", "copy"],
-        };
+
+      let pdf;
+      try {
+        if (pdfPassword) {
+          pdfOpts.encryption = {
+            userPassword: pdfPassword,
+            ownerPassword: pdfPassword,
+            userPermissions: ["print", "copy"],
+          };
+        }
+        pdf = new jsPDF(pdfOpts);
+      } catch (e) {
+        console.error("jsPDF init with encryption failed:", e);
+        delete pdfOpts.encryption;
+        pdf = new jsPDF(pdfOpts);
       }
-      const pdf = new jsPDF(pdfOpts);
 
-      const renderScale = 3;
-      const JPEG_Q = 0.78;
+        const renderScale = 3;
+        const JPEG_Q = 0.78;
 
-      type LinkRect = { x: number; y: number; w: number; h: number; href: string };
+        type LinkRect = { x: number; y: number; w: number; h: number; href: string };
       type CaptureResult = {
         dataUrl: string; heightMM: number;
         elWidthPx: number; elHeightPx: number;
@@ -1922,8 +1931,12 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       setProgressLabel("সংরক্ষণ...");
       pdf.save(`${filename}.pdf`);
       setProgress(1);
+    } catch (err: any) {
+      console.error("PDF generation error:", err);
+      alert("PDF তৈরি করার সময় একটি সমস্যা হয়েছে। দয়া করে আবার চেষ্টা করুন।\n" + (err.message || "Unknown error"));
     } finally {
-      container.remove();
+      const container = document.querySelector("[data-pdf-container-root]");
+      if (container) container.remove();
       setTimeout(() => {
         setGenerating(false);
         setProgress(0);
@@ -2029,7 +2042,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             </div>
           </div>
         ) : (
-          <div className="pointer-events-auto flex md:flex-col gap-1 bg-white border border-slate-200 shadow-lg rounded-xl p-1 max-w-full overflow-x-auto md:overflow-visible">
+          <div className="pointer-events-auto flex flex-wrap justify-center md:flex-col gap-1 bg-white border border-slate-200 shadow-lg rounded-xl p-1 max-w-full md:overflow-visible">
             <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
             <SquareBtn onClick={handlePaste} title="Paste from clipboard"><ClipboardPaste size={18} /></SquareBtn>
             <SquareBtn
@@ -2044,7 +2057,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
                 <MoreHorizontal size={18} />
               </SquareBtn>
               {showMoreTools && (
-                <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-1 bg-white border border-slate-200 shadow-xl rounded-xl p-1 animate-in fade-in zoom-in-95 md:left-full md:bottom-0 md:mb-0 md:ml-2 md:flex-row">
+                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 flex flex-col gap-1 bg-white border border-slate-200 shadow-xl rounded-xl p-1 animate-in fade-in zoom-in-95 md:left-full md:translate-x-0 md:bottom-0 md:mb-0 md:ml-2 md:flex-row">
                   <SquareBtn
                     onClick={() => { replaceSallallahu(); setShowMoreTools(false); }}
                     title="Auto replace ﷺ"
