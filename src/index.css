@@ -357,6 +357,7 @@
   font-style: italic;
 }
 .pdf-preview hr { border: none; border-top: 1px solid #cbd5e1; margin: 1.4em 0; }
+.pdf-preview hr.page-break-marker { border-top: 2px solid #ef4444; margin: 2.5em 0; }
 .pdf-preview code {
   background: #f1f5f9;
   padding: 0.05em 0.4em;
