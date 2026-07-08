@@ -152,6 +152,48 @@ function preprocessNumeralLists(md: string): string {
   return out.join("\n");
 }
 
+function colorizeTaskeel(html: string): string {
+  if (typeof DOMParser === "undefined") return html;
+  const storageKey = "book-taskeel-coloring";
+  if (localStorage.getItem(storageKey) !== "true") return html;
+
+  const TASKEEL_CHARS = "ًٌٍََُِّْٰٖٗۖۗۘۙۚۛۜ۝﷽﷾ﷺﷻ﵁﵃﵂﵀﵄﵅۞۩";
+  const TASKEEL_PHRASES = ["حفظك الله"];
+  const TASKEEL_RE = new RegExp(`[${TASKEEL_CHARS}]|${TASKEEL_PHRASES.join("|")}`, "g");
+
+  const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, "text/html");
+  const root = doc.getElementById("__root");
+  if (!root) return html;
+
+  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  const targets: Text[] = [];
+  let n: Node | null;
+  while ((n = walker.nextNode())) {
+    const t = n as Text;
+    if (!t.nodeValue || !TASKEEL_RE.test(t.nodeValue)) continue;
+    targets.push(t);
+  }
+
+  for (const t of targets) {
+    const parts = (t.nodeValue || "").split(new RegExp(`(${TASKEEL_RE.source})`, "g"));
+    if (parts.length <= 1) continue;
+    const frag = doc.createDocumentFragment();
+    for (const p of parts) {
+      if (!p) continue;
+      if (TASKEEL_RE.test(p)) {
+        const s = doc.createElement("span");
+        s.className = "num-red";
+        s.textContent = p;
+        frag.appendChild(s);
+      } else {
+        frag.appendChild(doc.createTextNode(p));
+      }
+    }
+    t.parentNode?.replaceChild(frag, t);
+  }
+  return root.innerHTML;
+}
+
 function colorizeDigits(html: string): string {
   if (typeof DOMParser === "undefined") return html;
   const DIGIT_RE = /[0-9\u09E6-\u09EF\u0660-\u0669]+/;
@@ -239,14 +281,19 @@ function collectFootnoteOrder(md: string, defs: Map<string, string>): string[] {
 function renderFootnoteBodyHtml(text: string): string {
   return marked.parse(text || "", { async: false, gfm: true, breaks: true }) as string;
 }
+function preprocessPageBreaks(md: string): string {
+  return md.replace(/^-\[\*\]-\s*$/gm, '<hr class="page-break-marker" />');
+}
+
 function renderForPreview(md: string, script: NumeralScript): string {
   const { md: stripped, defs } = extractFootnoteDefs(md);
   const order = collectFootnoteOrder(stripped, defs);
   const validIds = new Set(defs.keys());
   const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
-  const pre = preprocessNumeralLists(withMarkers);
+  const pre = preprocessNumeralLists(preprocessPageBreaks(withMarkers));
   let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
+  html = colorizeTaskeel(html);
   if (order.length > 0) {
     const items = order
       .map((id) => {
@@ -267,9 +314,10 @@ function renderForPdfBody(md: string, script: NumeralScript): { html: string; de
   const { md: stripped, defs } = extractFootnoteDefs(md);
   const validIds = new Set(defs.keys());
   const withMarkers = injectFootnoteMarkers(stripped, script, validIds);
-  const pre = preprocessNumeralLists(withMarkers);
+  const pre = preprocessNumeralLists(preprocessPageBreaks(withMarkers));
   let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
+  html = colorizeTaskeel(html);
   return { html: colorizeDigits(html), defs };
 }
 
@@ -1078,6 +1126,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const [progressLabel, setProgressLabel] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [pdfPwdModal, setPdfPwdModal] = useState(false);
+  const [showMoreTools, setShowMoreTools] = useState(false);
+  const [taskeelColoring, setTaskeelColoring] = useState(() => localStorage.getItem("book-taskeel-coloring") === "true");
 
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [selToolbar, setSelToolbar] = useState<{ top: number; left: number } | null>(null);
@@ -1085,6 +1135,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const setTitleSmart = (v: string) => setTitle(smartQuotes(v));
   const setAuthorSmart = (v: string) => setAuthor(smartQuotes(v));
   const setContentSmart = (v: string) => setContent(smartQuotes(v));
+
+  const replaceSallallahu = () => {
+    let next = content;
+    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লামের/g, "ﷺ এর");
+    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লামকে/g, "ﷺ কে");
+    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লাম/g, "ﷺ");
+    if (next !== content) setContent(next);
+  };
+
+  const toggleTaskeel = () => {
+    const next = !taskeelColoring;
+    setTaskeelColoring(next);
+    localStorage.setItem("book-taskeel-coloring", String(next));
+  };
 
   const insertAtCursor = (text: string) => {
     const ta = contentRef.current;
@@ -1312,6 +1376,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       }
       [data-pdf-body] hr {
         border: none; border-top: 2px solid #64748b; margin: 1.4em 0; height: 0;
+      }
+      [data-pdf-body] hr.page-break-marker {
+        border-top: 2px solid #dc2626; margin: 2em 0;
       }
       [data-pdf-body] code {
         background: #f1f5f9; padding: 0.05em 0.35em; border-radius: 4px;
@@ -1689,6 +1756,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           const mmPerPx = CONTENT_W / section.elWidthPx;
 
           const tag = (child.tagName || "").toUpperCase();
+
+          if (tag === "HR" && child.classList.contains("page-break-marker")) {
+            flushFootnotes();
+            pdf.addPage();
+            await stampPageNumber();
+            currentY = MARGIN;
+            continue;
+          }
+
           const isHeading = tag === "H1" || tag === "H2" || tag === "H3" || tag === "H4" || tag === "H5" || tag === "H6";
 
           if (isHeading && currentY > MARGIN) {
@@ -1736,7 +1812,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           }
 
           const freshAvail = CONTENT_H - reservedFor(childIds);
-          if (section.heightMM <= freshAvail && currentY > MARGIN) {
+          const isSliceable = tag === "P" || tag === "UL" || tag === "OL" || tag === "BLOCKQUOTE";
+
+          if (section.heightMM <= freshAvail && currentY > MARGIN && !isSliceable) {
             flushFootnotes();
             pdf.addPage();
             await stampPageNumber();
@@ -1961,6 +2039,29 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             >
               <FileLock2 size={18} />
             </SquareBtn>
+            <div className="relative">
+              <SquareBtn onClick={() => setShowMoreTools(!showMoreTools)} title="More tools">
+                <MoreHorizontal size={18} />
+              </SquareBtn>
+              {showMoreTools && (
+                <div className="absolute bottom-full left-0 mb-2 flex flex-col gap-1 bg-white border border-slate-200 shadow-xl rounded-xl p-1 animate-in fade-in zoom-in-95 md:left-full md:bottom-0 md:mb-0 md:ml-2 md:flex-row">
+                  <SquareBtn
+                    onClick={() => { replaceSallallahu(); setShowMoreTools(false); }}
+                    title="Auto replace ﷺ"
+                    className="text-[10px] font-bold"
+                  >
+                    ﷺ
+                  </SquareBtn>
+                  <SquareBtn
+                    onClick={() => { toggleTaskeel(); setShowMoreTools(false); }}
+                    title="Arabic Taskeel Color"
+                    className={taskeelColoring ? "bg-rose-500 text-white hover:bg-rose-600" : ""}
+                  >
+                    <span className="text-xs font-bold">Ar</span>
+                  </SquareBtn>
+                </div>
+              )}
+            </div>
             <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
               {preview ? <Pencil size={18} /> : <Eye size={18} />}
             </SquareBtn>
