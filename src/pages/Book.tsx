@@ -7,7 +7,6 @@ import {
   Trash2,
   Bold as BoldIcon,
   Italic as ItalicIcon,
-  ClipboardPaste,
   Plus,
   Search,
   ArrowLeft,
@@ -16,8 +15,9 @@ import {
   FileLock2,
   MoreHorizontal,
   Image as ImageIcon,
-  ImageOff,
   X,
+  EyeOff,
+  List,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -152,47 +152,6 @@ function preprocessNumeralLists(md: string): string {
   return out.join("\n");
 }
 
-function colorizeTaskeel(html: string): string {
-  if (typeof DOMParser === "undefined") return html;
-  const storageKey = "book-taskeel-coloring";
-  if (localStorage.getItem(storageKey) !== "true") return html;
-
-  const TASKEEL_CHARS = "ًٌٍََُِّْٰٖٗۖۗۘۙۚۛۜ۝﷽﷾ﷺﷻ﵁﵃﵂﵀﵄﵅۞۩";
-  const TASKEEL_PHRASES = ["حفظك الله"];
-  const TASKEEL_RE = new RegExp(`[${TASKEEL_CHARS}]|${TASKEEL_PHRASES.join("|")}`, "g");
-
-  const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, "text/html");
-  const root = doc.getElementById("__root");
-  if (!root) return html;
-
-  const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-  const targets: Text[] = [];
-  let n: Node | null;
-  while ((n = walker.nextNode())) {
-    const t = n as Text;
-    if (!t.nodeValue || !TASKEEL_RE.test(t.nodeValue)) continue;
-    targets.push(t);
-  }
-
-  for (const t of targets) {
-    const parts = (t.nodeValue || "").split(new RegExp(`(${TASKEEL_RE.source})`, "g"));
-    if (parts.length <= 1) continue;
-    const frag = doc.createDocumentFragment();
-    for (const p of parts) {
-      if (!p) continue;
-      if (TASKEEL_RE.test(p)) {
-        const s = doc.createElement("span");
-        s.className = "num-red";
-        s.textContent = p;
-        frag.appendChild(s);
-      } else {
-        frag.appendChild(doc.createTextNode(p));
-      }
-    }
-    t.parentNode?.replaceChild(frag, t);
-  }
-  return root.innerHTML;
-}
 
 function colorizeDigits(html: string): string {
   if (typeof DOMParser === "undefined") return html;
@@ -282,7 +241,7 @@ function renderFootnoteBodyHtml(text: string): string {
   return marked.parse(text || "", { async: false, gfm: true, breaks: true }) as string;
 }
 function preprocessPageBreaks(md: string): string {
-  return md.replace(/^-\[\*\]-\s*$/gm, '\n\n<hr class="page-break-marker" />\n\n');
+  return md.replace(/^-(\[\*\])-$/gm, '\n\n<hr class="page-break-marker" />\n\n');
 }
 
 function renderForPreview(md: string, script: NumeralScript): string {
@@ -293,7 +252,6 @@ function renderForPreview(md: string, script: NumeralScript): string {
   const pre = preprocessNumeralLists(preprocessPageBreaks(withMarkers));
   let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
-  html = colorizeTaskeel(html);
   if (order.length > 0) {
     const items = order
       .map((id) => {
@@ -317,7 +275,6 @@ function renderForPdfBody(md: string, script: NumeralScript): { html: string; de
   const pre = preprocessNumeralLists(preprocessPageBreaks(withMarkers));
   let html = marked.parse(pre, { async: false, gfm: true, breaks: true }) as string;
   html = applyArabicAlignment(html);
-  html = colorizeTaskeel(html);
   return { html: colorizeDigits(html), defs };
 }
 
@@ -333,65 +290,79 @@ type BookMeta = {
   author: string;
   content: string;
   coverImage?: string;
+  lastEdited?: number;
 };
 
 const DEFAULT_BOOK_CONTENT =
-  "# পরিচিতি\n\n" +
-  "এটি একটি *demo* বই। **Preview** (চোখ) বাটনে চাপ দিয়ে দেখুন কীভাবে প্রতিটি উপাদান PDF-এ রেন্ডার হয়, Edit বাটনে ফিরে এসে source দেখতে পারবেন। এই বইটি ইচ্ছেমত মুছে ফেলা যাবে।\n\n" +
-  "---\n\n" +
-  "# ১. Headings — শিরোনাম — العناوين\n\n" +
-  "`#`, `##`, `###` দিয়ে chapter, section ও sub-section। সবগুলো PDF-এ কেন্দ্রীভূত থাকে।\n\n" +
-  "## Section (H2)\n\n" +
-  "### Sub-section (H3)\n\n" +
-  "#### H4 — smaller\n\n" +
-  "# ২. Emphasis\n\n" +
-  "**Bold text**, *italic text*, ~~strikethrough~~ — inline সব মিলিয়ে ব্যবহার করা যায়।\n\n" +
-  "# ৩. Bullets — তালিকা\n\n" +
-  "- প্রথম item\n" +
-  "- দ্বিতীয় item\n" +
-  "    - Nested item\n" +
-  "- তৃতীয় item\n\n" +
-  "# ৪. Numbered lists (multi-script)\n\n" +
-  "1. English one\n" +
-  "2. English two\n" +
-  "3. English three\n\n" +
+  "# পরিচিতি — Introduction — مقدمة\n\n" +
+  "এটি একটি *demo* বই। এতে সমস্ত সিনট্যাক্স দেখানো হয়েছে।\n\n" +
+  "This is a *demo* book. It demonstrates all available syntaxes.\n\n" +
+  "هذا كتاب *تجريبي*. يعرض جميع تنسيقات الكتابة المتاحة.\n\n" +
+  "-[*]-\n\n" +
+  "# ১. শিরোনাম — Headings — العناوين\n\n" +
+  "# শিরোনাম ১ (H1)\n" +
+  "## শিরোনাম ২ (H2)\n" +
+  "### শিরোনাম ৩ (H3)\n\n" +
+  "# Heading 1\n" +
+  "## Heading 2\n" +
+  "### Heading 3\n\n" +
+  "# عنوان ১ (H1)\n" +
+  "## عنوان ২ (H2)\n" +
+  "### عنوان ৩ (H3)\n\n" +
+  "-[*]-\n\n" +
+  "# ২. টেক্সট ফরম্যাটিং — Formatting — التنسيق\n\n" +
+  "**বোল্ড টেক্সট**, *ইটালিক টেক্সট*, ~~স্ট্রাইক থ্রু~~।\n\n" +
+  "**Bold text**, *italic text*, ~~strikethrough text~~.\n\n" +
+  "**نص عريض**, *نص مائل*, ~~نص مشطوب~~.\n\n" +
+  "-[*]-\n\n" +
+  "# ৩. তালিকা — Lists — القوائم\n\n" +
+  "## বুলেটেড তালিকা (Unordered)\n\n" +
+  "- বাংলা আইটেম\n" +
+  "- English item\n" +
+  "- عنصر عربي\n\n" +
+  "## নম্বরযুক্ত তালিকা (Ordered)\n\n" +
   "১. বাংলা এক\n" +
-  "২. বাংলা দুই\n" +
-  "৩. বাংলা তিন\n\n" +
+  "২. বাংলা দুই\n\n" +
+  "1. English one\n" +
+  "2. English two\n\n" +
   "١. عربي واحد\n" +
-  "٢. عربي اثنان\n" +
-  "٣. عربي ثلاثة\n\n" +
-  "# ৫. Blockquote\n\n" +
-  "> এই ধরনের উদ্ধৃতির বাম দিকে সবসময় একটি লাল রেখা থাকে — এটি permanent design।\n\n" +
-  "# ৬. Table — টেবিল\n\n" +
-  "| Name | Language | Year |\n" +
-  "| --- | --- | --- |\n" +
-  "| Foo | English | 2024 |\n" +
-  "| বই | বাংলা | ২০২৫ |\n" +
-  "| كتاب | عربي | ٢٠٢٦ |\n\n" +
-  "# ৭. Code\n\n" +
-  "Inline `const x = 42;` অথবা block:\n\n" +
-  "```js\n" +
-  "function hello(name) {\n" +
-  "  return \"Hello, \" + name;\n" +
+  "٢. عربي اثنان\n\n" +
+  "-[*]-\n\n" +
+  "# ৪. উদ্ধৃতি — Blockquotes — الاقتباسات\n\n" +
+  "> এটি একটি বাংলা উদ্ধৃতি।\n\n" +
+  "> This is an English blockquote.\n\n" +
+  "> هذا اقتباس باللغة العربية.\n\n" +
+  "-[*]-\n\n" +
+  "# ৫. টেবিল — Tables — الجداول\n\n" +
+  "| ভাষা (Language) | কোড (Code) | সংখ্যা (Numbers) |\n" +
+  "| :--- | :---: | ---: |\n" +
+  "| বাংলা | BN | ১২৩৪ |\n" +
+  "| English | EN | 1234 |\n" +
+  "| العربية | AR | ١٢٣٤ |\n\n" +
+  "-[*]-\n\n" +
+  "# ৬. কোড — Code — البرمجة\n\n" +
+  "ইনলাইন কোড: `print(\"Hello\")` অথবা `লিখুন(\"হ্যালো\")`।\n\n" +
+  "ব্লক কোড:\n" +
+  "```javascript\n" +
+  "function greet() {\n" +
+  "  console.log(\"Hello World\");\n" +
   "}\n" +
   "```\n\n" +
-  "# ৮. Horizontal rule\n\n" +
-  "উপরে ও নিচে জায়গা রেখে একটি রেখা:\n\n" +
-  "---\n\n" +
-  "# ৯. Links\n\n" +
-  "ভিজিট করুন [Lovable](https://lovable.dev)। Link-এর নিচে কোনো underline নেই — শুধু রঙই signal।\n\n" +
-  "# ১০. Footnotes — টীকা\n\n" +
-  "একই id একাধিকবার cite করা যায় [[1]], কিন্তু body একবারই লেখা হয় [[2]]। আবার প্রথমটি [[1]]।\n\n" +
-  "[[1==এটি প্রথম footnote। ভেতরে **markdown** সমর্থিত।]]\n" +
-  "[[2==দ্বিতীয় footnote। সংখ্যা ১২৩ স্বয়ংক্রিয়ভাবে লাল।]]\n\n" +
-  "# ১১. Auto-red numbers\n\n" +
-  "সংখ্যা যেই script-এই থাকুক — 2025, ২০২৫, ٢٠٢٥ — সব স্বয়ংক্রিয়ভাবে লাল হয়ে যায়।\n\n" +
-  "# القسم العربي\n\n" +
-  "هذه فقرة عربية كاملة، مكتوبة من اليمين إلى اليسار مع ضبط تلقائي للاتجاه. الأرقام ٢٠٢٥ تظهر بلون أحمر.\n\n" +
-  "> اقتباس عربي مع خط أحمر على اليمين.\n\n" +
-  "# English section\n\n" +
-  "This paragraph is entirely in English. Numbers like 2026 are automatically coloured red. Long paragraphs will be split across pages automatically without breaking the layout.\n";
+  "-[*]- \n\n" +
+  "# ৭. অন্যান্য — Others — أخرى\n\n" +
+  "## লিঙ্ক (Links)\n\n" +
+  "[গুগল](https://google.com), [Google](https://google.com), [جوجل](https://google.com)\n\n" +
+  "## টীকা (Footnotes)\n\n" +
+  "এখানে একটি টীকা আছে [[১]]।\n" +
+  "Here is a footnote [[1]].\n" +
+  "هنا حاشية سفلية [[١]].\n\n" +
+  "[[১==এটি বাংলা টীকা।]]\n" +
+  "[[1==This is an English footnote.]]\n" +
+  "[[١==هذه حاشية باللغة العربية.]]\n\n" +
+  "## স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
+  "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+  "## স্পেশাল সিম্বল\n\n" +
+  "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n";
 
 function loadBookList(): number[] {
   try {
@@ -420,6 +391,7 @@ function readBookMeta(id: number): BookMeta {
         author: typeof p.author === "string" ? p.author : "",
         content: typeof p.content === "string" ? p.content : "",
         coverImage: typeof p.coverImage === "string" ? p.coverImage : undefined,
+        lastEdited: typeof p.lastEdited === "number" ? p.lastEdited : undefined,
       };
     }
   } catch {}
@@ -428,7 +400,7 @@ function readBookMeta(id: number): BookMeta {
 function writeBookMeta(id: number, meta: Partial<BookMeta>) {
   try {
     const existing = readBookMeta(id);
-    const merged = { ...existing, ...meta };
+    const merged = { ...existing, ...meta, lastEdited: Date.now() };
     localStorage.setItem(cacheKeyFor(id), JSON.stringify(merged));
   } catch {}
 }
@@ -489,7 +461,7 @@ const BookRouter = () => {
 
 const BookGate: React.FC<{ bookId: number }> = ({ bookId }) => {
   const lockHash = readLockHash(bookId);
-  const initial = !lockHash || sessionStorage.getItem(unlockSessionKey(bookId)) === "1";
+  const initial = !lockHash;
   const [unlocked, setUnlocked] = useState<boolean>(initial);
   const [error, setError] = useState<string | undefined>();
 
@@ -498,7 +470,6 @@ const BookGate: React.FC<{ bookId: number }> = ({ bookId }) => {
   const onSubmit = async (pwd: string) => {
     const h = await sha256Hex(pwd);
     if (h === lockHash) {
-      sessionStorage.setItem(unlockSessionKey(bookId), "1");
       setUnlocked(true);
     } else {
       setError("ভুল পাসওয়ার্ড।");
@@ -538,7 +509,6 @@ const PrettyPasswordPrompt: React.FC<{
   error?: string;
 }> = ({
   open,
-  icon = "lock",
   title,
   description,
   submitLabel = "ঠিক আছে",
@@ -549,43 +519,43 @@ const PrettyPasswordPrompt: React.FC<{
   error,
 }) => {
   const [pwd, setPwd] = useState("");
+  const [showPwd, setShowPwd] = useState(false);
   useEffect(() => {
-    if (open) setPwd("");
+    if (open) {
+      setPwd("");
+      setShowPwd(false);
+    }
   }, [open]);
   if (!open) return null;
-  const Icon = icon === "unlock" ? Unlock : icon === "file" ? FileLock2 : Lock;
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95">
-        <div className="flex items-start gap-4 mb-5">
-          <div className="shrink-0 w-11 h-11 rounded-2xl bg-gradient-to-br from-slate-900 to-slate-700 text-white flex items-center justify-center shadow-md">
-            <Icon size={20} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-slate-900 leading-tight">{title}</h3>
-            {description && (
-              <p className="mt-1 text-sm text-slate-600 leading-relaxed">{description}</p>
-            )}
-          </div>
+        <div className="mb-5">
+          <h3 className="text-lg font-normal text-slate-900 leading-tight">{title}</h3>
+          {description && (
+            <p className="mt-1 text-sm text-slate-600 leading-relaxed font-normal">{description}</p>
+          )}
+        </div>
+        <div className="relative">
+          <input
+            autoFocus
+            type={showPwd ? "text" : "password"}
+            value={pwd}
+            onChange={(e) => setPwd(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && pwd) onSubmit(pwd);
+            }}
+            className="w-full border border-slate-200 bg-slate-50 rounded-xl pl-4 pr-12 py-3 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal"
+            placeholder="পাসওয়ার্ড লিখুন"
+          />
           <button
-            onClick={onCancel}
-            className="shrink-0 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100 hover:text-slate-700"
-            aria-label="Close"
+            type="button"
+            onClick={() => setShowPwd(!showPwd)}
+            className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 text-slate-400 hover:text-slate-600 transition-colors"
           >
-            <X size={16} />
+            {showPwd ? <EyeOff size={18} /> : <Eye size={18} />}
           </button>
         </div>
-        <input
-          autoFocus
-          type="password"
-          value={pwd}
-          onChange={(e) => setPwd(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" && pwd) onSubmit(pwd);
-          }}
-          className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-3 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors"
-          placeholder="পাসওয়ার্ড লিখুন"
-        />
         {error && (
           <p className="mt-3 text-sm text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-3 py-2">
             {error}
@@ -647,22 +617,11 @@ const ConfirmModal: React.FC<{
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
       <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95">
-        <div className="flex items-start gap-4 mb-5">
-          <div
-            className={`shrink-0 w-11 h-11 rounded-2xl flex items-center justify-center shadow-md ${
-              tone === "danger"
-                ? "bg-gradient-to-br from-rose-600 to-rose-500 text-white"
-                : "bg-gradient-to-br from-slate-900 to-slate-700 text-white"
-            }`}
-          >
-            <Trash2 size={20} />
-          </div>
-          <div className="flex-1">
-            <h3 className="text-lg font-semibold text-slate-900 leading-tight">{title}</h3>
-            {description && (
-              <p className="mt-1 text-sm text-slate-600 leading-relaxed">{description}</p>
-            )}
-          </div>
+        <div className="mb-5">
+          <h3 className="text-lg font-normal text-slate-900 leading-tight">{title}</h3>
+          {description && (
+            <p className="mt-1 text-sm text-slate-600 leading-relaxed font-normal">{description}</p>
+          )}
         </div>
         <div className="flex justify-end gap-2">
           <button
@@ -778,7 +737,7 @@ const BookLanding = () => {
 
   const openBook = (id: number) => {
     const h = locks[id];
-    if (h && sessionStorage.getItem(unlockSessionKey(id)) !== "1") {
+    if (h) {
       setPwdError(undefined);
       setPwdModal({ kind: "open", id, hash: h });
     } else {
@@ -830,7 +789,6 @@ const BookLanding = () => {
     if (pwdModal.kind === "open") {
       if (hashed !== pwdModal.hash) return setPwdError("ভুল পাসওয়ার্ড।");
       const id = pwdModal.id;
-      sessionStorage.setItem(unlockSessionKey(id), "1");
       setPwdModal(null);
       window.location.hash = `#${id}`;
     } else if (pwdModal.kind === "delete") {
@@ -876,6 +834,15 @@ const BookLanding = () => {
     ];
     return opts[Math.abs(id) % opts.length];
   };
+
+  const lastEditedId = useMemo(() => {
+    if (books.length === 0) return null;
+    let best = books[0];
+    for (const b of books) {
+      if ((b.lastEdited || 0) > (best.lastEdited || 0)) best = b;
+    }
+    return best.lastEdited ? best.id : null;
+  }, [books]);
 
   return (
     <div className="min-h-screen bg-white flex flex-col">
@@ -936,12 +903,19 @@ const BookLanding = () => {
                 ) : null}
                 <div className="absolute inset-0 p-3 flex flex-col justify-between">
                   <div className="relative flex items-start justify-between">
-                    <div
-                      className={`text-[10px] font-mono uppercase tracking-wider ${
-                        b.coverImage ? "text-white/90 drop-shadow" : "text-slate-400"
-                      }`}
-                    >
-                      #{b.id}
+                    <div className="flex flex-col gap-1">
+                      <div
+                        className={`text-[10px] font-mono uppercase tracking-wider ${
+                          b.coverImage ? "text-white/90 drop-shadow" : "text-slate-400"
+                        }`}
+                      >
+                        #{b.id}
+                      </div>
+                      {lastEditedId === b.id && (
+                        <div className="bg-slate-900 text-white text-[9px] px-1.5 py-0.5 rounded-full font-mixed w-fit">
+                          সর্বশেষ সম্পাদিত
+                        </div>
+                      )}
                     </div>
                     <div className="flex items-center gap-1">
                       {locked && (
@@ -1121,13 +1095,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const [pdfPassword, setPdfPassword] = useState<string>("");
   const [preview, setPreview] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [includeIndex] = useState(true);
+  const [includeIndex, setIncludeIndex] = useState(true);
   const [progress, setProgress] = useState(0);
   const [progressLabel, setProgressLabel] = useState("");
   const [hydrated, setHydrated] = useState(false);
   const [pdfPwdModal, setPdfPwdModal] = useState(false);
   const [showMoreTools, setShowMoreTools] = useState(false);
-  const [taskeelColoring, setTaskeelColoring] = useState(() => localStorage.getItem("book-taskeel-coloring") === "true");
+  const [showLockModal, setShowLockModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
 
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
   const [selToolbar, setSelToolbar] = useState<{ top: number; left: number } | null>(null);
@@ -1142,12 +1118,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লামকে/g, "ﷺ কে");
     next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লাম/g, "ﷺ");
     if (next !== content) setContent(next);
-  };
-
-  const toggleTaskeel = () => {
-    const next = !taskeelColoring;
-    setTaskeelColoring(next);
-    localStorage.setItem("book-taskeel-coloring", String(next));
   };
 
   const insertAtCursor = (text: string) => {
@@ -1236,14 +1206,6 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     return () => document.removeEventListener("mousedown", onDown);
   }, []);
 
-  const handlePaste = async () => {
-    try {
-      const text = await navigator.clipboard.readText();
-      if (text) insertAtCursor(text);
-    } catch {
-      alert("ক্লিপবোর্ড পড়া যায়নি। ব্রাউজারের অনুমতি পরীক্ষা করুন।");
-    }
-  };
 
   useEffect(() => {
     try {
@@ -1274,6 +1236,25 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     const empty = !title.trim() && !author.trim() && !content.trim() && !coverImage;
     if (empty) deleteBookEntirely(bookId);
     window.location.hash = "";
+  };
+
+  const isLocked = !!readLockHash(bookId);
+  const toggleBookLock = async (pwd: string) => {
+    if (isLocked) {
+      writeLockHash(bookId, null);
+    } else {
+      const hashed = await sha256Hex(pwd);
+      writeLockHash(bookId, hashed);
+    }
+    setShowLockModal(false);
+  };
+
+  const handleCoverUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const cropped = await cropToA5DataUrl(file);
+      setCoverImage(cropped);
+    }
   };
 
   const previewHtml = useMemo(
@@ -1413,10 +1394,10 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       }
       [data-pdf-body] th, [data-pdf-body] td {
         border: 1px solid #94a3b8;
-        padding: 6px 9px;
-        vertical-align: top;
+        padding: 8px 10px;
+        vertical-align: middle;
         text-align: left;
-        line-height: 1.5;
+        line-height: 1.2;
         box-sizing: border-box;
       }
       [data-pdf-body] th { background: #f1f5f9; font-weight: 600; }
@@ -2025,11 +2006,18 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
       <div
         className="fixed z-40 pointer-events-none
-                   bottom-3 left-3 right-3 flex justify-center
-                   md:bottom-auto md:right-auto md:top-1/2 md:-translate-y-1/2 md:left-3 md:flex-col md:justify-start"
+                   bottom-3 left-3 right-3 flex flex-col items-center gap-3
+                   md:bottom-6 md:left-6 md:right-6 md:flex-row md:justify-center"
       >
+        <input
+          ref={coverInputRef}
+          type="file"
+          accept="image/*"
+          className="hidden"
+          onChange={handleCoverUpload}
+        />
         {generating ? (
-          <div className="pointer-events-auto w-full max-w-sm md:max-w-[14rem] bg-white border border-slate-200 shadow-xl rounded-xl px-4 py-3">
+          <div className="pointer-events-auto w-full max-w-sm bg-white border border-slate-200 shadow-xl rounded-2xl px-4 py-3">
             <div className="flex items-center justify-between mb-2 gap-3">
               <div className="flex items-center gap-2 text-slate-800 text-sm font-medium">
                 <Loader2 size={14} className="animate-spin" />
@@ -2042,56 +2030,86 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             </div>
           </div>
         ) : (
-          <div className="pointer-events-auto flex flex-wrap justify-center md:flex-col gap-1 bg-white border border-slate-200 shadow-lg rounded-xl p-1 max-w-full md:overflow-visible">
-            <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
-            <SquareBtn onClick={handlePaste} title="Paste from clipboard"><ClipboardPaste size={18} /></SquareBtn>
-            <SquareBtn
-              onClick={() => setPdfPwdModal(true)}
-              title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
-              className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
-            >
-              <FileLock2 size={18} />
-            </SquareBtn>
-            <div className="relative">
-              <SquareBtn onClick={() => setShowMoreTools(!showMoreTools)} title="More tools">
-                <MoreHorizontal size={18} />
+          <div className="flex flex-wrap md:flex-nowrap items-center justify-center gap-3 w-full max-w-4xl">
+            <div className="pointer-events-auto flex items-center gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1.5">
+              <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
+              <SquareBtn
+                onClick={() => isLocked ? toggleBookLock("") : setShowLockModal(true)}
+                title={isLocked ? "Unlock Book" : "Lock Book"}
+                className={isLocked ? "text-rose-600" : ""}
+              >
+                {isLocked ? <Unlock size={18} /> : <Lock size={18} />}
               </SquareBtn>
-              {showMoreTools && (
-                <div className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 flex flex-col gap-1 bg-white border border-slate-200 shadow-xl rounded-xl p-1 animate-in fade-in zoom-in-95 md:left-full md:translate-x-0 md:bottom-0 md:mb-0 md:ml-2 md:flex-row">
-                  <SquareBtn
-                    onClick={() => { replaceSallallahu(); setShowMoreTools(false); }}
-                    title="Auto replace ﷺ"
-                    className="text-[10px] font-bold"
-                  >
-                    ﷺ
-                  </SquareBtn>
-                  <SquareBtn
-                    onClick={() => { toggleTaskeel(); setShowMoreTools(false); }}
-                    title="Arabic Taskeel Color"
-                    className={taskeelColoring ? "bg-rose-500 text-white hover:bg-rose-600" : ""}
-                  >
-                    <span className="text-xs font-bold">Ar</span>
-                  </SquareBtn>
-                </div>
-              )}
+              <SquareBtn
+                onClick={() => coverImage ? setCoverImage(undefined) : coverInputRef.current?.click()}
+                title={coverImage ? "Remove Cover" : "Add Cover"}
+                className={coverImage ? "text-rose-600" : ""}
+              >
+                <ImageIcon size={18} />
+              </SquareBtn>
+              <SquareBtn onClick={() => setShowDeleteConfirm(true)} title="Delete Book" className="text-rose-600"><Trash2 size={18} /></SquareBtn>
+              <SquareBtn
+                onClick={() => setPdfPwdModal(true)}
+                title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
+                className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
+              >
+                <FileLock2 size={18} />
+              </SquareBtn>
+              <SquareBtn
+                onClick={() => setIncludeIndex(!includeIndex)}
+                title="Toggle Index"
+                className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+              >
+                <List size={18} />
+              </SquareBtn>
+              <SquareBtn
+                onClick={replaceSallallahu}
+                title="Auto replace ﷺ"
+                className="text-lg font-bold"
+              >
+                ﷺ
+              </SquareBtn>
             </div>
-            <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
-              {preview ? <Pencil size={18} /> : <Eye size={18} />}
-            </SquareBtn>
-            <SquareBtn
-              onClick={handleDownloadPDF}
-              title="Download PDF"
-              className="bg-slate-900 text-white hover:bg-slate-800"
-            >
-              <Download size={18} />
-            </SquareBtn>
+
+            <div className="pointer-events-auto flex items-center gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1.5">
+              <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
+                {preview ? <Pencil size={18} /> : <Eye size={18} />}
+              </SquareBtn>
+              <SquareBtn
+                onClick={handleDownloadPDF}
+                title="Download PDF"
+                className="bg-slate-900 text-white hover:bg-slate-800"
+              >
+                <Download size={18} />
+              </SquareBtn>
+            </div>
           </div>
         )}
       </div>
 
       <PrettyPasswordPrompt
+        open={showLockModal}
+        title="বইটি লক করুন"
+        description="পাসওয়ার্ড দিলে বইটি সুরক্ষিত থাকবে। ভুলে গেলে পুনরুদ্ধারের পথ নেই।"
+        submitLabel="লক করুন"
+        onCancel={() => setShowLockModal(false)}
+        onSubmit={toggleBookLock}
+      />
+
+      <ConfirmModal
+        open={showDeleteConfirm}
+        title="বইটি মুছে ফেলবেন?"
+        description="এই কাজটি অপরিবর্তনীয় — সমস্ত লেখা, কভার ও সেটিংস স্থায়ীভাবে মুছে যাবে।"
+        confirmLabel="মুছে ফেলুন"
+        onConfirm={() => {
+          deleteBookEntirely(bookId);
+          window.location.hash = "";
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+
+      <PrettyPasswordPrompt
         open={pdfPwdModal}
-        icon="file"
         title={pdfPassword ? "PDF পাসওয়ার্ড পরিবর্তন" : "PDF-এর জন্য পাসওয়ার্ড"}
         description="এই পাসওয়ার্ড দিয়ে exported PDF এনক্রিপ্ট হবে। প্রিন্ট ও কপি অনুমোদিত থাকবে।"
         submitLabel="সংরক্ষণ"

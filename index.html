@@ -11,6 +11,11 @@
     <meta name="theme-color" content="#0f172a" />
     <title>Md. Abdullah Bari | Portfolio</title>
     <script>
+      // Dark Mode
+      if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+        document.documentElement.classList.add('dark');
+      }
+
       // Zoom Lock
       document.addEventListener('wheel', function(e) {
         if (e.ctrlKey) {

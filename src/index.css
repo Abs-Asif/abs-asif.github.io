@@ -60,24 +60,24 @@
   }
 
   .dark {
-    --background: 230 30% 5%;
-    --foreground: 230 40% 98%;
+    --background: 222 47% 11%;
+    --foreground: 210 40% 98%;
 
-    --primary: 230 70% 70%;
-    --primary-foreground: 230 70% 10%;
+    --primary: 217 91% 60%;
+    --primary-foreground: 210 40% 98%;
 
-    --secondary: 230 30% 15%;
-    --secondary-foreground: 230 40% 90%;
+    --secondary: 217 33% 17%;
+    --secondary-foreground: 210 40% 98%;
 
-    --muted: 230 30% 12%;
-    --muted-foreground: 230 10% 60%;
+    --muted: 217 33% 17%;
+    --muted-foreground: 215 20% 65%;
 
-    --accent: 280 50% 70%;
-    --accent-foreground: 280 50% 10%;
+    --accent: 217 33% 17%;
+    --accent-foreground: 210 40% 98%;
 
-    --border: 230 30% 15%;
-    --input: 230 30% 15%;
-    --ring: 230 70% 70%;
+    --border: 217 33% 17%;
+    --input: 217 33% 17%;
+    --ring: 224 76% 48%;
 
     /* Material You Tones (Dark) */
     --m3-primary: 230 70% 70%;
@@ -131,12 +131,85 @@
   .dark body::before {
     background: linear-gradient(
       -45deg,
-      rgba(20, 30, 50, 0.4),
-      rgba(40, 20, 40, 0.4),
-      rgba(10, 40, 20, 0.4),
-      rgba(30, 10, 50, 0.4)
+      rgba(15, 23, 42, 0.9),
+      rgba(30, 41, 59, 0.9),
+      rgba(15, 23, 42, 0.9),
+      rgba(30, 41, 59, 0.9)
     );
     background-size: 400% 400%;
+  }
+
+  .dark .bg-white {
+    @apply bg-slate-900;
+  }
+
+  .dark .bg-slate-50 {
+    @apply bg-slate-800;
+  }
+
+  .dark .bg-slate-100 {
+    @apply bg-slate-800;
+  }
+
+  .dark .text-slate-900 {
+    color: theme('colors.slate.100');
+  }
+
+  .dark .text-slate-800 {
+    color: theme('colors.slate.200');
+  }
+
+  .dark .text-slate-700 {
+    color: theme('colors.slate.300');
+  }
+
+  .dark .text-slate-600 {
+    color: theme('colors.slate.400');
+  }
+
+  .dark .text-slate-500 {
+    color: theme('colors.slate.500');
+  }
+
+  .dark .border-slate-100,
+  .dark .border-slate-200,
+  .dark .border-slate-300 {
+    border-color: theme('colors.slate.800');
+  }
+
+  .dark .hover\:bg-slate-50:hover {
+    background-color: theme('colors.slate.800');
+  }
+
+  .dark .hover\:bg-slate-100:hover {
+    background-color: theme('colors.slate.800');
+  }
+
+  .dark input,
+  .dark textarea {
+    color: theme('colors.slate.100');
+  }
+  .dark input::placeholder,
+  .dark textarea::placeholder {
+    color: theme('colors.slate.600');
+  }
+
+  .dark .prose-xl,
+  .dark .prose-2xl {
+    @apply text-slate-200;
+  }
+
+  .dark .pdf-preview {
+    @apply text-slate-200;
+  }
+
+  .dark .pdf-preview h1,
+  .dark .pdf-preview h2,
+  .dark .pdf-preview h3,
+  .dark .pdf-preview h4,
+  .dark .pdf-preview h5,
+  .dark .pdf-preview h6 {
+    @apply text-slate-100;
   }
 
   .font-mono {
