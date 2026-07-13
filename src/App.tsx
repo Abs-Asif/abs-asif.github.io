@@ -7,6 +7,7 @@ import Index from "./pages/Index";
 import Info from "./pages/Info";
 import Book from "./pages/Book";
 import Medic from "./pages/Medic";
+import Secret from "./pages/Secret";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,6 +23,7 @@ const App = () => (
           <Route path="/INFO" element={<Info />} />
           <Route path="/book" element={<Book />} />
           <Route path="/medic" element={<Medic />} />
+          <Route path="/secret" element={<Secret />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
