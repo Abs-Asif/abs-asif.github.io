@@ -376,6 +376,73 @@ function convertToMarkdown(content: string, type: string): string {
       if (idx !== undefined) return `[[${idx}]]`;
       return raw;
     });
+
+  } else if (type === "wikitext") {
+    // WikiText
+    md = md.replace(/^=====\s*(.*?)\s*=====$/gm, "##### $1");
+    md = md.replace(/^====\s*(.*?)\s*====$/gm, "#### $1");
+    md = md.replace(/^===\s*(.*?)\s*===$/gm, "### $1");
+    md = md.replace(/^==\s*(.*?)\s*==$/gm, "## $1");
+    md = md.replace(/^=\s*(.*?)\s*=$/gm, "# $1");
+    md = md.replace(/'''(.*?)'''/g, "**$1**");
+    md = md.replace(/''(.*?)''/g, "*$1*");
+    md = md.replace(/\{\{pagebreak\}\}/g, "-[*]-");
+    let fnIndex = 1;
+    const fnDefs: string[] = [];
+    md = md.replace(/<ref>(.*?)<\/ref>/g, (_m, body) => {
+      const idx = fnIndex++;
+      fnDefs.push(`[[${idx}==${body}]]`);
+      return `[[${idx}]]`;
+    });
+    if (fnDefs.length > 0) {
+      md += "\n\n" + fnDefs.join("\n");
+    }
+
+  } else if (type === "textile") {
+    // Textile
+    md = md.replace(/^h5\.\s+(.*)$/gm, "##### $1");
+    md = md.replace(/^h4\.\s+(.*)$/gm, "#### $1");
+    md = md.replace(/^h3\.\s+(.*)$/gm, "### $1");
+    md = md.replace(/^h2\.\s+(.*)$/gm, "## $1");
+    md = md.replace(/^h1\.\s+(.*)$/gm, "# $1");
+    md = md.replace(/(?<!\*)\*(?!\*)([^* \n][^*]*?[^* \n])\*(?!\*)/g, "**$1**");
+    md = md.replace(/(?<!_)_(?!_)([^_ \n][^_]*?[^_ \n])_(?!_)/g, "*$1*");
+    md = md.replace(/@(.*?)@/g, "`$1`");
+    md = md.replace(/<pagebreak>/g, "-[*]-");
+    let fnIndex = 1;
+    const fnMap = new Map<string, number>();
+    md = md.replace(/^fn(\d+)\.\s+(.*)$/gm, (_m, num, body) => {
+      const idx = fnIndex++;
+      fnMap.set(num.trim(), idx);
+      return `[[${idx}==${body}]]`;
+    });
+    md = md.replace(/\[(\d+)\]/g, (_m, num) => {
+      const idx = fnMap.get(num.trim()) || fnIndex++;
+      return `[[${idx}]]`;
+    });
+
+  } else if (type === "obsidian" || type === "notion") {
+    // Obsidian / Notion callouts conversion
+    md = md.replace(/\[\[([^\]|]+)\|([^\]]+)\]\]/g, "**$2**");
+    md = md.replace(/\[\[([^\]]+)\]\]/g, "**$1**");
+    md = md.replace(/^>\s*\[!([^\]]+)\](.*)$/gm, (_m, t, rest) => {
+      const title = t.charAt(0).toUpperCase() + t.slice(1);
+      return `> **${title}:**${rest}`;
+    });
+
+  } else if (type === "logseq" || type === "roam") {
+    // Outliner bullet parser
+    md = md.split("\n").map(line => {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("- #")) {
+        return line.replace(/^(\s*)-\s+#/, "#");
+      }
+      if (trimmed.startsWith("- ")) {
+        return line.replace(/^(\s*)-\s+/, "");
+      }
+      return line;
+    }).join("\n");
+    md = md.replace(/\[\[(.*?)\]\]/g, "**$1**");
   }
 
   return md;
@@ -596,6 +663,213 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "** স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "** স্পেশাল সিম্বল\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "wikitext") {
+    return {
+      title: "WikiText Demo — উইকিটেক্সট ডেমো বই",
+      author: "Book Editor",
+      content:
+        "= পরিচিতি — Introduction — مقدمة =\n\n" +
+        "এটি একটি '''demo''' বই যা উইকিটেক্সট সিনট্যাক্স ব্যবহার করে।\n\n" +
+        "This is a '''demo''' book written using WikiText syntax.\n\n" +
+        "هذا كتاب '''تجريبي''' مكتوب بتنسيق ويكيتيكست.\n\n" +
+        "{{pagebreak}}\n\n" +
+        "= ১. শিরোনাম — Headings — العناوين =\n\n" +
+        "= শিরোনাম ১ (H1) =\n" +
+        "== শিরোনাম ২ (H2) ==\n" +
+        "=== শিরোনাম ৩ (H3) ===\n\n" +
+        "= Heading 1 =\n" +
+        "== Heading 2 ==\n" +
+        "=== Heading 3 ===\n\n" +
+        "= عنوان ১ =\n" +
+        "== عنوان ২ ==\n" +
+        "=== عنوان ৩ ===\n\n" +
+        "{{pagebreak}}\n\n" +
+        "= ২. টেক্সট ফরম্যাটিং — Formatting — التنسيق =\n\n" +
+        "'''বোল্ড টেক্সট''' (Bold), ''ইটালিক টেক্সট'' (Italic).\n\n" +
+        "'''Bold text''', ''italic text''.\n\n" +
+        "'''نص عريض''', ''نص مائل''.\n\n" +
+        "{{pagebreak}}\n\n" +
+        "= ৩. তালিকা — Lists — القوائم =\n\n" +
+        "== বুলেটেড তালিকা ==\n\n" +
+        "* বাংলা আইটেম\n" +
+        "* English item\n" +
+        "* عنصر عربي\n\n" +
+        "== নম্বরযুক্ত তালিকা ==\n\n" +
+        "১. বাংলা এক\n" +
+        "২. বাংলা দুই\n\n" +
+        "1. English one\n" +
+        "2. English two\n\n" +
+        "١. عربي واحد\n" +
+        "٢. عربي اثنان\n\n" +
+        "{{pagebreak}}\n\n" +
+        "= ৪. উদ্ধৃতি — Blockquotes — الاقتباسات =\n\n" +
+        "> এটি একটি বাংলা উদ্ধৃতি।\n\n" +
+        "> This is an English blockquote.\n\n" +
+        "> هذا اقتباس باللغة العربية.\n\n" +
+        "{{pagebreak}}\n\n" +
+        "= ৫. টীকা — Footnotes — أخرى =\n\n" +
+        "এখানে একটি টীকা আছে <ref>এটি বাংলা টীকা।</ref>.\n" +
+        "Here is a footnote <ref>This is an English footnote.</ref>.\n" +
+        "هنا حاشية سفلية <ref>هذه حاشية باللغة العربية.</ref>.\n\n" +
+        "== স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers) ==\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "== স্পেশাল সিম্বল ==\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "textile") {
+    return {
+      title: "Textile Demo — টেক্সটাইল ডেমো বই",
+      author: "Book Editor",
+      content:
+        "h1. পরিচিতি — Introduction — مقدمة\n\n" +
+        "এটি একটি *demo* বই যা টেক্সটাইল সিনট্যাক্স ব্যবহার করে।\n\n" +
+        "This is a *demo* book written using Textile syntax.\n\n" +
+        "هذا كتاب *تجريبي* مكتوب بتنسيق تيكستايل.\n\n" +
+        "<pagebreak>\n\n" +
+        "h1. ১. শিরোনাম — Headings — العناوين\n\n" +
+        "h1. শিরোনাম ১ (H1)\n" +
+        "h2. শিরোনাম ২ (H2)\n" +
+        "h3. শিরোনাম ৩ (H3)\n\n" +
+        "h1. Heading 1\n" +
+        "h2. Heading 2\n" +
+        "h3. Heading 3\n\n" +
+        "h1. عنوان ১ (H1)\n" +
+        "h2. عنوان ২ (H2)\n" +
+        "h3. عنوان ৩ (H3)\n\n" +
+        "<pagebreak>\n\n" +
+        "h1. ২. টেক্সট ফরম্যাটিং — Formatting — التنسيق\n\n" +
+        "*বোল্ড টেক্সট* (Bold), _ইটালিক টেক্সট_ (Italic), @monospace@ code.\n\n" +
+        "*Bold text*, _italic text_, @monospace@ code.\n\n" +
+        "*نص عريض*, _نص مائل_, @monospace@ code.\n\n" +
+        "<pagebreak>\n\n" +
+        "h1. ৩. তালিকা — Lists — القوائم\n\n" +
+        "h2. বুলেটেড তালিকা\n\n" +
+        "* বাংলা আইটেম\n" +
+        "* English item\n" +
+        "* عنصر عربي\n\n" +
+        "h2. নম্বরযুক্ত তালিকা\n\n" +
+        "# বাংলা এক\n" +
+        "# বাংলা দুই\n\n" +
+        "# English one\n" +
+        "# English two\n\n" +
+        "# عربي واحد\n" +
+        "# عربي اثنان\n\n" +
+        "<pagebreak>\n\n" +
+        "h1. ৪. উদ্ধৃতি — Blockquotes — الاقتباسات\n\n" +
+        "> এটি একটি বাংলা উদ্ধৃতি।\n\n" +
+        "> This is an English blockquote.\n\n" +
+        "> هذا اقتباس باللغة العربية.\n\n" +
+        "<pagebreak>\n\n" +
+        "h1. ৫. টীকা — Footnotes — أخرى\n\n" +
+        "এখানে একটি টীকা আছে [1].\n" +
+        "Here is a footnote [2].\n" +
+        "هنا حاشية سفلية [3].\n\n" +
+        "fn1. এটি বাংলা টীকা।\n" +
+        "fn2. This is an English footnote.\n" +
+        "fn3. هذه حاشية باللغة العربية.\n\n" +
+        "h2. স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "h2. স্পেশাল সিম্বল\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "obsidian" || markup === "notion") {
+    const label = markup.charAt(0).toUpperCase() + markup.slice(1);
+    return {
+      title: `${label} Demo — ${label === "Obsidian" ? "অবসিডিয়ান" : "নোশন"} ডেমো বই`,
+      author: "Book Editor",
+      content:
+        `# পরিচিতি — Introduction — مقدمة (${label})\n\n` +
+        `এটি একটি *demo* বই যা [[${label}]] সিনট্যাক্স ব্যবহার করে।\n\n` +
+        `This is a *demo* book written using [[${label}]] syntax.\n\n` +
+        `هذا كتاب *تجريبي* مكتوب بتنسيق [[${label}]].\n\n` +
+        "-[*]-\n\n" +
+        "# ১. শিরোনাম — Headings — العناوين\n\n" +
+        "# শিরোনাম ১ (H1)\n" +
+        "## শিরোনাম ২ (H2)\n" +
+        "### শিরোনাম ৩ (H3)\n\n" +
+        "-[*]-\n\n" +
+        "# ২. কলআউট — Callouts — التنسيق\n\n" +
+        `> [!info]\n` +
+        `> এটি একটি ${label}-স্টাইল ইনফো কলআউট।\n` +
+        `> This is an ${label}-style info callout.\n` +
+        `> هذا مربع معلومات بتنسيق ${label}.\n\n` +
+        "-[*]-\n\n" +
+        "# ৩. টীকা — Footnotes\n\n" +
+        "এখানে একটি টীকা আছে [[১]]।\n" +
+        "[[১==এটি বাংলা টীকা।]]\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "logseq" || markup === "roam") {
+    const label = markup === "logseq" ? "Logseq" : "Roam Research";
+    return {
+      title: `${label} Outliner Demo — ${markup === "logseq" ? "লগসিক" : "রোম রিসার্চ"} ডেমো বই`,
+      author: "Book Editor",
+      content:
+        `- # পরিচিতি — Introduction — مقدمة\n` +
+        `- এটি একটি *outliner* বই যা [[${label}]] সিনট্যাক্স ব্যবহার করে।\n` +
+        `- every paragraph is a top-level bullet point block.\n` +
+        `- output will be rendered as a beautifully clean traditional book layout!\n` +
+        `- -[*]-\n` +
+        `- # ১. শিরোনাম — Headings — العناوين\n` +
+        `- ## শিরোনাম ২ (H2)\n` +
+        `- ### শিরোনাম ৩ (H3)\n` +
+        `- -[*]-\n` +
+        `- # ২. টীকা — Footnotes\n` +
+        `- এখানে একটি টীকা আছে [[১]]।\n` +
+        `- [[১==এটি আউটলাইনার বাংলা টীকা।]]\n` +
+        `- ১২৩৪৫, 12345, ١٢٣٤٥\n` +
+        `- সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n`,
+    };
+  }
+
+  // Handle remaining standard Markdown dialects/environments/apps
+  const standardMarkdowns = [
+    "commonmark", "marktext", "typora", "zettlr", "ghostwriter",
+    "anytype", "hackmd", "stackedit", "codimd", "dillinger"
+  ];
+  if (standardMarkdowns.includes(markup)) {
+    const labelMap: Record<string, string> = {
+      commonmark: "CommonMark",
+      marktext: "MarkText",
+      typora: "Typora",
+      zettlr: "Zettlr",
+      ghostwriter: "Ghostwriter",
+      anytype: "Anytype",
+      hackmd: "HackMD",
+      stackedit: "StackEdit",
+      codimd: "CodiMD",
+      dillinger: "Dillinger"
+    };
+    const label = labelMap[markup] || markup;
+    return {
+      title: `${label} Demo Book — ${label} ডেমো বই`,
+      author: "Book Editor",
+      content:
+        `# পরিচিতি — Introduction — مقدمة (${label})\n\n` +
+        `এটি একটি *demo* বই যা standard Markdown সমর্থিত **${label}** সিস্টেমে কাজ করে।\n\n` +
+        `This is a *demo* book compatible with standard Markdown in **${label}**.\n\n` +
+        `هذا كتاب *تجريبي* متوافق مع لغة ماركداون في **${label}**.\n\n` +
+        "-[*]-\n\n" +
+        "# ১. শিরোনাম — Headings\n\n" +
+        "# শিরোনাম ১ (H1)\n" +
+        "## শিরোনাম ২ (H2)\n" +
+        "### শিরোনাম ৩ (H3)\n\n" +
+        "-[*]-\n\n" +
+        "# ২. টীকা — Footnotes\n\n" +
+        "এখানে একটি টীকা আছে [[১]]।\n" +
+        "[[১==এটি বাংলা টীকা।]]\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
     };
   }
@@ -1019,23 +1293,73 @@ async function cropToA5DataUrl(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+const MarkupCheckbox: React.FC<{
+  label: string;
+  desc?: string;
+  checked: boolean;
+  onChange: () => void;
+}> = ({ label, desc, checked, onChange }) => (
+  <label className="flex items-start gap-2.5 cursor-pointer p-1 rounded hover:bg-slate-50">
+    <input
+      type="checkbox"
+      checked={checked}
+      onChange={onChange}
+      className="mt-0.5 rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4 w-4 cursor-pointer shrink-0"
+    />
+    <div className="flex flex-col">
+      <span className="font-normal text-slate-800 text-xs leading-none">{label}</span>
+      {desc && <span className="text-[10px] text-slate-400 mt-0.5">{desc}</span>}
+    </div>
+  </label>
+);
+
 const SettingsPopup: React.FC<{
   open: boolean;
   onClose: () => void;
 }> = ({ open, onClose }) => {
   const [watermark, setWatermark] = useState(() => localStorage.getItem("book-settings-watermark") || "");
   const [credit, setCredit] = useState(() => localStorage.getItem("book-settings-credit") || "Compiled by Abdullah Bari Asif.");
-  const [asciidoc, setAsciidoc] = useState(() => localStorage.getItem("book-settings-asciidoc-enabled") === "true");
-  const [rst, setRst] = useState(() => localStorage.getItem("book-settings-rst-enabled") === "true");
-  const [orgmode, setOrgmode] = useState(() => localStorage.getItem("book-settings-orgmode-enabled") === "true");
+
+  const formats = [
+    "asciidoc", "rst", "orgmode", "wikitext", "textile", "commonmark",
+    "marktext", "typora", "zettlr", "ghostwriter",
+    "obsidian", "notion", "logseq", "anytype", "roam",
+    "hackmd", "stackedit", "codimd", "dillinger"
+  ];
+
+  const [markups, setMarkups] = useState<Record<string, boolean>>(() => {
+    const init: Record<string, boolean> = {};
+    formats.forEach(f => {
+      if (f === "asciidoc") {
+        init[f] = localStorage.getItem("book-settings-asciidoc-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+      } else if (f === "rst") {
+        init[f] = localStorage.getItem("book-settings-rst-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+      } else if (f === "orgmode") {
+        init[f] = localStorage.getItem("book-settings-orgmode-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+      } else {
+        init[f] = localStorage.getItem(`book-settings-markup-${f}`) === "true";
+      }
+    });
+    return init;
+  });
 
   useEffect(() => {
     if (open) {
       setWatermark(localStorage.getItem("book-settings-watermark") || "");
       setCredit(localStorage.getItem("book-settings-credit") || "Compiled by Abdullah Bari Asif.");
-      setAsciidoc(localStorage.getItem("book-settings-asciidoc-enabled") === "true");
-      setRst(localStorage.getItem("book-settings-rst-enabled") === "true");
-      setOrgmode(localStorage.getItem("book-settings-orgmode-enabled") === "true");
+      const nextMarkups: Record<string, boolean> = {};
+      formats.forEach(f => {
+        if (f === "asciidoc") {
+          nextMarkups[f] = localStorage.getItem("book-settings-asciidoc-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+        } else if (f === "rst") {
+          nextMarkups[f] = localStorage.getItem("book-settings-rst-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+        } else if (f === "orgmode") {
+          nextMarkups[f] = localStorage.getItem("book-settings-orgmode-enabled") === "true" || localStorage.getItem(`book-settings-markup-${f}`) === "true";
+        } else {
+          nextMarkups[f] = localStorage.getItem(`book-settings-markup-${f}`) === "true";
+        }
+      });
+      setMarkups(nextMarkups);
     }
   }, [open]);
 
@@ -1044,15 +1368,22 @@ const SettingsPopup: React.FC<{
   const handleSave = () => {
     localStorage.setItem("book-settings-watermark", watermark);
     localStorage.setItem("book-settings-credit", credit);
-    localStorage.setItem("book-settings-asciidoc-enabled", asciidoc ? "true" : "false");
-    localStorage.setItem("book-settings-rst-enabled", rst ? "true" : "false");
-    localStorage.setItem("book-settings-orgmode-enabled", orgmode ? "true" : "false");
+    formats.forEach(f => {
+      localStorage.setItem(`book-settings-markup-${f}`, markups[f] ? "true" : "false");
+      if (f === "asciidoc") localStorage.setItem("book-settings-asciidoc-enabled", markups[f] ? "true" : "false");
+      if (f === "rst") localStorage.setItem("book-settings-rst-enabled", markups[f] ? "true" : "false");
+      if (f === "orgmode") localStorage.setItem("book-settings-orgmode-enabled", markups[f] ? "true" : "false");
+    });
     onClose();
+  };
+
+  const handleToggle = (f: string) => {
+    setMarkups(prev => ({ ...prev, [f]: !prev[f] }));
   };
 
   return (
     <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
-      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95 overflow-y-auto max-h-[90vh]">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-2xl p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95 overflow-y-auto max-h-[90vh]">
         <div className="mb-6 flex justify-between items-center border-b border-slate-100 pb-3">
           <h3 className="text-xl font-normal text-slate-900 leading-tight">বই সেটিংস (Settings)</h3>
           <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
@@ -1061,72 +1392,87 @@ const SettingsPopup: React.FC<{
         </div>
 
         <div className="space-y-6 mb-8">
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Watermark Text (জলছাপ)</label>
-            <input
-              type="text"
-              value={watermark}
-              onChange={(e) => setWatermark(e.target.value)}
-              placeholder="যেমন: My Copyright Watermark"
-              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
-            />
-            <p className="text-xs text-slate-400">
-              এটি বইয়ের সাধারণ পাতাগুলোতে কোনাকুনিভাবে জলছাপ হিসেবে বসবে (কভার ও সূচিপত্র ছাড়া)।
-            </p>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700">Watermark Text (জলছাপ)</label>
+              <input
+                type="text"
+                value={watermark}
+                onChange={(e) => setWatermark(e.target.value)}
+                placeholder="যেমন: My Copyright Watermark"
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
+              />
+              <p className="text-xs text-slate-400">
+                এটি বইয়ের সাধারণ পাতাগুলোতে কোনাকুনিভাবে জলছাপ হিসেবে বসবে (কভার ও সূচিপত্র ছাড়া)।
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <label className="block text-sm font-medium text-slate-700">Cover Page Credit (কৃতিত্ব)</label>
+              <input
+                type="text"
+                value={credit}
+                onChange={(e) => setCredit(e.target.value)}
+                placeholder="Compiled by Abdullah Bari Asif."
+                className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
+              />
+              <p className="text-xs text-slate-400">
+                কভার পেজের নিচে কৃতিত্ব সূচক লেখাটি পরিবর্তন করার জন্য।
+              </p>
+            </div>
           </div>
 
-          <div className="space-y-2">
-            <label className="block text-sm font-medium text-slate-700">Cover Page Credit (কৃতিত্ব)</label>
-            <input
-              type="text"
-              value={credit}
-              onChange={(e) => setCredit(e.target.value)}
-              placeholder="Compiled by Abdullah Bari Asif."
-              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
-            />
-            <p className="text-xs text-slate-400">
-              কভার পেজের নিচে কৃতিত্ব সূচক লেখাটি পরিবর্তন করার জন্য।
-            </p>
-          </div>
-
-          <div className="space-y-3">
-            <label className="block text-sm font-medium text-slate-700 border-b border-slate-100 pb-1">
+          <div className="space-y-4">
+            <label className="block text-sm font-semibold text-slate-800 border-b border-slate-100 pb-1">
               Markup Alternatives (বিকল্প মার্কআপ ফরম্যাট)
             </label>
             <p className="text-xs text-slate-400 mb-2">
               চালু করা হলে, নতুন বই তৈরির সময় এগুলোর ডেমো তৈরি হবে এবং ফরম্যাট নির্বাচন করার অপশন আসবে।
             </p>
 
-            <div className="space-y-2.5">
-              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={asciidoc}
-                  onChange={(e) => setAsciidoc(e.target.checked)}
-                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
-                />
-                <span className="font-normal text-slate-800">AsciiDoc (using =, ==, *, _ and footnote:[])</span>
-              </label>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Markup Formats</h4>
+                <div className="space-y-1 pl-2">
+                  <MarkupCheckbox label="AsciiDoc" desc="For books & manuals" checked={markups.asciidoc} onChange={() => handleToggle("asciidoc")} />
+                  <MarkupCheckbox label="reStructuredText (reST)" desc="Python ecosystem standard" checked={markups.rst} onChange={() => handleToggle("rst")} />
+                  <MarkupCheckbox label="Org-mode" desc="Emacs task outlines" checked={markups.orgmode} onChange={() => handleToggle("orgmode")} />
+                  <MarkupCheckbox label="WikiText" desc="Wikipedia MediaWiki syntax" checked={markups.wikitext} onChange={() => handleToggle("wikitext")} />
+                  <MarkupCheckbox label="Textile" desc="Human-readable web markup" checked={markups.textile} onChange={() => handleToggle("textile")} />
+                  <MarkupCheckbox label="CommonMark" desc="Strictly defined Markdown spec" checked={markups.commonmark} onChange={() => handleToggle("commonmark")} />
+                </div>
+              </div>
 
-              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={rst}
-                  onChange={(e) => setRst(e.target.checked)}
-                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
-                />
-                <span className="font-normal text-slate-800">reStructuredText (using underline headers and [#]_)</span>
-              </label>
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Visual & WYSIWYG</h4>
+                <div className="space-y-1 pl-2">
+                  <MarkupCheckbox label="MarkText" desc="Real-time hidden syntax" checked={markups.marktext} onChange={() => handleToggle("marktext")} />
+                  <MarkupCheckbox label="Typora" desc="Premium distraction-free visual" checked={markups.typora} onChange={() => handleToggle("typora")} />
+                  <MarkupCheckbox label="Zettlr" desc="Academic research writing" checked={markups.zettlr} onChange={() => handleToggle("zettlr")} />
+                  <MarkupCheckbox label="Ghostwriter" desc="Distraction-free creative environment" checked={markups.ghostwriter} onChange={() => handleToggle("ghostwriter")} />
+                </div>
+              </div>
 
-              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
-                <input
-                  type="checkbox"
-                  checked={orgmode}
-                  onChange={(e) => setOrgmode(e.target.checked)}
-                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
-                />
-                <span className="font-normal text-slate-800">Org-mode (using *, **, / and [fn:])</span>
-              </label>
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Knowledge Management</h4>
+                <div className="space-y-1 pl-2">
+                  <MarkupCheckbox label="Obsidian" desc="Interconnected visual notes" checked={markups.obsidian} onChange={() => handleToggle("obsidian")} />
+                  <MarkupCheckbox label="Notion" desc="Collaborative block workspaces" checked={markups.notion} onChange={() => handleToggle("notion")} />
+                  <MarkupCheckbox label="Logseq" desc="Privacy-focused visual outlines" checked={markups.logseq} onChange={() => handleToggle("logseq")} />
+                  <MarkupCheckbox label="Anytype" desc="Decentralized Notion alternative" checked={markups.anytype} onChange={() => handleToggle("anytype")} />
+                  <MarkupCheckbox label="Roam Research" desc="Fluid bi-directional linking notes" checked={markups.roam} onChange={() => handleToggle("roam")} />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Collaborative Web Apps</h4>
+                <div className="space-y-1 pl-2">
+                  <MarkupCheckbox label="HackMD" desc="Real-time team workspaces" checked={markups.hackmd} onChange={() => handleToggle("hackmd")} />
+                  <MarkupCheckbox label="StackEdit" desc="Cloud-synced in-browser editor" checked={markups.stackedit} onChange={() => handleToggle("stackedit")} />
+                  <MarkupCheckbox label="CodiMD" desc="Open-source collaborative editor" checked={markups.codimd} onChange={() => handleToggle("codimd")} />
+                  <MarkupCheckbox label="Dillinger" desc="Cloud-enabled HTML5 editor" checked={markups.dillinger} onChange={() => handleToggle("dillinger")} />
+                </div>
+              </div>
             </div>
           </div>
         </div>
