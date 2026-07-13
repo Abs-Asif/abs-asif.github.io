@@ -118,18 +118,18 @@ describe("Secret Intimacy Roulette Component", () => {
     expect(select).toBeInTheDocument();
 
     act(() => {
-      fireEvent.change(select, { target: { value: "আলিঙ্গন" } });
+      fireEvent.change(select, { target: { value: "আরামদায়ক" } });
     });
-    expect(select.value).toBe("আলিঙ্গন");
+    expect(select.value).toBe("আরামদায়ক");
 
     // Under fake timers, let's run all pending timers
     act(() => {
       vi.runAllTimers();
     });
 
-    // All displayed poses under Cuddling category should match
-    // E.g. "কোজি স্পুনিং"
-    const poseName = screen.getByText(/কোজি স্পুনিং/i);
+    // All displayed poses under Comfortable category should match
+    // E.g. "ফ্ল্যাট আয়রন (The Flat Iron)"
+    const poseName = screen.getByText(/ফ্ল্যাট আয়রন/i);
     expect(poseName).toBeInTheDocument();
   });
 });
