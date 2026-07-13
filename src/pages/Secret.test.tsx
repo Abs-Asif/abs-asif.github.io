@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, fireEvent, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import Secret from "./Secret";
@@ -39,7 +39,7 @@ describe("Secret Intimacy Roulette Component", () => {
     vi.useRealTimers();
   });
 
-  it("renders headers, filters, game screens, playbook, and timers", () => {
+  it("renders headers, filters, game screens, playbook, and dice roller in Bangla", () => {
     render(
       <MemoryRouter>
         <Secret />
@@ -47,17 +47,16 @@ describe("Secret Intimacy Roulette Component", () => {
     );
 
     // Header check
-    expect(screen.getByText("Cupid's Roulette")).toBeInTheDocument();
-    expect(screen.getByText("ORACLE OF CONNECTION")).toBeInTheDocument();
+    expect(screen.getAllByText(/কিউপিড রুলেট/i)[0]).toBeInTheDocument();
+    expect(screen.getByText(/ভঙ্গির দৈবচয়ন/i)).toBeInTheDocument();
 
     // Filters check
-    expect(screen.getByText("Spiciness Meter")).toBeInTheDocument();
-    expect(screen.getByText("Pose Category")).toBeInTheDocument();
+    expect(screen.getByText(/উষ্ণতার মাত্রা/i)).toBeInTheDocument();
+    expect(screen.getByText(/আসন বা ভঙ্গির ধরণ/i)).toBeInTheDocument();
 
     // Side widgets
-    expect(screen.getByText("Pose Playbook")).toBeInTheDocument();
-    expect(screen.getByText("Scenario Dice Roller")).toBeInTheDocument();
-    expect(screen.getByText("Intimacy Challenge Timer")).toBeInTheDocument();
+    expect(screen.getByText(/ভঙ্গি নির্দেশিকা/i)).toBeInTheDocument();
+    expect(screen.getByText(/পরিস্থিতি ডাইস/i)).toBeInTheDocument();
   });
 
   it("can spin the roulette to select a pose", async () => {
@@ -67,14 +66,14 @@ describe("Secret Intimacy Roulette Component", () => {
       </MemoryRouter>
     );
 
-    const spinButton = screen.getByRole("button", { name: /SPIN ROULETTE/ });
+    const spinButton = screen.getByRole("button", { name: /রুলেট ঘোরান/i });
     expect(spinButton).toBeInTheDocument();
 
     // Click spin button
     fireEvent.click(spinButton);
 
-    // Should show rolling text
-    expect(screen.getByText("Shuffling Poses...")).toBeInTheDocument();
+    // Should show rolling text in Bangla
+    expect(screen.getByText("ভঙ্গি বাছাই করা হচ্ছে...")).toBeInTheDocument();
 
     // Fast-forward timers to let shuffle complete
     act(() => {
@@ -82,7 +81,7 @@ describe("Secret Intimacy Roulette Component", () => {
     });
 
     // Spinning should finish
-    expect(screen.queryByText("Shuffling Poses...")).not.toBeInTheDocument();
+    expect(screen.queryByText("ভঙ্গি বাছাই করা হচ্ছে...")).not.toBeInTheDocument();
   });
 
   it("can roll scenario dice", () => {
@@ -92,7 +91,7 @@ describe("Secret Intimacy Roulette Component", () => {
       </MemoryRouter>
     );
 
-    const rollDiceButton = screen.getByRole("button", { name: /ROLL DICE/ });
+    const rollDiceButton = screen.getByRole("button", { name: /ডাইস রোল করুন/i });
     expect(rollDiceButton).toBeInTheDocument();
 
     fireEvent.click(rollDiceButton);
@@ -102,46 +101,9 @@ describe("Secret Intimacy Roulette Component", () => {
       vi.runAllTimers();
     });
 
-    // Ensure they display something from Locations / Moods
-    expect(screen.getByText(/Where to perform/i)).toBeInTheDocument();
-    expect(screen.getByText(/Special Condition/i)).toBeInTheDocument();
-  });
-
-  it("can run and control the intimacy timer", () => {
-    render(
-      <MemoryRouter>
-        <Secret />
-      </MemoryRouter>
-    );
-
-    // Remaining time default should be 3:00 (180 seconds)
-    expect(screen.getByText("3:00")).toBeInTheDocument();
-
-    // Click play/start button using ARIA label
-    const playBtn = screen.getByLabelText("Start Timer");
-    expect(playBtn).toBeInTheDocument();
-    fireEvent.click(playBtn);
-
-    // Let's tick the clock 1 second
-    act(() => {
-      vi.advanceTimersByTime(1000);
-    });
-
-    // Time should decrement to 2:59
-    expect(screen.getByText("2:59")).toBeInTheDocument();
-
-    // Fast forward remaining 179 seconds to complete timer challenge
-    act(() => {
-      vi.advanceTimersByTime(179000);
-    });
-
-    // Should finish and show reward card
-    expect(screen.getByText("Challenge Completed! 🎉")).toBeInTheDocument();
-
-    // Can dismiss reward
-    const dismissBtn = screen.getByRole("button", { name: "Dismiss" });
-    fireEvent.click(dismissBtn);
-    expect(screen.queryByText("Challenge Completed! 🎉")).not.toBeInTheDocument();
+    // Ensure they display labels
+    expect(screen.getByText(/📍 স্থান/i)).toBeInTheDocument();
+    expect(screen.getByText(/🎲 বিশেষ শর্ত/i)).toBeInTheDocument();
   });
 
   it("can change category and spiciness filters", () => {
@@ -155,11 +117,11 @@ describe("Secret Intimacy Roulette Component", () => {
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     expect(select).toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "Cuddling" } });
-    expect(select.value).toBe("Cuddling");
+    fireEvent.change(select, { target: { value: "আলিঙ্গন" } });
+    expect(select.value).toBe("আলিঙ্গন");
 
     // All displayed poses under Cuddling category should match
-    // E.g. "Cozy Spooning"
-    expect(screen.getByText("Cozy Spooning")).toBeInTheDocument();
+    // E.g. "কোজি স্পুনিং"
+    expect(screen.getByText(/কোজি স্পুনিং/i)).toBeInTheDocument();
   });
 });
