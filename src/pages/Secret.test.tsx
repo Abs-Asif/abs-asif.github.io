@@ -117,11 +117,19 @@ describe("Secret Intimacy Roulette Component", () => {
     const select = screen.getByRole("combobox") as HTMLSelectElement;
     expect(select).toBeInTheDocument();
 
-    fireEvent.change(select, { target: { value: "আলিঙ্গন" } });
+    act(() => {
+      fireEvent.change(select, { target: { value: "আলিঙ্গন" } });
+    });
     expect(select.value).toBe("আলিঙ্গন");
+
+    // Under fake timers, let's run all pending timers
+    act(() => {
+      vi.runAllTimers();
+    });
 
     // All displayed poses under Cuddling category should match
     // E.g. "কোজি স্পুনিং"
-    expect(screen.getByText(/কোজি স্পুনিং/i)).toBeInTheDocument();
+    const poseName = screen.getByText(/কোজি স্পুনিং/i);
+    expect(poseName).toBeInTheDocument();
   });
 });
