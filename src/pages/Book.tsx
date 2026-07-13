@@ -18,6 +18,7 @@ import {
   X,
   EyeOff,
   List,
+  Settings,
 } from "lucide-react";
 import { jsPDF } from "jspdf";
 import html2canvas from "html2canvas";
@@ -268,6 +269,345 @@ function renderForPreview(md: string, script: NumeralScript): string {
 function indexTitle(script: NumeralScript): string {
   return script === "bn" ? "সূচিপত্র" : script === "ar" ? "الفهرس" : "Index";
 }
+function convertToMarkdown(content: string, type: string): string {
+  if (!type || type === "markdown") return content;
+
+  let md = content;
+
+  if (type === "asciidoc") {
+    // 1. Convert headers
+    md = md.replace(/^=====\s+(.*)$/gm, "##### $1");
+    md = md.replace(/^====\s+(.*)$/gm, "#### $1");
+    md = md.replace(/^===\s+(.*)$/gm, "### $1");
+    md = md.replace(/^==\s+(.*)$/gm, "## $1");
+    md = md.replace(/^=\s+(.*)$/gm, "# $1");
+
+    // 2. Page break
+    md = md.replace(/^<<<\s*$/gm, "-[*]-");
+
+    // 3. Bold, Italic
+    md = md.replace(/(?<!\*)\*(?!\*)([^* \n][^*]*?[^* \n])\*(?!\*)/g, "**$1**");
+    md = md.replace(/(?<!_)_(?!_)([^_ \n][^_]*?[^_ \n])_(?!_)/g, "*$1*");
+
+    // 4. Blockquotes: [quote] or empty line with >
+    md = md.replace(/^\[quote\]\s*\n/gm, "");
+
+    // 5. Footnotes: footnote:[Text] -> [[1]] and [[1==Text]]
+    let fnIndex = 1;
+    const fnDefs: string[] = [];
+    md = md.replace(/footnote:\[(.*?)\]/g, (_m, body) => {
+      const idx = fnIndex++;
+      fnDefs.push(`[[${idx}==${body}]]`);
+      return `[[${idx}]]`;
+    });
+    if (fnDefs.length > 0) {
+      md += "\n\n" + fnDefs.join("\n");
+    }
+
+  } else if (type === "rst") {
+    // reStructuredText
+    // 1. Headers: line followed by underlining ==== or ----
+    const lines = md.split("\n");
+    for (let i = 0; i < lines.length - 1; i++) {
+      const line = lines[i].trim();
+      const nextLine = lines[i + 1].trim();
+      if (line && nextLine) {
+        if (/^={3,}$/.test(nextLine)) {
+          lines[i] = "# " + line;
+          lines[i + 1] = "";
+        } else if (/^-{3,}$/.test(nextLine)) {
+          lines[i] = "## " + line;
+          lines[i + 1] = "";
+        } else if (/^~{3,}$/.test(nextLine)) {
+          lines[i] = "### " + line;
+          lines[i + 1] = "";
+        }
+      }
+    }
+    md = lines.join("\n");
+
+    // 2. Bold, Italic, Monospace
+    md = md.replace(/``(.*?)``/g, "`$1`");
+
+    // 3. Page break
+    md = md.replace(/^\.\.\s+pagebreak::\s*$/gm, "-[*]-");
+
+    // 4. Footnotes
+    let fnIndex = 1;
+    const fnMap = new Map<string, number>();
+    md = md.replace(/^\.\.\s+\[#?([^\]]+)\]\s+(.*)$/gm, (_m, name, body) => {
+      const idx = fnIndex++;
+      fnMap.set(name.trim(), idx);
+      return `[[${idx}==${body}]]`;
+    });
+    md = md.replace(/\[#?([^\]]+)\]_/g, (_m, name) => {
+      const idx = fnMap.get(name.trim()) || fnIndex++;
+      return `[[${idx}]]`;
+    });
+
+  } else if (type === "orgmode") {
+    // Org-mode
+    // 1. Headers: * Header 1, ** Header 2
+    md = md.replace(/^\*\*\*\*\*\s+(.*)$/gm, "##### $1");
+    md = md.replace(/^\*\*\*\*\s+(.*)$/gm, "#### $1");
+    md = md.replace(/^\*\*\*\s+(.*)$/gm, "### $1");
+    md = md.replace(/^\*\*\s+(.*)$/gm, "## $1");
+    md = md.replace(/^\*\s+(.*)$/gm, "# $1");
+
+    // 2. Bold, Italic, Monospace
+    md = md.replace(/(?<!\*)\*(?!\*)([^* \n][^*]*?[^* \n])\*(?!\*)/g, "**$1**");
+    md = md.replace(/(?<!\/)\/(?!\/)([^/ \n][^/]*?[^/ \n])\/(?!\/)/g, "*$1*");
+    md = md.replace(/=([^= \n]+)=/g, "`$1`");
+    md = md.replace(/~([^~ \n]+)~/g, "`$1`");
+
+    // 3. Page break
+    md = md.replace(/^#\+PAGEBREAK\s*$/gm, "-[*]-");
+
+    // 4. Footnotes
+    let fnIndex = 1;
+    const fnMap = new Map<string, number>();
+    md = md.replace(/^\[fn:([^\]]+)\]\s+(.*)$/gm, (_m, name, body) => {
+      const idx = fnIndex++;
+      fnMap.set(name.trim(), idx);
+      return `[[${idx}==${body}]]`;
+    });
+    md = md.replace(/\[fn:([^\]]+)\]/g, (raw, name) => {
+      const idx = fnMap.get(name.trim());
+      if (idx !== undefined) return `[[${idx}]]`;
+      return raw;
+    });
+  }
+
+  return md;
+}
+
+function generateWatermarkPng(text: string, script: NumeralScript): string {
+  const canvas = document.createElement("canvas");
+  canvas.width = 800;
+  canvas.height = 1135;
+  const ctx = canvas.getContext("2d")!;
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  let fontName = "'TimesNR', 'Times New Roman', serif";
+  if (script === "bn") fontName = "'Kalpurush'";
+  else if (script === "ar") fontName = "'Scheherazade New', 'Noto Naskh Arabic'";
+
+  ctx.font = `bold 42px ${fontName}`;
+  ctx.fillStyle = "rgba(180, 180, 180, 0.16)";
+  ctx.textAlign = "center";
+  ctx.textBaseline = "middle";
+
+  ctx.translate(canvas.width / 2, canvas.height / 2);
+  const angleRad = Math.atan2(-canvas.height, canvas.width);
+  ctx.rotate(angleRad);
+
+  ctx.fillText(text, 0, 0);
+
+  return canvas.toDataURL("image/png");
+}
+
+function getDemoContentFor(markup: string): { title: string; author: string; content: string } {
+  if (markup === "asciidoc") {
+    return {
+      title: "AsciiDoc Demo — এ্যাসকিডক ডেমো বই",
+      author: "Book Editor",
+      content:
+        "= পরিচিতি — Introduction — مقدمة\n\n" +
+        "এটি একটি *demo* বই যা এ্যাসকিডক সিনট্যাক্স ব্যবহার করে।\n\n" +
+        "This is a *demo* book written using AsciiDoc syntax.\n\n" +
+        "هذا كتاب *تجريبي* مكتوب بتنسيق أسكيدوك.\n\n" +
+        "<<<\n\n" +
+        "= ১. শিরোনাম — Headings — العناوين\n\n" +
+        "= শিরোনাম ১ (H1)\n" +
+        "== শিরোনাম ২ (H2)\n" +
+        "=== শিরোনাম ৩ (H3)\n\n" +
+        "= Heading 1\n" +
+        "== Heading 2\n" +
+        "=== Heading 3\n\n" +
+        "= عنوان ১ (H1)\n" +
+        "== عنوان ২ (H2)\n" +
+        "=== عنوان ৩ (H3)\n\n" +
+        "<<<\n\n" +
+        "= ২. টেক্সট ফরম্যাটিং — Formatting — التنسيق\n\n" +
+        "*বোল্ড টেক্সট* (Bold), _ইটালিক টেক্সট_ (Italic).\n\n" +
+        "*Bold text*, _italic text_.\n\n" +
+        "*نص عريض*, _نص مائل_.\n\n" +
+        "<<<\n\n" +
+        "= ৩. তালিকা — Lists — القوائم\n\n" +
+        "== বুলেটেড তালিকা\n\n" +
+        "- বাংলা আইটেম\n" +
+        "- English item\n" +
+        "- عنصر عربي\n\n" +
+        "== নম্বরযুক্ত তালিকা\n\n" +
+        "১. বাংলা এক\n" +
+        "২. বাংলা দুই\n\n" +
+        "1. English one\n" +
+        "2. English two\n\n" +
+        "١. عربي واحد\n" +
+        "٢. عربي اثنان\n\n" +
+        "<<<\n\n" +
+        "= ৪. উদ্ধৃতি — Blockquotes — الاقتباسات\n\n" +
+        "[quote]\n" +
+        "এটি একটি বাংলা উদ্ধৃতি।\n\n" +
+        "[quote]\n" +
+        "This is an English blockquote.\n\n" +
+        "[quote]\n" +
+        "هذا اقتباس باللغة العربية.\n\n" +
+        "<<<\n\n" +
+        "= ৫. টীকা — Footnotes — أخرى\n\n" +
+        "এখানে একটি টীকা আছে footnote:[এটি বাংলা টীকা।].\n" +
+        "Here is a footnote footnote:[This is an English footnote.].\n" +
+        "هنا حاشية سفلية footnote:[هذه حاشية باللغة العربية.].\n\n" +
+        "== স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "== স্পেশাল সিম্বল\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "rst") {
+    return {
+      title: "RST Demo — আরএসটি ডেমো বই",
+      author: "Book Editor",
+      content:
+        "পরিচিতি — Introduction — مقدمة\n" +
+        "===============================\n\n" +
+        "এটি একটি **demo** বই যা আরএসটি সিনট্যাক্স ব্যবহার করে।\n\n" +
+        "This is a **demo** book written using reStructuredText syntax.\n\n" +
+        "هذا كتاب **تجريبي** مكتوب بتنسيق ريستركشردتيكست.\n\n" +
+        ".. pagebreak::\n\n" +
+        "১. শিরোনাম — Headings — العناوين\n" +
+        "---------------------------------\n\n" +
+        "শিরোনাম ১\n" +
+        "=========\n" +
+        "শিরোনাম ২\n" +
+        "---------\n" +
+        "শিরোনাম ৩\n" +
+        "~~~~~~~~~\n\n" +
+        "Heading 1\n" +
+        "=========\n" +
+        "Heading 2\n" +
+        "---------\n" +
+        "Heading 3\n" +
+        "~~~~~~~~~\n\n" +
+        "عنوان ১\n" +
+        "=======\n" +
+        "عنوان ২\n" +
+        "-------\n" +
+        "عنوان ৩\n" +
+        "-------\n\n" +
+        ".. pagebreak::\n\n" +
+        "২. ফরম্যাটিং — Formatting — التنسيق\n" +
+        "-----------------------------------\n\n" +
+        "**বোল্ড টেক্সট** (Bold), *ইটালিক টেক্সট* (Italic), ``monospace`` code.\n\n" +
+        "**Bold text**, *italic text*, ``monospace`` code.\n\n" +
+        "**نص عريض**, *نص مائل*, ``monospace`` code.\n\n" +
+        ".. pagebreak::\n\n" +
+        "৩. তালিকা — Lists — القوائم\n" +
+        "---------------------------\n\n" +
+        "বুলেটেড তালিকা\n" +
+        "~~~~~~~~~~~~~~\n\n" +
+        "* বাংলা আইটেম\n" +
+        "* English item\n" +
+        "* عنصر عربي\n\n" +
+        "নম্বরযুক্ত তালিকা\n" +
+        "~~~~~~~~~~~~~~~\n\n" +
+        "#. বাংলা এক\n" +
+        "#. বাংলা দুই\n\n" +
+        "#. English one\n" +
+        "#. English two\n\n" +
+        "#. عربي واحد\n" +
+        "#. عربي اثنان\n\n" +
+        ".. pagebreak::\n\n" +
+        "৪. টীকা — Footnotes — أخرى\n" +
+        "---------------------------\n\n" +
+        "এখানে একটি টীকা আছে [#fn1]_.\n" +
+        "Here is a footnote [#fn2]_.\n" +
+        "هنا حاشية سفلية [#fn3]_.\n\n" +
+        ".. [#fn1] এটি বাংলা টীকা।\n" +
+        ".. [#fn2] This is an English footnote.\n" +
+        ".. [#fn3] هذه حاشية باللغة العربية.\n\n" +
+        "স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n" +
+        "~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "স্পেশাল সিম্বল\n" +
+        "~~~~~~~~~~~~~~\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  if (markup === "orgmode") {
+    return {
+      title: "Org-mode Demo — অর্গ-মোড ডেমো বই",
+      author: "Book Editor",
+      content:
+        "* পরিচিতি — Introduction — مقدمة\n\n" +
+        "এটি একটি /demo/ বই যা অর্গ-মোড সিনট্যাক্স ব্যবহার করে।\n\n" +
+        "This is a /demo/ book written using Org-mode syntax.\n\n" +
+        "هذا كتاب /تجريبي/ مكتوب بتنسيق أورغ مود.\n\n" +
+        "#+PAGEBREAK\n\n" +
+        "* ১. শিরোনাম — Headings — العناوين\n\n" +
+        "* শিরোনাম ১ (H1)\n" +
+        "** শিরোনাম ২ (H2)\n" +
+        "*** শিরোনাম ৩ (H3)\n\n" +
+        "* Heading 1\n" +
+        "** Heading 2\n" +
+        "*** Heading 3\n\n" +
+        "* عنوان ১ (H1)\n" +
+        "** عنوان ২ (H2)\n" +
+        "*** عنوان ৩ (H3)\n\n" +
+        "#+PAGEBREAK\n\n" +
+        "* ২. টেক্সট ফরম্যাটিং — Formatting — التنسيق\n\n" +
+        "*বোল্ড টেক্সট* (Bold), /ইটালিক টেক্সট/ (Italic), =monospace= code.\n\n" +
+        "*Bold text*, /italic text/, =monospace= code.\n\n" +
+        "*نص عريض*, /نص مائل/, =monospace= code.\n\n" +
+        "#+PAGEBREAK\n\n" +
+        "* ৩. তালিকা — Lists — القোائم\n\n" +
+        "** বুলেটেড তালিকা\n\n" +
+        "- বাংলা আইটেম\n" +
+        "- English item\n" +
+        "- عنصر عربي\n\n" +
+        "** নম্বরযুক্ত তালিকা\n\n" +
+        "১. বাংলা এক\n" +
+        "২. বাংলা দুই\n\n" +
+        "1. English one\n" +
+        "2. English two\n\n" +
+        "١. عربي واحد\n" +
+        "٢. عربي اثنان\n\n" +
+        "#+PAGEBREAK\n\n" +
+        "* ৪. উদ্ধৃতি — Blockquotes — الاقتباسات\n\n" +
+        "#+begin_quote\n" +
+        "এটি একটি বাংলা উদ্ধৃতি।\n" +
+        "#+end_quote\n\n" +
+        "#+begin_quote\n" +
+        "This is an English blockquote.\n" +
+        "#+end_quote\n\n" +
+        "#+begin_quote\n" +
+        "هذا اقتباس باللغة العربية.\n" +
+        "#+end_quote\n\n" +
+        "#+PAGEBREAK\n\n" +
+        "* ৫. টীকা — Footnotes — أخرى\n\n" +
+        "এখানে একটি টীকা আছে [fn:1].\n" +
+        "Here is a footnote [fn:2].\n" +
+        "هنا حاشية سفلية [fn:3].\n\n" +
+        "[fn:1] এটি বাংলা টীকা।\n" +
+        "[fn:2] This is an English footnote.\n" +
+        "[fn:3] هذه حاشية باللغة العربية.\n\n" +
+        "** স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
+        "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
+        "** স্পেশাল সিম্বল\n\n" +
+        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+    };
+  }
+
+  // default markdown templates
+  return {
+    title: "Demo Book — ডেমো বই",
+    author: "Book Editor",
+    content: DEFAULT_BOOK_CONTENT,
+  };
+}
+
 function renderForPdfBody(md: string, script: NumeralScript): { html: string; defs: Map<string, string> } {
   const { md: stripped, defs } = extractFootnoteDefs(md);
   const validIds = new Set(defs.keys());
@@ -284,6 +624,8 @@ const cacheKeyFor = (id: number) => `book-draft-v1:${id}`;
 const lockKeyFor = (id: number) => `book-lock-v1:${id}`;
 const unlockSessionKey = (id: number) => `book-unlocked:${id}`;
 
+type FnRefPos = { id: string; x: number; y: number; w: number; h: number };
+
 type BookMeta = {
   id: number;
   title: string;
@@ -291,6 +633,7 @@ type BookMeta = {
   content: string;
   coverImage?: string;
   lastEdited?: number;
+  markupType?: string;
 };
 
 const DEFAULT_BOOK_CONTENT =
@@ -676,11 +1019,190 @@ async function cropToA5DataUrl(file: File): Promise<string> {
   return canvas.toDataURL("image/jpeg", 0.85);
 }
 
+const SettingsPopup: React.FC<{
+  open: boolean;
+  onClose: () => void;
+}> = ({ open, onClose }) => {
+  const [watermark, setWatermark] = useState(() => localStorage.getItem("book-settings-watermark") || "");
+  const [credit, setCredit] = useState(() => localStorage.getItem("book-settings-credit") || "Compiled by Abdullah Bari Asif.");
+  const [asciidoc, setAsciidoc] = useState(() => localStorage.getItem("book-settings-asciidoc-enabled") === "true");
+  const [rst, setRst] = useState(() => localStorage.getItem("book-settings-rst-enabled") === "true");
+  const [orgmode, setOrgmode] = useState(() => localStorage.getItem("book-settings-orgmode-enabled") === "true");
+
+  useEffect(() => {
+    if (open) {
+      setWatermark(localStorage.getItem("book-settings-watermark") || "");
+      setCredit(localStorage.getItem("book-settings-credit") || "Compiled by Abdullah Bari Asif.");
+      setAsciidoc(localStorage.getItem("book-settings-asciidoc-enabled") === "true");
+      setRst(localStorage.getItem("book-settings-rst-enabled") === "true");
+      setOrgmode(localStorage.getItem("book-settings-orgmode-enabled") === "true");
+    }
+  }, [open]);
+
+  if (!open) return null;
+
+  const handleSave = () => {
+    localStorage.setItem("book-settings-watermark", watermark);
+    localStorage.setItem("book-settings-credit", credit);
+    localStorage.setItem("book-settings-asciidoc-enabled", asciidoc ? "true" : "false");
+    localStorage.setItem("book-settings-rst-enabled", rst ? "true" : "false");
+    localStorage.setItem("book-settings-orgmode-enabled", orgmode ? "true" : "false");
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-lg p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95 overflow-y-auto max-h-[90vh]">
+        <div className="mb-6 flex justify-between items-center border-b border-slate-100 pb-3">
+          <h3 className="text-xl font-normal text-slate-900 leading-tight">বই সেটিংস (Settings)</h3>
+          <button onClick={onClose} className="p-1 rounded-full hover:bg-slate-100 text-slate-400 hover:text-slate-600 transition-colors">
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="space-y-6 mb-8">
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Watermark Text (জলছাপ)</label>
+            <input
+              type="text"
+              value={watermark}
+              onChange={(e) => setWatermark(e.target.value)}
+              placeholder="যেমন: My Copyright Watermark"
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
+            />
+            <p className="text-xs text-slate-400">
+              এটি বইয়ের সাধারণ পাতাগুলোতে কোনাকুনিভাবে জলছাপ হিসেবে বসবে (কভার ও সূচিপত্র ছাড়া)।
+            </p>
+          </div>
+
+          <div className="space-y-2">
+            <label className="block text-sm font-medium text-slate-700">Cover Page Credit (কৃতিত্ব)</label>
+            <input
+              type="text"
+              value={credit}
+              onChange={(e) => setCredit(e.target.value)}
+              placeholder="Compiled by Abdullah Bari Asif."
+              className="w-full border border-slate-200 bg-slate-50 rounded-xl px-4 py-2.5 text-base focus:outline-none focus:border-slate-800 focus:bg-white transition-colors font-normal text-slate-900"
+            />
+            <p className="text-xs text-slate-400">
+              কভার পেজের নিচে কৃতিত্ব সূচক লেখাটি পরিবর্তন করার জন্য।
+            </p>
+          </div>
+
+          <div className="space-y-3">
+            <label className="block text-sm font-medium text-slate-700 border-b border-slate-100 pb-1">
+              Markup Alternatives (বিকল্প মার্কআপ ফরম্যাট)
+            </label>
+            <p className="text-xs text-slate-400 mb-2">
+              চালু করা হলে, নতুন বই তৈরির সময় এগুলোর ডেমো তৈরি হবে এবং ফরম্যাট নির্বাচন করার অপশন আসবে।
+            </p>
+
+            <div className="space-y-2.5">
+              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={asciidoc}
+                  onChange={(e) => setAsciidoc(e.target.checked)}
+                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
+                />
+                <span className="font-normal text-slate-800">AsciiDoc (using =, ==, *, _ and footnote:[])</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={rst}
+                  onChange={(e) => setRst(e.target.checked)}
+                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
+                />
+                <span className="font-normal text-slate-800">reStructuredText (using underline headers and [#]_)</span>
+              </label>
+
+              <label className="flex items-center gap-3 cursor-pointer p-1 rounded hover:bg-slate-50">
+                <input
+                  type="checkbox"
+                  checked={orgmode}
+                  onChange={(e) => setOrgmode(e.target.checked)}
+                  className="rounded border-slate-300 text-slate-900 focus:ring-slate-900 h-4.5 w-4.5 cursor-pointer"
+                />
+                <span className="font-normal text-slate-800">Org-mode (using *, **, / and [fn:])</span>
+              </label>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
+          <button
+            onClick={onClose}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100 transition-colors"
+          >
+            বাতিল
+          </button>
+          <button
+            onClick={handleSave}
+            className="px-5 py-2.5 rounded-xl text-sm font-medium bg-slate-900 text-white hover:bg-slate-800 transition-colors"
+          >
+            সংরক্ষণ করুন (Save)
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const CreateBookSelectModal: React.FC<{
+  open: boolean;
+  enabledMarkups: string[];
+  onSelect: (markup: string) => void;
+  onCancel: () => void;
+}> = ({ open, enabledMarkups, onSelect, onCancel }) => {
+  if (!open) return null;
+  const labels: Record<string, string> = {
+    markdown: "Standard Markdown",
+    asciidoc: "AsciiDoc",
+    rst: "reStructuredText (RST)",
+    orgmode: "Org-mode",
+  };
+  return (
+    <div className="fixed inset-0 z-[100] bg-slate-900/50 backdrop-blur-sm flex items-center justify-center px-4 font-mixed">
+      <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md p-7 border border-slate-100 animate-in fade-in-0 zoom-in-95">
+        <div className="mb-5">
+          <h3 className="text-lg font-normal text-slate-900 leading-tight">নতুন বইয়ের ফরম্যাট নির্বাচন করুন</h3>
+          <p className="mt-1 text-sm text-slate-600 leading-relaxed font-normal">
+            আপনি একাধিক ফরম্যাট চালু রেখেছেন। নিচের যেকোনো একটি ফরম্যাট সিলেক্ট করে নতুন বই তৈরি করুন:
+          </p>
+        </div>
+        <div className="flex flex-col gap-2 mb-5">
+          {enabledMarkups.map((m) => (
+            <button
+              key={m}
+              onClick={() => onSelect(m)}
+              className="w-full text-left px-4 py-3 rounded-xl border border-slate-200 hover:border-slate-800 hover:bg-slate-50 transition-all font-normal text-slate-800 text-base"
+            >
+              {labels[m] || m}
+            </button>
+          ))}
+        </div>
+        <div className="flex justify-end">
+          <button
+            onClick={onCancel}
+            className="px-4 py-2 rounded-xl text-sm font-medium text-slate-600 hover:bg-slate-100"
+          >
+            বাতিল
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const BookLanding = () => {
   const [books, setBooks] = useState<BookMeta[]>([]);
   const [locks, setLocks] = useState<Record<number, string | null>>({});
   const [query, setQuery] = useState("");
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [showCreateModal, setShowCreateModal] = useState(false);
 
   const [pwdModal, setPwdModal] = useState<
     | { kind: "open"; id: number; hash: string }
@@ -728,11 +1250,35 @@ const BookLanding = () => {
     return () => window.removeEventListener("click", onDown);
   }, [expandedId]);
 
-  const createBook = () => {
+  const enabledMarkups = useMemo(() => {
+    const list = ["markdown"];
+    if (localStorage.getItem("book-settings-asciidoc-enabled") === "true") list.push("asciidoc");
+    if (localStorage.getItem("book-settings-rst-enabled") === "true") list.push("rst");
+    if (localStorage.getItem("book-settings-orgmode-enabled") === "true") list.push("orgmode");
+    return list;
+  }, [showSettings]);
+
+  const handleCreateBook = (markup: string) => {
+    setShowCreateModal(false);
     const ids = loadBookList();
     const next = ids.length ? Math.max(...ids) + 1 : 1;
+    const demo = getDemoContentFor(markup);
+    writeBookMeta(next, {
+      title: demo.title,
+      author: demo.author,
+      content: demo.content,
+      markupType: markup,
+    });
     saveBookList([...ids, next]);
     window.location.hash = `#${next}`;
+  };
+
+  const createBook = () => {
+    if (enabledMarkups.length > 1) {
+      setShowCreateModal(true);
+    } else {
+      handleCreateBook("markdown");
+    }
   };
 
   const openBook = (id: number) => {
@@ -865,6 +1411,13 @@ const BookLanding = () => {
               dir="auto"
             />
           </div>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="p-2.5 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-700 transition-colors shrink-0"
+            title="Settings"
+          >
+            <Settings size={20} />
+          </button>
         </div>
       </div>
 
@@ -1065,6 +1618,18 @@ const BookLanding = () => {
         }}
         onCancel={() => setConfirmDelete(null)}
       />
+
+      <SettingsPopup
+        open={showSettings}
+        onClose={() => setShowSettings(false)}
+      />
+
+      <CreateBookSelectModal
+        open={showCreateModal}
+        enabledMarkups={enabledMarkups}
+        onSelect={handleCreateBook}
+        onCancel={() => setShowCreateModal(false)}
+      />
     </div>
   );
 };
@@ -1103,6 +1668,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   const [showMoreTools, setShowMoreTools] = useState(false);
   const [showLockModal, setShowLockModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [markupType, setMarkupType] = useState("markdown");
   const coverInputRef = useRef<HTMLInputElement | null>(null);
 
   const contentRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1217,6 +1783,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         if (typeof p.content === "string") setContent(p.content);
         if (typeof p.pdfPassword === "string") setPdfPassword(p.pdfPassword);
         if (typeof p.coverImage === "string") setCoverImage(p.coverImage);
+        if (typeof p.markupType === "string") setMarkupType(p.markupType);
       }
     } catch {}
     setHydrated(true);
@@ -1227,10 +1794,10 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
     try {
       localStorage.setItem(
         CACHE_KEY,
-        JSON.stringify({ title, author, content, pdfPassword, coverImage })
+        JSON.stringify({ title, author, content, pdfPassword, coverImage, markupType })
       );
     } catch {}
-  }, [title, author, content, pdfPassword, coverImage, hydrated]);
+  }, [title, author, content, pdfPassword, coverImage, markupType, hydrated]);
 
   const goBack = () => {
     const empty = !title.trim() && !author.trim() && !content.trim() && !coverImage;
@@ -1258,8 +1825,11 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
   };
 
   const previewHtml = useMemo(
-    () => renderForPreview(content, detectScript(title || content)),
-    [content, title]
+    () => {
+      const converted = convertToMarkdown(content, markupType);
+      return renderForPreview(converted, detectScript(title || converted));
+    },
+    [content, title, markupType]
   );
 
   const handleDownloadPDF = async () => {
@@ -1271,7 +1841,13 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       const safeTitle = (title || "Untitled").trim();
       const safeAuthor = author.trim();
       const numeralScript = detectScript(safeTitle || content);
-      const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(content, numeralScript);
+
+      const converted = convertToMarkdown(content, markupType);
+      const { html: bodyHtml, defs: footnoteDefs } = renderForPdfBody(converted, numeralScript);
+
+      const watermarkText = localStorage.getItem("book-settings-watermark") || "";
+      const creditText = localStorage.getItem("book-settings-credit") || "Compiled by Abdullah Bari Asif.";
+      const watermarkPng = watermarkText ? generateWatermarkPng(watermarkText, numeralScript) : "";
 
       const PAGE_W = 148;
       const PAGE_H = 210;
@@ -1468,7 +2044,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
               : ""
           }
           <div style="position: absolute; left: 0; right: 0; bottom: 6mm; text-align: center;
-            font-size: 9pt; color: #475569;">Compiled by Abdullah Bari Asif.</div>
+            font-size: 9pt; color: #475569;">${escapeHtml(creditText)}</div>
         </div>
       `;
 
@@ -1522,6 +2098,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         dataUrl: string; heightMM: number;
         elWidthPx: number; elHeightPx: number;
         links: LinkRect[]; canvas: HTMLCanvasElement;
+        fnRefs: FnRefPos[];
       };
 
       const captureElement = async (el: HTMLElement, opts: { pad?: boolean } = {}): Promise<CaptureResult> => {
@@ -1549,6 +2126,15 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             links.push({ x: r.left - baseRect.left, y: r.top - baseRect.top, w: r.width, h: r.height, href });
           }
         });
+        const fnRefs: FnRefPos[] = [];
+        el.querySelectorAll(".fn-ref").forEach((r) => {
+          const id = r.getAttribute("data-fn-id");
+          if (!id) return;
+          const rects = (r as HTMLElement).getClientRects();
+          for (const rect of Array.from(rects)) {
+            fnRefs.push({ id, x: rect.left - baseRect.left, y: rect.top - baseRect.top, w: rect.width, h: rect.height });
+          }
+        });
         const canvas = await html2canvas(el, {
           scale: renderScale, useCORS: true, backgroundColor: "#ffffff",
           logging: false, windowWidth: widthPx,
@@ -1563,7 +2149,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         const heightMM = elHeightPx * mmPerPx;
         return {
           dataUrl: canvas.toDataURL("image/jpeg", JPEG_Q),
-          heightMM, elWidthPx, elHeightPx, links, canvas,
+          heightMM, elWidthPx, elHeightPx, links, canvas, fnRefs,
         };
       };
 
@@ -1655,6 +2241,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         pdf.addImage(tile.dataUrl, "PNG", x, y, tile.wMM, tile.hMM);
       };
 
+      const addBodyPage = async () => {
+        pdf.addPage();
+        await stampPageNumber();
+        if (watermarkText) {
+          pdf.addImage(watermarkPng, "PNG", 0, 0, PAGE_W, PAGE_H);
+        }
+      };
+
       type FnTile = { id: string; cap: CaptureResult };
       const fnTiles = new Map<string, FnTile>();
       const allRefIds: string[] = (() => {
@@ -1695,7 +2289,9 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         if (pageFnIds.length === 0) return 0;
         let h = DIV_GAP_TOP + DIV_GAP_BOT;
         pageFnIds.forEach((id, i) => {
-          h += fnTiles.get(id)!.cap.heightMM;
+          if (fnTiles.has(id)) {
+            h += fnTiles.get(id)!.cap.heightMM;
+          }
           if (i < pageFnIds.length - 1) h += FN_ITEM_GAP;
         });
         return h;
@@ -1710,10 +2306,12 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         pdf.line(MARGIN, dividerY, MARGIN + CONTENT_W * 0.45, dividerY);
         let y = dividerY + DIV_GAP_BOT;
         for (const id of pageFnIds) {
-          const t = fnTiles.get(id)!.cap;
-          pdf.addImage(t.dataUrl, "JPEG", MARGIN, y, CONTENT_W, t.heightMM);
-          addLinkAnnotations(t, MARGIN, y, CONTENT_W, t.heightMM);
-          y += t.heightMM + FN_ITEM_GAP;
+          if (fnTiles.has(id)) {
+            const t = fnTiles.get(id)!.cap;
+            pdf.addImage(t.dataUrl, "JPEG", MARGIN, y, CONTENT_W, t.heightMM);
+            addLinkAnnotations(t, MARGIN, y, CONTENT_W, t.heightMM);
+            y += t.heightMM + FN_ITEM_GAP;
+          }
         }
         pageFnIds = [];
       };
@@ -1732,25 +2330,23 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       const coverPages = 1 + (firstPageUsed ? 1 : 0);
 
       if (bodyChildren.length > 0) {
-        pdf.addPage();
-        await stampPageNumber();
+        await addBodyPage();
         let currentY = MARGIN;
         setProgressLabel("পৃষ্ঠা রেন্ডার...");
         for (let ci = 0; ci < bodyChildren.length; ci++) {
           const child = bodyChildren[ci];
           setProgress(0.1 + 0.8 * (ci / Math.max(1, bodyChildren.length)));
-          const isEmpty = !child.textContent?.trim() && child.querySelectorAll("img").length === 0;
+          const tag = (child.tagName || "").toUpperCase();
+          const isPageBreak = tag === "HR" && child.classList.contains("page-break-marker");
+          const isEmpty = !child.textContent?.trim() && child.querySelectorAll("img").length === 0 && !isPageBreak;
           if (isEmpty) { currentY += 4; continue; }
 
           const section = await captureElement(child);
           const mmPerPx = CONTENT_W / section.elWidthPx;
 
-          const tag = (child.tagName || "").toUpperCase();
-
-          if (tag === "HR" && child.classList.contains("page-break-marker")) {
+          if (isPageBreak) {
             flushFootnotes();
-            pdf.addPage();
-            await stampPageNumber();
+            await addBodyPage();
             currentY = MARGIN;
             continue;
           }
@@ -1770,8 +2366,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             }
             if (breakBefore) {
               flushFootnotes();
-              pdf.addPage();
-              await stampPageNumber();
+              await addBodyPage();
               currentY = MARGIN;
             }
           }
@@ -1781,13 +2376,18 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             if (ids.length === 0) return 0;
             let h = DIV_GAP_TOP + DIV_GAP_BOT;
             ids.forEach((id, i) => {
-              h += fnTiles.get(id)!.cap.heightMM;
+              if (fnTiles.has(id)) {
+                h += fnTiles.get(id)!.cap.heightMM;
+              }
               if (i < ids.length - 1) h += FN_ITEM_GAP;
             });
             return h;
           };
 
-          const tentativeIdsWhole = [...pageFnIds, ...childIds.filter((id) => !pageFnIds.includes(id))];
+          const tentativeIdsWhole = [...pageFnIds];
+          for (const id of childIds) {
+            if (!tentativeIdsWhole.includes(id)) tentativeIdsWhole.push(id);
+          }
           const wholeAvail = PAGE_H - MARGIN - reservedFor(tentativeIdsWhole) - currentY;
 
           if (section.heightMM <= wholeAvail) {
@@ -1797,17 +2397,14 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             pdf.addImage(section.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, section.heightMM);
             addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
             currentY += section.heightMM + SECTION_GAP;
-            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            pageFnIds = tentativeIdsWhole;
             continue;
           }
 
           const freshAvail = CONTENT_H - reservedFor(childIds);
-          const isSliceable = tag === "P" || tag === "UL" || tag === "OL" || tag === "BLOCKQUOTE";
-
-          if (section.heightMM <= freshAvail && currentY > MARGIN && !isSliceable) {
+          if (section.heightMM <= freshAvail && currentY > MARGIN) {
             flushFootnotes();
-            pdf.addPage();
-            await stampPageNumber();
+            await addBodyPage();
             currentY = MARGIN;
             if (tag === "H1" || tag === "H2" || tag === "H3") {
               chapters.push({ level: parseInt(tag.substring(1), 10), text: cleanChapterText(child), page: bodyPageNum });
@@ -1815,7 +2412,7 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             pdf.addImage(section.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, section.heightMM);
             addLinkAnnotations(section, MARGIN, currentY, CONTENT_W, section.heightMM);
             currentY += section.heightMM + SECTION_GAP;
-            for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
+            pageFnIds = childIds;
             continue;
           }
 
@@ -1824,36 +2421,105 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
           }
           let remainingPx = section.elHeightPx;
           let srcYpx = 0;
-          for (const id of childIds) if (!pageFnIds.includes(id)) pageFnIds.push(id);
 
           while (remainingPx > 0) {
-            const availMM = PAGE_H - MARGIN - reservedFor(pageFnIds) - currentY;
-            const availPx = availMM / mmPerPx;
-            if (availPx < 30 / mmPerPx) {
+            const activeRefs = section.fnRefs
+              .filter((ref) => {
+                const midY = ref.y + ref.h / 2;
+                return midY >= srcYpx && midY < section.elHeightPx;
+              })
+              .sort((a, b) => a.y - b.y);
+
+            let bestTakePx = 0;
+            let bestFnIds: string[] = [];
+
+            const optWholeTakePx = remainingPx;
+            const optWholeFnIds = [...pageFnIds];
+            activeRefs.forEach((ref) => {
+              if (!optWholeFnIds.includes(ref.id)) optWholeFnIds.push(ref.id);
+            });
+            const optWholeNeededFnHeight = reservedFor(optWholeFnIds);
+            const optWholeMaxTextHeight = CONTENT_H - optWholeNeededFnHeight - (currentY - MARGIN);
+            if (optWholeTakePx * mmPerPx <= optWholeMaxTextHeight) {
+              bestTakePx = optWholeTakePx;
+              bestFnIds = optWholeFnIds;
+            } else {
+              let found = false;
+              for (let i = activeRefs.length - 1; i >= 0; i--) {
+                const ref = activeRefs[i];
+                const cutPx = ref.y - srcYpx;
+                if (cutPx <= 0) continue;
+
+                const includedFnIds = [...pageFnIds];
+                activeRefs.forEach((r) => {
+                  if (r.y + r.h / 2 < srcYpx + cutPx) {
+                    if (!includedFnIds.includes(r.id)) includedFnIds.push(r.id);
+                  }
+                });
+                const neededFnHeight = reservedFor(includedFnIds);
+                const maxTextHeight = CONTENT_H - neededFnHeight - (currentY - MARGIN);
+                if (cutPx * mmPerPx <= maxTextHeight) {
+                  bestTakePx = cutPx;
+                  bestFnIds = includedFnIds;
+                  found = true;
+                  break;
+                }
+              }
+
+              if (!found) {
+                const optNoneFnIds = [...pageFnIds];
+                const neededFnHeight = reservedFor(optNoneFnIds);
+                const maxTextHeight = CONTENT_H - neededFnHeight - (currentY - MARGIN);
+                bestTakePx = Math.max(0, maxTextHeight / mmPerPx);
+                bestFnIds = optNoneFnIds;
+              }
+            }
+
+            bestTakePx = Math.min(bestTakePx, remainingPx);
+
+            const sliceMM = bestTakePx * mmPerPx;
+            const remMM = remainingPx * mmPerPx;
+            const minAllowedSliceMM = 20;
+
+            if (currentY > MARGIN && sliceMM < minAllowedSliceMM && remMM >= minAllowedSliceMM) {
               flushFootnotes();
-              pdf.addPage();
-              await stampPageNumber();
+              await addBodyPage();
               currentY = MARGIN;
               continue;
             }
-            const takePx = Math.min(remainingPx, availPx);
-            const slice = sliceSection(section, srcYpx, takePx);
+
+            let finalTakePx = bestTakePx;
+            if (currentY === MARGIN && finalTakePx <= 0) {
+              finalTakePx = Math.min(remainingPx, 10 / mmPerPx);
+            }
+
+            pageFnIds = bestFnIds;
+
+            const slice = sliceSection(section, srcYpx, finalTakePx);
             pdf.addImage(slice.dataUrl, "JPEG", MARGIN, currentY, CONTENT_W, slice.heightMM);
+
             const sliceTopPx = srcYpx;
-            const sliceBotPx = srcYpx + takePx;
+            const sliceBotPx = srcYpx + finalTakePx;
             for (const lk of section.links) {
               if (lk.y >= sliceTopPx && lk.y + lk.h <= sliceBotPx) {
                 const localY = lk.y - sliceTopPx;
-                pdf.link(MARGIN + lk.x * mmPerPx, currentY + localY * mmPerPx, lk.w * mmPerPx, lk.h * mmPerPx, { url: lk.href });
+                pdf.link(
+                  MARGIN + lk.x * mmPerPx,
+                  currentY + localY * mmPerPx,
+                  lk.w * mmPerPx,
+                  lk.h * mmPerPx,
+                  { url: lk.href }
+                );
               }
             }
+
             currentY += slice.heightMM;
-            srcYpx += takePx;
-            remainingPx -= takePx;
+            srcYpx += finalTakePx;
+            remainingPx -= finalTakePx;
+
             if (remainingPx > 0) {
               flushFootnotes();
-              pdf.addPage();
-              await stampPageNumber();
+              await addBodyPage();
               currentY = MARGIN;
             } else {
               currentY += SECTION_GAP;
@@ -2006,8 +2672,8 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
       <div
         className="fixed z-40 pointer-events-none
-                   bottom-3 left-3 right-3 flex flex-col items-center gap-3
-                   md:bottom-6 md:left-6 md:right-6 md:flex-row md:justify-center"
+                   bottom-3 left-3 right-3 flex justify-center
+                   md:bottom-6 md:left-6 md:right-6"
       >
         <input
           ref={coverInputRef}
@@ -2030,59 +2696,55 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             </div>
           </div>
         ) : (
-          <div className="flex flex-wrap md:flex-nowrap items-center justify-center gap-3 w-full max-w-4xl">
-            <div className="pointer-events-auto flex items-center gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1.5">
-              <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={18} /></SquareBtn>
-              <SquareBtn
-                onClick={() => isLocked ? toggleBookLock("") : setShowLockModal(true)}
-                title={isLocked ? "Unlock Book" : "Lock Book"}
-                className={isLocked ? "text-rose-600" : ""}
-              >
-                {isLocked ? <Unlock size={18} /> : <Lock size={18} />}
-              </SquareBtn>
-              <SquareBtn
-                onClick={() => coverImage ? setCoverImage(undefined) : coverInputRef.current?.click()}
-                title={coverImage ? "Remove Cover" : "Add Cover"}
-                className={coverImage ? "text-rose-600" : ""}
-              >
-                <ImageIcon size={18} />
-              </SquareBtn>
-              <SquareBtn onClick={() => setShowDeleteConfirm(true)} title="Delete Book" className="text-rose-600"><Trash2 size={18} /></SquareBtn>
-              <SquareBtn
-                onClick={() => setPdfPwdModal(true)}
-                title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
-                className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
-              >
-                <FileLock2 size={18} />
-              </SquareBtn>
-              <SquareBtn
-                onClick={() => setIncludeIndex(!includeIndex)}
-                title="Toggle Index"
-                className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
-              >
-                <List size={18} />
-              </SquareBtn>
-              <SquareBtn
-                onClick={replaceSallallahu}
-                title="Auto replace ﷺ"
-                className="text-lg font-bold"
-              >
-                ﷺ
-              </SquareBtn>
-            </div>
-
-            <div className="pointer-events-auto flex items-center gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1.5">
-              <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
-                {preview ? <Pencil size={18} /> : <Eye size={18} />}
-              </SquareBtn>
-              <SquareBtn
-                onClick={handleDownloadPDF}
-                title="Download PDF"
-                className="bg-slate-900 text-white hover:bg-slate-800"
-              >
-                <Download size={18} />
-              </SquareBtn>
-            </div>
+          <div className="pointer-events-auto flex items-center gap-0.5 sm:gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1 sm:p-1.5 max-w-full">
+            <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={16} className="sm:w-[18px] sm:h-[18px]" /></SquareBtn>
+            <SquareBtn
+              onClick={() => isLocked ? toggleBookLock("") : setShowLockModal(true)}
+              title={isLocked ? "Unlock Book" : "Lock Book"}
+              className={isLocked ? "text-rose-600" : ""}
+            >
+              {isLocked ? <Unlock size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Lock size={16} className="sm:w-[18px] sm:h-[18px]" />}
+            </SquareBtn>
+            <SquareBtn
+              onClick={() => coverImage ? setCoverImage(undefined) : coverInputRef.current?.click()}
+              title={coverImage ? "Remove Cover" : "Add Cover"}
+              className={coverImage ? "text-rose-600" : ""}
+            >
+              <ImageIcon size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </SquareBtn>
+            <SquareBtn onClick={() => setShowDeleteConfirm(true)} title="Delete Book" className="text-rose-600"><Trash2 size={16} className="sm:w-[18px] sm:h-[18px]" /></SquareBtn>
+            <SquareBtn
+              onClick={() => setPdfPwdModal(true)}
+              title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
+              className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
+            >
+              <FileLock2 size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </SquareBtn>
+            <SquareBtn
+              onClick={() => setIncludeIndex(!includeIndex)}
+              title="Toggle Index"
+              className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+            >
+              <List size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </SquareBtn>
+            <SquareBtn
+              onClick={replaceSallallahu}
+              title="Auto replace ﷺ"
+              className="text-base sm:text-lg font-bold"
+            >
+              ﷺ
+            </SquareBtn>
+            <div className="w-[1px] h-6 bg-slate-200 mx-0.5 sm:mx-1 shrink-0" />
+            <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
+              {preview ? <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Eye size={16} className="sm:w-[18px] sm:h-[18px]" />}
+            </SquareBtn>
+            <SquareBtn
+              onClick={handleDownloadPDF}
+              title="Download PDF"
+              className="bg-slate-900 text-white hover:bg-slate-800"
+            >
+              <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
+            </SquareBtn>
           </div>
         )}
       </div>
@@ -2131,7 +2793,7 @@ const SquareBtn: React.FC<
 > = ({ className = "", children, ...rest }) => (
   <button
     {...rest}
-    className={`shrink-0 flex items-center justify-center w-10 h-10 sm:w-11 sm:h-11 rounded-lg text-slate-800 hover:bg-slate-100 transition-colors ${className}`}
+    className={`shrink-0 flex items-center justify-center w-8 h-8 sm:w-11 sm:h-11 rounded-lg text-slate-800 hover:bg-slate-100 transition-colors ${className}`}
   >
     {children}
   </button>
