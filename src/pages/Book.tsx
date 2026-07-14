@@ -103,6 +103,44 @@ function isArabicOnly(text: string): boolean {
   }
   return true;
 }
+
+function findBlankRow(canvas: HTMLCanvasElement, startY: number, maxSearch: number): number {
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return startY;
+
+  const yStart = Math.max(0, startY - maxSearch);
+  const height = startY - yStart;
+  if (height <= 0) return startY;
+
+  try {
+    const imgData = ctx.getImageData(0, yStart, canvas.width, height);
+    const data = imgData.data;
+    const w = canvas.width;
+
+    for (let dy = height - 1; dy >= 0; dy--) {
+      let isBlank = true;
+      const rowOffset = dy * w * 4;
+      for (let x = 0; x < w; x++) {
+        const idx = rowOffset + x * 4;
+        const r = data[idx];
+        const g = data[idx + 1];
+        const b = data[idx + 2];
+        const a = data[idx + 3];
+        if (a > 10 && (r < 254 || g < 254 || b < 254)) {
+          isBlank = false;
+          break;
+        }
+      }
+      if (isBlank) {
+        return yStart + dy;
+      }
+    }
+  } catch (e) {
+    console.warn("findBlankRow error", e);
+  }
+  return startY;
+}
+
 function applyArabicAlignment(html: string): string {
   if (typeof DOMParser === "undefined") return html;
   const doc = new DOMParser().parseFromString(`<div id="__root">${html}</div>`, "text/html");
@@ -122,6 +160,30 @@ function applyArabicAlignment(html: string): string {
       (el as HTMLElement).style.textAlign = "center";
     }
   });
+
+  // Center "۞" separator in H6 (######) Arabic lines
+  root.querySelectorAll("h6").forEach((el) => {
+    const inner = el.innerHTML || "";
+    if (inner.includes("۞")) {
+      const parts = inner.split("۞");
+      if (parts.length === 2) {
+        el.setAttribute("dir", "rtl");
+        const hEl = el as HTMLElement;
+        hEl.style.display = "flex";
+        hEl.style.alignItems = "center";
+        hEl.style.justifyContent = "center";
+        hEl.style.width = "100%";
+        hEl.style.gap = "0.25em";
+
+        el.innerHTML = `
+          <span class="part-right" style="flex: 1; text-align: left; padding-left: 0.5em; white-space: normal; overflow-wrap: break-word;">${parts[0].trim()}</span>
+          <span class="ayat-separator" style="flex: 0 0 auto; font-family: inherit; font-size: inherit; display: inline-flex; align-items: center; justify-content: center; padding: 0 0.25em;">۞</span>
+          <span class="part-left" style="flex: 1; text-align: right; padding-right: 0.5em; white-space: normal; overflow-wrap: break-word;">${parts[1].trim()}</span>
+        `.trim();
+      }
+    }
+  });
+
   return root.innerHTML;
 }
 
@@ -528,7 +590,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "== স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "== স্পেশাল সিম্বল\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -599,7 +661,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "স্পেশাল সিম্বল\n" +
         "~~~~~~~~~~~~~~\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -663,7 +725,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "** স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "** স্পেশাল সিম্বল\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -718,7 +780,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "== স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers) ==\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "== স্পেশাল সিম্বল ==\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -776,7 +838,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "h2. স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
         "h2. স্পেশাল সিম্বল\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -806,7 +868,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "এখানে একটি টীকা আছে [[১]]।\n" +
         "[[১==এটি বাংলা টীকা।]]\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -829,7 +891,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         `- এখানে একটি টীকা আছে [[১]]।\n` +
         `- [[১==এটি আউটলাইনার বাংলা টীকা।]]\n` +
         `- ১২৩৪৫, 12345, ١٢٣٤٥\n` +
-        `- সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n`,
+        `- সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n`,
     };
   }
 
@@ -870,7 +932,7 @@ function getDemoContentFor(markup: string): { title: string; author: string; con
         "এখানে একটি টীকা আছে [[১]]।\n" +
         "[[১==এটি বাংলা টীকা।]]\n\n" +
         "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
-        "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n",
+        "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n",
     };
   }
 
@@ -979,7 +1041,7 @@ const DEFAULT_BOOK_CONTENT =
   "## স্বয়ংক্রিয় লাল সংখ্যা (Auto-red Numbers)\n\n" +
   "১২৩৪৫, 12345, ١٢٣٤٥\n\n" +
   "## স্পেশাল সিম্বল\n\n" +
-  "সাল্লাললাহু আলাইহি ওয়াসাল্লাম -> ﷺ\n";
+  "সাল্লালাহু আলাইহি ওয়াসাল্লাম -> ﷾\n";
 
 function loadBookList(): number[] {
   try {
@@ -1422,59 +1484,6 @@ const SettingsPopup: React.FC<{
             </div>
           </div>
 
-          <div className="space-y-4">
-            <label className="block text-sm font-semibold text-slate-800 border-b border-slate-100 pb-1">
-              Markup Alternatives (বিকল্প মার্কআপ ফরম্যাট)
-            </label>
-            <p className="text-xs text-slate-400 mb-2">
-              চালু করা হলে, নতুন বই তৈরির সময় এগুলোর ডেমো তৈরি হবে এবং ফরম্যাট নির্বাচন করার অপশন আসবে।
-            </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Markup Formats</h4>
-                <div className="space-y-1 pl-2">
-                  <MarkupCheckbox label="AsciiDoc" desc="For books & manuals" checked={markups.asciidoc} onChange={() => handleToggle("asciidoc")} />
-                  <MarkupCheckbox label="reStructuredText (reST)" desc="Python ecosystem standard" checked={markups.rst} onChange={() => handleToggle("rst")} />
-                  <MarkupCheckbox label="Org-mode" desc="Emacs task outlines" checked={markups.orgmode} onChange={() => handleToggle("orgmode")} />
-                  <MarkupCheckbox label="WikiText" desc="Wikipedia MediaWiki syntax" checked={markups.wikitext} onChange={() => handleToggle("wikitext")} />
-                  <MarkupCheckbox label="Textile" desc="Human-readable web markup" checked={markups.textile} onChange={() => handleToggle("textile")} />
-                  <MarkupCheckbox label="CommonMark" desc="Strictly defined Markdown spec" checked={markups.commonmark} onChange={() => handleToggle("commonmark")} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Visual & WYSIWYG</h4>
-                <div className="space-y-1 pl-2">
-                  <MarkupCheckbox label="MarkText" desc="Real-time hidden syntax" checked={markups.marktext} onChange={() => handleToggle("marktext")} />
-                  <MarkupCheckbox label="Typora" desc="Premium distraction-free visual" checked={markups.typora} onChange={() => handleToggle("typora")} />
-                  <MarkupCheckbox label="Zettlr" desc="Academic research writing" checked={markups.zettlr} onChange={() => handleToggle("zettlr")} />
-                  <MarkupCheckbox label="Ghostwriter" desc="Distraction-free creative environment" checked={markups.ghostwriter} onChange={() => handleToggle("ghostwriter")} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Knowledge Management</h4>
-                <div className="space-y-1 pl-2">
-                  <MarkupCheckbox label="Obsidian" desc="Interconnected visual notes" checked={markups.obsidian} onChange={() => handleToggle("obsidian")} />
-                  <MarkupCheckbox label="Notion" desc="Collaborative block workspaces" checked={markups.notion} onChange={() => handleToggle("notion")} />
-                  <MarkupCheckbox label="Logseq" desc="Privacy-focused visual outlines" checked={markups.logseq} onChange={() => handleToggle("logseq")} />
-                  <MarkupCheckbox label="Anytype" desc="Decentralized Notion alternative" checked={markups.anytype} onChange={() => handleToggle("anytype")} />
-                  <MarkupCheckbox label="Roam Research" desc="Fluid bi-directional linking notes" checked={markups.roam} onChange={() => handleToggle("roam")} />
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <h4 className="text-xs font-semibold text-slate-900 border-l-2 border-slate-700 pl-2 uppercase tracking-wider">Collaborative Web Apps</h4>
-                <div className="space-y-1 pl-2">
-                  <MarkupCheckbox label="HackMD" desc="Real-time team workspaces" checked={markups.hackmd} onChange={() => handleToggle("hackmd")} />
-                  <MarkupCheckbox label="StackEdit" desc="Cloud-synced in-browser editor" checked={markups.stackedit} onChange={() => handleToggle("stackedit")} />
-                  <MarkupCheckbox label="CodiMD" desc="Open-source collaborative editor" checked={markups.codimd} onChange={() => handleToggle("codimd")} />
-                  <MarkupCheckbox label="Dillinger" desc="Cloud-enabled HTML5 editor" checked={markups.dillinger} onChange={() => handleToggle("dillinger")} />
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
 
         <div className="flex justify-end gap-2.5 pt-3 border-t border-slate-100">
@@ -1596,24 +1605,17 @@ const BookLanding = () => {
     return () => window.removeEventListener("click", onDown);
   }, [expandedId]);
 
-  const enabledMarkups = useMemo(() => {
-    const list = ["markdown"];
-    if (localStorage.getItem("book-settings-asciidoc-enabled") === "true") list.push("asciidoc");
-    if (localStorage.getItem("book-settings-rst-enabled") === "true") list.push("rst");
-    if (localStorage.getItem("book-settings-orgmode-enabled") === "true") list.push("orgmode");
-    return list;
-  }, [showSettings]);
+  const enabledMarkups = useMemo(() => ["markdown"], []);
 
   const handleCreateBook = (markup: string) => {
     setShowCreateModal(false);
     const ids = loadBookList();
     const next = ids.length ? Math.max(...ids) + 1 : 1;
-    const demo = getDemoContentFor(markup);
     writeBookMeta(next, {
-      title: demo.title,
-      author: demo.author,
-      content: demo.content,
-      markupType: markup,
+      title: "",
+      author: "",
+      content: "",
+      markupType: "markdown",
     });
     saveBookList([...ids, next]);
     window.location.hash = `#${next}`;
@@ -1737,7 +1739,7 @@ const BookLanding = () => {
   }, [books]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-white dark:bg-slate-950 flex flex-col transition-colors duration-300">
       <input
         ref={coverInputRef}
         type="file"
@@ -1745,21 +1747,21 @@ const BookLanding = () => {
         className="hidden"
         onChange={onCoverFile}
       />
-      <div className="sticky top-0 z-20 bg-white/95 backdrop-blur border-b border-slate-100 px-5 py-4 md:px-16 lg:px-28">
+      <div className="sticky top-0 z-20 bg-white/95 dark:bg-slate-950/95 backdrop-blur border-b border-slate-100 dark:border-slate-800 px-5 py-4 md:px-16 lg:px-28 transition-colors">
         <div className="max-w-3xl mx-auto flex items-center gap-3">
-          <div className="flex-1 flex items-center gap-2 bg-slate-100 rounded-full px-4 py-2.5">
+          <div className="flex-1 flex items-center gap-2 bg-slate-100 dark:bg-slate-900 rounded-full px-4 py-2.5">
             <Search size={16} className="text-slate-500" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               placeholder="বই খুঁজুন..."
-              className="flex-1 bg-transparent focus:outline-none text-base font-mixed placeholder:text-slate-400"
+              className="flex-1 bg-transparent focus:outline-none text-base font-mixed placeholder:text-slate-400 dark:placeholder:text-slate-600 dark:text-slate-200"
               dir="auto"
             />
           </div>
           <button
             onClick={() => setShowSettings(true)}
-            className="p-2.5 bg-slate-100 rounded-full hover:bg-slate-200 text-slate-700 transition-colors shrink-0"
+            className="p-2.5 bg-slate-100 dark:bg-slate-900 rounded-full hover:bg-slate-200 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 transition-colors shrink-0"
             title="Settings"
           >
             <Settings size={20} />
@@ -1778,7 +1780,7 @@ const BookLanding = () => {
               <div
                 key={b.id}
                 onClick={() => openBook(b.id)}
-                className="group relative aspect-[3/4] rounded-2xl border border-slate-200 bg-white hover:border-slate-400 hover:shadow-md transition-all overflow-hidden cursor-pointer"
+                className="group relative aspect-[3/4] rounded-2xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 hover:border-slate-400 dark:hover:border-slate-700 hover:shadow-md transition-all overflow-hidden cursor-pointer"
               >
                 {b.coverImage ? (
                   <img
@@ -1789,11 +1791,12 @@ const BookLanding = () => {
                 ) : letter ? (
                   <div className="absolute inset-0 overflow-hidden pointer-events-none select-none">
                     <div
-                      className="absolute font-mixed text-slate-100 font-semibold leading-none"
+                      className="absolute font-mixed text-slate-400 font-semibold leading-none"
                       style={{
                         fontSize: "20rem",
                         top: corner.top,
                         left: corner.left,
+                        opacity: 0.08,
                       }}
                     >
                       {letter}
@@ -2026,9 +2029,35 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
 
   const replaceSallallahu = () => {
     let next = content;
-    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লামের/g, "ﷺ এর");
-    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লামকে/g, "ﷺ কে");
-    next = next.replace(/সাল্লাললাহু আলাইহি ওয়াসাল্লাম/g, "ﷺ");
+
+    // 1. Replace "সাল্লালাহু আলাইহি ওয়াসাল্লাম" / "সাল্লালাহু আলাইহি ওয়া সাল্লাম" with ﷾.
+    next = next.replace(/সাল্লাল?লাহু আলাইহি ওয়া\s?সাল্লামের/g, "﷾ এর");
+    next = next.replace(/সাল্লাল?লাহু আলাইহি ওয়া\s?সাল্লামকে/g, "﷾ কে");
+    next = next.replace(/সাল্লাল?লাহু আলাইহি ওয়া\s?সাল্লাম/g, "﷾");
+
+    // Also replace the old ﷺ characters just in case they were there from old versions:
+    next = next.replace(/ﷺ এর/g, "﷾ এর");
+    next = next.replace(/ﷺ কে/g, "﷾ কে");
+    next = next.replace(/ﷺ/g, "﷾");
+
+    // 2. Newly add "(সা.)" to "﷾", "(সা.)-কে" to "﷾ কে", "(সা.)-এর" to "﷾ এর", "(সাঃ)" to "﷾", "(সাঃ)-কে" to "﷾ কে", "(সাঃ)-এর" to "﷾ এর"
+    // Also support "(সা:)" (colon instead of visarga) for robustness
+    next = next.replace(/\(সা\.\)-এর/g, "﷾ এর");
+    next = next.replace(/\(সাঃ\)-এর/g, "﷾ এর");
+    next = next.replace(/\(সা:\)-এর/g, "﷾ এর");
+    next = next.replace(/\(সা\.\)-কে/g, "﷾ কে");
+    next = next.replace(/\(সাঃ\)-কে/g, "﷾ কে");
+    next = next.replace(/\(সা:\)-কে/g, "﷾ কে");
+    next = next.replace(/\(সা\.\)/g, "﷾");
+    next = next.replace(/\(সাঃ\)/g, "﷾");
+    next = next.replace(/\(সা:\)/g, "﷾");
+
+    // 3. Add "রহ." to "﵀", "(রহ.)" to "﵀", "(রহ.)-কে" to "﵀ কে", "(রহ.)-এর" to "﵀ এর"
+    next = next.replace(/\(রহ\.\)-এর/g, "﵀ এর");
+    next = next.replace(/\(রহ\.\)-কে/g, "﵀ কে");
+    next = next.replace(/\(রহ\.\)/g, "﵀");
+    next = next.replace(/(?<![\u0980-\u09ff])রহ\.(?![\u0980-\u09ff])/g, "﵀");
+
     if (next !== content) setContent(next);
   };
 
@@ -2251,6 +2280,17 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
       [data-pdf-body] h4 { font-size: 13pt; }
       [data-pdf-body] h5 { font-size: 12pt; }
       [data-pdf-body] h6 { font-size: 11.5pt; }
+      [data-pdf-body] h5, [data-pdf-body] h6 {
+        margin: 0.25em 0 0.2em !important;
+        padding-top: 0.1em !important;
+        padding-bottom: 0.15em !important;
+        line-height: 1.3 !important;
+      }
+      [data-pdf-body] h5[dir="rtl"], [data-pdf-body] h6[dir="rtl"] {
+        padding-top: 0.1em !important;
+        padding-bottom: 0.25em !important;
+        line-height: 1.5 !important;
+      }
       [data-pdf-body] ul, [data-pdf-body] ol {
         margin: 0 0 0.75em 0; padding-left: 0; list-style: none;
       }
@@ -2839,6 +2879,18 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
               finalTakePx = Math.min(remainingPx, 10 / mmPerPx);
             }
 
+            // Adjust finalTakePx to avoid cutting text lines if there's remaining content
+            if (remainingPx > finalTakePx) {
+              const scale = section.canvas.width / section.elWidthPx;
+              const splitCanvasY = Math.round((srcYpx + finalTakePx) * scale);
+              const maxSearchCanvas = Math.round(40 * scale);
+              const blankCanvasY = findBlankRow(section.canvas, splitCanvasY, maxSearchCanvas);
+              const adjustedTakePx = (blankCanvasY / scale) - srcYpx;
+              if (adjustedTakePx * mmPerPx >= 5) {
+                finalTakePx = adjustedTakePx;
+              }
+            }
+
             pageFnIds = bestFnIds;
 
             const slice = sliceSection(section, srcYpx, finalTakePx);
@@ -2908,7 +2960,20 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
         let insertAt = coverPages + 1;
         while (remPx > 0) {
           const availPx = CONTENT_H / idxMmPerPx;
-          const takePx = Math.min(remPx, availPx);
+          let takePx = Math.min(remPx, availPx);
+
+          // Adjust takePx to avoid cutting text lines in the Index
+          if (remPx > takePx) {
+            const scale = cap.canvas.width / cap.elWidthPx;
+            const splitCanvasY = Math.round((yPx + takePx) * scale);
+            const maxSearchCanvas = Math.round(40 * scale);
+            const blankCanvasY = findBlankRow(cap.canvas, splitCanvasY, maxSearchCanvas);
+            const adjustedTakePx = (blankCanvasY / scale) - yPx;
+            if (adjustedTakePx * idxMmPerPx >= 5) {
+              takePx = adjustedTakePx;
+            }
+          }
+
           const slice = sliceSection(cap, yPx, takePx);
           pdf.insertPage(insertAt);
           pdf.setPage(insertAt);
@@ -3042,19 +3107,19 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             </div>
           </div>
         ) : (
-          <div className="pointer-events-auto flex items-center gap-0.5 sm:gap-1 bg-white border border-slate-200 shadow-lg rounded-2xl p-1 sm:p-1.5 max-w-full">
-            <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={16} className="sm:w-[18px] sm:h-[18px]" /></SquareBtn>
+          <div className="pointer-events-auto flex items-center gap-0.5 sm:gap-1 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-lg rounded-2xl p-1 sm:p-1.5 max-w-full">
+            <SquareBtn onClick={goBack} title="Back to library"><ArrowLeft size={16} className="sm:w-[18px] sm:h-[18px] dark:text-slate-200" /></SquareBtn>
             <SquareBtn
               onClick={() => isLocked ? toggleBookLock("") : setShowLockModal(true)}
               title={isLocked ? "Unlock Book" : "Lock Book"}
-              className={isLocked ? "text-rose-600" : ""}
+              className={isLocked ? "text-rose-600" : "dark:text-slate-200"}
             >
               {isLocked ? <Unlock size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Lock size={16} className="sm:w-[18px] sm:h-[18px]" />}
             </SquareBtn>
             <SquareBtn
               onClick={() => coverImage ? setCoverImage(undefined) : coverInputRef.current?.click()}
               title={coverImage ? "Remove Cover" : "Add Cover"}
-              className={coverImage ? "text-rose-600" : ""}
+              className={coverImage ? "text-rose-600" : "dark:text-slate-200"}
             >
               <ImageIcon size={16} className="sm:w-[18px] sm:h-[18px]" />
             </SquareBtn>
@@ -3062,32 +3127,32 @@ const BookEditor = ({ bookId }: { bookId: number }) => {
             <SquareBtn
               onClick={() => setPdfPwdModal(true)}
               title={pdfPassword ? "PDF পাসওয়ার্ড সেট" : "PDF পাসওয়ার্ড দিন"}
-              className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : ""}
+              className={pdfPassword ? "bg-amber-500 text-white hover:bg-amber-600" : "dark:text-slate-200"}
             >
               <FileLock2 size={16} className="sm:w-[18px] sm:h-[18px]" />
             </SquareBtn>
             <SquareBtn
               onClick={() => setIncludeIndex(!includeIndex)}
               title="Toggle Index"
-              className={includeIndex ? "bg-slate-900 text-white hover:bg-slate-800" : ""}
+              className={includeIndex ? "bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200" : "dark:text-slate-200"}
             >
               <List size={16} className="sm:w-[18px] sm:h-[18px]" />
             </SquareBtn>
             <SquareBtn
               onClick={replaceSallallahu}
-              title="Auto replace ﷺ"
-              className="text-base sm:text-lg font-bold"
+              title="Auto replace ﷾"
+              className="text-base sm:text-lg font-bold dark:text-slate-200"
             >
-              ﷺ
+              ﷾
             </SquareBtn>
-            <div className="w-[1px] h-6 bg-slate-200 mx-0.5 sm:mx-1 shrink-0" />
-            <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"}>
+            <div className="w-[1px] h-6 bg-slate-200 dark:bg-slate-800 mx-0.5 sm:mx-1 shrink-0" />
+            <SquareBtn onClick={() => setPreview((p) => !p)} title={preview ? "Edit" : "Preview"} className="dark:text-slate-200">
               {preview ? <Pencil size={16} className="sm:w-[18px] sm:h-[18px]" /> : <Eye size={16} className="sm:w-[18px] sm:h-[18px]" />}
             </SquareBtn>
             <SquareBtn
               onClick={handleDownloadPDF}
               title="Download PDF"
-              className="bg-slate-900 text-white hover:bg-slate-800"
+              className="bg-slate-900 dark:bg-slate-100 text-white dark:text-slate-900 hover:bg-slate-800 dark:hover:bg-slate-200"
             >
               <Download size={16} className="sm:w-[18px] sm:h-[18px]" />
             </SquareBtn>
