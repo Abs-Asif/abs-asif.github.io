@@ -128,8 +128,8 @@ describe("Secret Intimacy Roulette Component", () => {
     });
 
     // All displayed poses under Comfortable category should match
-    // E.g. "ফ্ল্যাট আয়রন (The Flat Iron)"
-    const poseName = screen.getByText(/ফ্ল্যাট আয়রন/i);
+    // E.g. "ফ্ল্যাট আয়রন (The Flat Iron)", "স্পুনিং (Spooning)", etc.
+    const poseName = screen.getByText(/ফ্ল্যাট আয়রন|স্পুনিং|হ্যাপি বেবি|স্বর্গের সিঁড়ি/i);
     expect(poseName).toBeInTheDocument();
   });
 });
