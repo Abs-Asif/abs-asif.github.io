@@ -3,6 +3,8 @@ const FONT_CACHE_NAME = 'book-editor-fonts-v1';
 
 const ASSETS = [
   '/book',
+  '/medic',
+  '/medic-data.json',
   '/manifest.webmanifest',
   '/favicon.png'
 ];
