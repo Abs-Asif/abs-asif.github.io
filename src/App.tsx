@@ -10,6 +10,7 @@ import Quran from "./pages/Quran";
 import Medic from "./pages/Medic";
 import Secret from "./pages/Secret";
 import Law from "./pages/Law";
+import News from "./pages/News";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/medic" element={<Medic />} />
           <Route path="/secret" element={<Secret />} />
           <Route path="/law" element={<Law />} />
+          <Route path="/news" element={<News />} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>
