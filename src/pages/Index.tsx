@@ -2,7 +2,7 @@ import { HeroSection } from "@/components/HeroSection";
 import { ContactSection } from "@/components/ContactSection";
 import { Footer } from "@/components/Footer";
 import { Link } from "react-router-dom";
-import { BookOpen, Pill, Scale, Languages } from "lucide-react";
+import { BookOpen, Pill, Scale, Languages, Newspaper } from "lucide-react";
 
 const Index = () => {
   return (
@@ -25,6 +25,10 @@ const Index = () => {
           <Link to="/law" className="linktree-button m3-tertiary-tonal w-full max-w-[280px]">
             <Scale size={20} />
             <span>BD Law Wiki</span>
+          </Link>
+          <Link to="/news" className="linktree-button m3-primary-tonal w-full max-w-[280px]">
+            <Newspaper size={20} />
+            <span>Newspaper Crawler</span>
           </Link>
         </div>
         <ContactSection />
