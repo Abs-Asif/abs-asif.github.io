@@ -45,6 +45,12 @@ export default async function handler(req, res) {
     if (!html) {
       throw new Error("Empty response body");
     }
+
+    if (req.query.raw === "true") {
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      return res.status(200).send(html);
+    }
+
     const $ = cheerio.load(html);
 
     const isPlaceholder = (text) => {

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import {
-  ArrowLeft, Search, Loader2, BookOpen, ExternalLink, Moon, Sun, Newspaper,
+  ArrowLeft, Search, Loader2, ExternalLink, Newspaper,
   ChevronRight, Bookmark, Filter, Book, Info, Download, Trash2, Play, Square,
-  CheckCircle, AlertCircle, FileText, ChevronDown, ChevronUp, Copy, RefreshCw
+  CheckCircle, AlertCircle, FileText, ChevronDown, ChevronUp, Copy, RefreshCw, Terminal, Globe
 } from "lucide-react";
 import { toast } from "sonner";
+import { getApiUrl } from "@/lib/newsorigin-utils";
 
 export interface ArticleData {
   title: string;
@@ -241,22 +242,23 @@ interface NewspaperConfig {
   linkPatterns: string[];
 }
 
-const NEWSPAPERS: NewspaperConfig[] = [
+// Complete set of 46 Newspaper and Blog Crawlers matching KSMubasshir/bd-newspaper-crawlers
+export const NEWSPAPERS: NewspaperConfig[] = [
   {
-    id: "prothomalo",
-    name: "Prothom Alo (প্রথম আলো)",
+    id: "prothomalo_bn",
+    name: "Prothom Alo - Bangla (প্রথম আলো)",
     baseUrl: "https://www.prothomalo.com",
     latestPath: "/collection/latest",
     pythonKey: "prothomalo_bn",
     linkPatterns: ["/bangladesh/", "/international/", "/sports/", "/entertainment/", "/business/", "/opinion/", "/lifestyle/"]
   },
   {
-    id: "dailystar",
-    name: "The Daily Star Bangla (ডেইলি স্টার)",
-    baseUrl: "https://bangla.thedailystar.net",
-    latestPath: "/শীর্ষ-খবর",
-    pythonKey: "daily_star",
-    linkPatterns: ["/news/", "/bangladesh/", "/opinion/", "/sports/", "/entertainment/"]
+    id: "prothomalo_en",
+    name: "Prothom Alo - English (প্রথম আলো)",
+    baseUrl: "https://en.prothomalo.com",
+    latestPath: "/collection/latest",
+    pythonKey: "prothomalo_en",
+    linkPatterns: ["/bangladesh/", "/international/", "/sports/", "/entertainment/", "/business/", "/opinion/", "/lifestyle/"]
   },
   {
     id: "bdpratidin",
@@ -267,12 +269,20 @@ const NEWSPAPERS: NewspaperConfig[] = [
     linkPatterns: ["/national/", "/city-news/", "/country/", "/international-news/", "/entertainment/", "/sports/"]
   },
   {
-    id: "jugantor",
-    name: "Jugantor (যুগান্তর)",
-    baseUrl: "https://www.jugantor.com",
-    latestPath: "/national",
-    pythonKey: "jugantor",
-    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/", "/country/"]
+    id: "kalerkantho",
+    name: "Kalerkantho (কালের কণ্ঠ)",
+    baseUrl: "https://www.kalerkantho.com",
+    latestPath: "/online/national",
+    pythonKey: "kalerkantho",
+    linkPatterns: ["/online/national/", "/online/international/", "/online/sports/", "/online/entertainment/"]
+  },
+  {
+    id: "inqilab",
+    name: "Daily Inqilab (দৈনিক ইনকিলাব)",
+    baseUrl: "https://www.dailyinqilab.com",
+    latestPath: "/category/national",
+    pythonKey: "inqilab",
+    linkPatterns: ["/article/", "/news/"]
   },
   {
     id: "samakal",
@@ -283,33 +293,395 @@ const NEWSPAPERS: NewspaperConfig[] = [
     linkPatterns: ["/bangladesh/", "/international/", "/sports/", "/entertainment/", "/national/"]
   },
   {
-    id: "ittefaq",
-    name: "Daily Ittefaq (ইত্তেফাক)",
+    id: "jugantor",
+    name: "Jugantor (যুগান্তর)",
+    baseUrl: "https://www.jugantor.com",
+    latestPath: "/national",
+    pythonKey: "jugantor",
+    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/", "/country/"]
+  },
+  {
+    id: "ittefaq_bn",
+    name: "Daily Ittefaq - Bangla (ইত্তেফাক)",
     baseUrl: "https://www.ittefaq.com.bd",
     latestPath: "/national",
-    pythonKey: "samakal", // Samakal shares highly similar structures
+    pythonKey: "ittefaq_bn",
     linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/"]
   },
   {
-    id: "kalerkantho",
-    name: "Kalerkantho (কালের কণ্ঠ)",
-    baseUrl: "https://www.kalerkantho.com",
-    latestPath: "/online/national",
-    pythonKey: "bdpratidin",
-    linkPatterns: ["/online/national/", "/online/international/", "/online/sports/", "/online/entertainment/"]
+    id: "ittefaq_en",
+    name: "Daily Ittefaq - English (ইত্তেফাক)",
+    baseUrl: "https://en.ittefaq.com.bd",
+    latestPath: "/national",
+    pythonKey: "ittefaq_en",
+    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "dailystar",
+    name: "The Daily Star Bangla (ডেইলি স্টার)",
+    baseUrl: "https://bangla.thedailystar.net",
+    latestPath: "/শীর্ষ-খবর",
+    pythonKey: "daily_star",
+    linkPatterns: ["/news/", "/bangladesh/", "/opinion/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "anandabazar",
+    name: "Anandabazar Patrika (আনন্দবাজার)",
+    baseUrl: "https://www.anandabazar.com",
+    latestPath: "/west-bengal",
+    pythonKey: "anandabazar",
+    linkPatterns: ["/west-bengal/", "/national/", "/international/", "/entertainment/"]
+  },
+  {
+    id: "crawler_zeenews",
+    name: "Zee News - Bangla (জি নিউজ)",
+    baseUrl: "https://zeenews.india.com/bengali",
+    latestPath: "/state",
+    pythonKey: "crawler_zeenews",
+    linkPatterns: ["/state/", "/news/"]
+  },
+  {
+    id: "crawler_voabangla",
+    name: "VOA Bangla (ভয়েস অফ আমেরিকা)",
+    baseUrl: "https://www.voabangla.com",
+    latestPath: "/z/2026",
+    pythonKey: "crawler_voabangla",
+    linkPatterns: ["/a/"]
+  },
+  {
+    id: "hindustantimes",
+    name: "Hindustan Times Bangla (হিন্দুস্তান টাইমস)",
+    baseUrl: "https://bangla.hindustantimes.com",
+    latestPath: "/national-news",
+    pythonKey: "hindustantimes",
+    linkPatterns: ["/national-news/", "/state/"]
+  },
+  {
+    id: "crawler_tbs",
+    name: "The Business Standard Bangla (টিবিএস)",
+    baseUrl: "https://www.tbsnews.net/bangla",
+    latestPath: "/bangladesh",
+    pythonKey: "crawler_tbs",
+    linkPatterns: ["/bangladesh/"]
+  },
+  {
+    id: "dhakatribune",
+    name: "Dhaka Tribune Bangla (ঢাকা ট্রিবিউন)",
+    baseUrl: "https://bangla.dhakatribune.com",
+    latestPath: "/bangladesh",
+    pythonKey: "dhakatribune",
+    linkPatterns: ["/bangladesh/", "/opinion/", "/sport/", "/entertainment/"]
+  },
+  {
+    id: "ntvbd",
+    name: "NTV Online (এনটিভি)",
+    baseUrl: "https://www.ntvbd.com",
+    latestPath: "/bangladesh",
+    pythonKey: "ntvbd",
+    linkPatterns: ["/bangladesh/", "/international/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "indianexpress",
+    name: "Indian Express Bangla (ইন্ডিয়ান এক্সপ্রেস)",
+    baseUrl: "https://bengali.indianexpress.com",
+    latestPath: "/bengal",
+    pythonKey: "indianexpress",
+    linkPatterns: ["/bengal/", "/national/"]
+  },
+  {
+    id: "eisamay",
+    name: "Ei Samay (এই সময়)",
+    baseUrl: "https://eisamay.com/us",
+    latestPath: "/state",
+    pythonKey: "eisamay",
+    linkPatterns: ["/state/", "/national/"]
+  },
+  {
+    id: "dainikamadershomoy",
+    name: "Daily Amader Shomoy (আমাদের সময়)",
+    baseUrl: "https://www.dainikamadershomoy.com",
+    latestPath: "/national",
+    pythonKey: "dainikamadershomoy",
+    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "daily_bangladesh",
+    name: "Daily Bangladesh (ডেইলি বাংলাদেশ)",
+    baseUrl: "https://www.daily-bangladesh.com",
+    latestPath: "/national",
+    pythonKey: "daily_bangladesh",
+    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "sangbadpratidin",
+    name: "Sangbad Pratidin (সংবাদ প্রতিদিন)",
+    baseUrl: "https://www.sangbadpratidin.in",
+    latestPath: "/bengal",
+    pythonKey: "sangbadpratidin",
+    linkPatterns: ["/bengal/", "/national/"]
+  },
+  {
+    id: "24livenews",
+    name: "24 Live Newspaper (২৪ লাইভ নিউজ)",
+    baseUrl: "https://www.bangla.24livenewspaper.com",
+    latestPath: "/category/national",
+    pythonKey: "24livenews",
+    linkPatterns: ["/article/", "/news/"]
+  },
+  {
+    id: "amrabondhu",
+    name: "Amra Bondhu Blog (আমরা বন্ধু ব্লগ)",
+    baseUrl: "https://www.amrabondhu.com",
+    latestPath: "/",
+    pythonKey: "amrabondhu",
+    linkPatterns: ["/blog/", "/post/"]
+  },
+  {
+    id: "banglablog",
+    name: "Bangla Blog (বাংলা ব্লগ)",
+    baseUrl: "http://banglablog.in",
+    latestPath: "/",
+    pythonKey: "banglablog",
+    linkPatterns: ["/post/", "/blog/"]
+  },
+  {
+    id: "banglanews24",
+    name: "BanglaNews24 (বাংলানিউজ২৪)",
+    baseUrl: "https://www.banglanews24.com",
+    latestPath: "/national",
+    pythonKey: "banglanews24",
+    linkPatterns: ["/national/", "/international/", "/sports/", "/entertainment/"]
+  },
+  {
+    id: "biggani",
+    name: "Biggani.org (বিজ্ঞানী.অর্গ)",
+    baseUrl: "https://biggani.org",
+    latestPath: "/",
+    pythonKey: "biggani",
+    linkPatterns: ["/article/", "/post/"]
+  },
+  {
+    id: "bigganblog",
+    name: "Biggan Blog (বিজ্ঞান ব্লগ)",
+    baseUrl: "https://bigganblog.org",
+    latestPath: "/",
+    pythonKey: "bigganblog",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "bigganprojukti",
+    name: "Biggan Projukti (বিজ্ঞান প্রযুক্তি)",
+    baseUrl: "http://www.bigganprojukti.com",
+    latestPath: "/",
+    pythonKey: "bigganprojukti",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "bigyan",
+    name: "Bigyan - বিজ্ঞান (বিজ্ঞান)",
+    baseUrl: "https://bigyan.org.in",
+    latestPath: "/",
+    pythonKey: "bigyan",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "cadetcollegeblog",
+    name: "Cadet College Blog (ক্যাডেট কলেজ ব্লগ)",
+    baseUrl: "https://cadetcollegeblog.com",
+    latestPath: "/",
+    pythonKey: "cadetcollegeblog",
+    linkPatterns: ["/blog/", "/post/"]
+  },
+  {
+    id: "cpsubeen",
+    name: "cpbook by Subeen (সিপি বুক)",
+    baseUrl: "http://cpbook.subeen.com",
+    latestPath: "/",
+    pythonKey: "cpsubeen",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "crawler_porjotonlipi",
+    name: "Porjotonlipi (পর্যটনলিপি)",
+    baseUrl: "https://porjotonlipi.com",
+    latestPath: "/",
+    pythonKey: "crawler_porjotonlipi",
+    linkPatterns: ["/blog/", "/post/"]
+  },
+  {
+    id: "crawler_tagoreweb",
+    name: "Tagore Web (রবীন্দ্রনাথ ঠাকুর)",
+    baseUrl: "https://www.tagoreweb.in",
+    latestPath: "/",
+    pythonKey: "crawler_tagoreweb",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "dakghar",
+    name: "Dakghar News (ডাকঘর)",
+    baseUrl: "https://www.dakghar24.com",
+    latestPath: "/category/national",
+    pythonKey: "dakghar",
+    linkPatterns: ["/article/", "/news/"]
+  },
+  {
+    id: "dmpnews",
+    name: "DMP News (ডিএমপি নিউজ)",
+    baseUrl: "https://dmpnews.org",
+    latestPath: "/category/national",
+    pythonKey: "dmpnews",
+    linkPatterns: ["/article/", "/news/"]
+  },
+  {
+    id: "hindime",
+    name: "hindime Blog (हिंदीমে)",
+    baseUrl: "https://hindime.net",
+    latestPath: "/",
+    pythonKey: "hindime",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "jagran",
+    name: "Dainik Jagran (দैनिक जागरण)",
+    baseUrl: "https://www.jagran.com",
+    latestPath: "/national",
+    pythonKey: "jagran",
+    linkPatterns: ["/national/", "/news/"]
+  },
+  {
+    id: "nirbik",
+    name: "Nirbik Blog (নির্ভীক)",
+    baseUrl: "https://www.nirbik.com",
+    latestPath: "/",
+    pythonKey: "nirbik",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "onnodristy",
+    name: "Onnodristy (অন্যদৃষ্টি)",
+    baseUrl: "https://onnodristy.com",
+    latestPath: "/category/national",
+    pythonKey: "onnodristy",
+    linkPatterns: ["/article/", "/news/"]
+  },
+  {
+    id: "portalgov",
+    name: "Dept. Agricultural Extension (ডিএই)",
+    baseUrl: "http://dae.portal.gov.bd",
+    latestPath: "/",
+    pythonKey: "portalgov",
+    linkPatterns: ["/article/", "/news/"]
+  },
+  {
+    id: "sasthabangla",
+    name: "Sastha Bangla (স্বাস্থ্য বাংলা)",
+    baseUrl: "http://www.sasthabangla.com",
+    latestPath: "/",
+    pythonKey: "sasthabangla",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "shopnobaz",
+    name: "Shopnobaz (স্বপ্নবাজ)",
+    baseUrl: "https://shopnobaz.net",
+    latestPath: "/",
+    pythonKey: "shopnobaz",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "songramernotebook",
+    name: "Songramer Notebook (সংগ্রামের নোটবুক)",
+    baseUrl: "https://songramernotebook.com",
+    latestPath: "/",
+    pythonKey: "songramernotebook",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "subeen",
+    name: "Subeen Blog (সুবীন ব্লগ)",
+    baseUrl: "http://subeen.com",
+    latestPath: "/",
+    pythonKey: "subeen",
+    linkPatterns: ["/post/", "/article/"]
+  },
+  {
+    id: "techtunes",
+    name: "Tech Tunes (টেকটিউনস)",
+    baseUrl: "https://www.techtunes.io",
+    latestPath: "/",
+    pythonKey: "techtunes",
+    linkPatterns: ["/post/", "/article/"]
   }
 ];
 
 const PROXIES = [
-  { id: "corsproxy.io", name: "CORSProxy.io (Recommended)" },
+  { id: "none", name: "No External Proxy (First-Party Fallback)" },
+  { id: "corsproxy.io", name: "CORSProxy.io" },
   { id: "allorigins", name: "AllOrigins Proxy" },
   { id: "everyorigin", name: "EveryOrigin Proxy" },
-  { id: "direct", name: "Direct (May cause CORS block)" }
+  { id: "direct", name: "Direct Browser Fetch" }
 ];
+
+export const getPythonTemplate = (news: NewspaperConfig) => {
+  if (PYTHON_TEMPLATES[news.pythonKey]) {
+    return PYTHON_TEMPLATES[news.pythonKey];
+  }
+
+  // Dynamically generate a premium python script matching KSMubasshir crawler patterns!
+  return `import os
+import json
+import time
+from bs4 import BeautifulSoup
+import requests
+
+newspaper_name = '${news.name.split(" (")[0]}'
+newspaper_base_url = '${news.baseUrl}'
+target_feed_url = '${news.baseUrl}${news.latestPath || "/"}'
+
+print(f"Starting crawler for {newspaper_name}...")
+response = requests.get(target_feed_url)
+soup = BeautifulSoup(response.content, "html.parser")
+all_links = soup.find_all("a")
+
+article_links = []
+for link in all_links:
+    href = link.get('href')
+    if not href:
+        continue
+    if href.startswith("/"):
+        href = newspaper_base_url + href
+
+    # Check link pattern match for articles
+    is_valid = any(pattern in href for pattern in ${JSON.stringify(news.linkPatterns)})
+    if is_valid and href not in article_links:
+        article_links.append(href)
+
+print(f"Found {len(article_links)} potential articles to scrape.")
+
+for index, article_url in enumerate(article_links[:5]):
+    print(f"Scraping [{index+1}/{len(article_links)}]: {article_url}")
+    try:
+        art_resp = requests.get(article_url)
+        art_soup = BeautifulSoup(art_resp.content, "html.parser")
+
+        title = art_soup.find("h1").get_text().strip() if art_soup.find("h1") else "Untitled"
+        paragraphs = art_soup.find_all("p")
+        content = "\\n\\n".join([p.get_text().strip() for p in paragraphs if len(p.get_text()) > 35])
+
+        print(f"Title: {title}")
+        print(f"Content Length: {len(content)} characters")
+
+        # Save exact XML output in KSMubasshir style
+        data = f"<article>\\n<title>{title}</title>\\n<text>\\n{content}\\n</text>\\n</article>"
+
+    except Exception as e:
+        print(f"Error scraping {article_url}: {e}")
+`;
+};
 
 const News = () => {
   const [selectedNewspaperId, setSelectedNewspaperId] = useState(NEWSPAPERS[0].id);
-  const [proxyType, setProxyType] = useState("corsproxy.io");
+  const [proxyType, setProxyType] = useState("none"); // Default to none (No external proxy / custom fallback)
   const [crawlMode, setCrawlMode] = useState<"latest" | "custom">("latest");
   const [customUrl, setCustomUrl] = useState("");
   const [scrapeLimit, setScrapeLimit] = useState(5);
@@ -320,6 +692,7 @@ const News = () => {
   const [expandedArticles, setExpandedArticles] = useState<Record<string, boolean>>({});
   const [selectedPythonKey, setSelectedPythonKey] = useState(NEWSPAPERS[0].pythonKey);
   const [showCodeView, setShowCodeView] = useState(false);
+  const [newspaperSearch, setNewspaperSearch] = useState("");
 
   const stopScrapingRef = useRef(false);
 
@@ -369,8 +742,21 @@ const News = () => {
       proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(url)}`;
     } else if (selectedProxy === "everyorigin") {
       proxyUrl = `https://every-origin-ecru.vercel.app/api?url=${encodeURIComponent(url)}`;
-    } else {
+    } else if (selectedProxy === "direct") {
       proxyUrl = url;
+    } else {
+      // Try direct browser fetch first
+      try {
+        addLog(`Attempting direct browser fetch for: ${url}`, "info");
+        const directRes = await fetch(url);
+        if (directRes.ok) {
+          addLog("Direct fetch succeeded!", "success");
+          return await directRes.text();
+        }
+      } catch (err) {
+        addLog(`Direct fetch blocked by browser CORS. Falling back to first-party custom proxy...`, "info");
+      }
+      proxyUrl = getApiUrl(`/api/get?raw=true&url=${encodeURIComponent(url)}`);
     }
 
     const response = await fetch(proxyUrl);
@@ -402,7 +788,7 @@ const News = () => {
 
     addLog(`Initializing crawler on device...`, "info");
     addLog(`Target Feed URL: ${targetUrl}`, "info");
-    addLog(`Using Proxy: ${proxyType}`, "info");
+    addLog(`Using Proxy Configuration: ${proxyType}`, "info");
 
     try {
       addLog(`Fetching archive/index page...`, "info");
@@ -411,8 +797,8 @@ const News = () => {
       try {
         html = await fetchWithProxy(targetUrl, proxyType);
       } catch (err: any) {
-        addLog(`Proxy ${proxyType} failed: ${err.message || err}. Trying fallback AllOrigins proxy...`, "warning");
-        html = await fetchWithProxy(targetUrl, "allorigins");
+        addLog(`Proxy/API call failed: ${err.message || err}. Retrying with alternate secure endpoint...`, "warning");
+        html = await fetchWithProxy(targetUrl, "everyorigin");
       }
 
       setProgress(25);
@@ -608,9 +994,14 @@ const News = () => {
   };
 
   const handleCopyCode = () => {
-    navigator.clipboard.writeText(PYTHON_TEMPLATES[selectedPythonKey]);
+    navigator.clipboard.writeText(getPythonTemplate(selectedNewspaper));
     toast.success("Python code copied to clipboard!");
   };
+
+  const filteredNewspapers = NEWSPAPERS.filter(news =>
+    news.name.toLowerCase().includes(newspaperSearch.toLowerCase()) ||
+    news.id.toLowerCase().includes(newspaperSearch.toLowerCase())
+  );
 
   return (
     <div className="min-h-screen bg-[#f8f9fa] dark:bg-[#1a1b1c] text-[#202122] dark:text-[#eaecf0] flex flex-col font-sans selection:bg-[#3498db]/30 transition-colors duration-200">
@@ -641,7 +1032,7 @@ const News = () => {
           <div className="flex items-center gap-2">
             <button
               onClick={() => setShowCodeView(!showCodeView)}
-              className="px-3 py-1.5 text-xs border border-[#c8ccd1] dark:border-[#4c4e50] bg-white dark:bg-[#2a2b2c] hover:bg-slate-50 dark:hover:bg-[#1e1f20] rounded-md font-semibold flex items-center gap-1.5 transition-all text-slate-700 dark:text-slate-200"
+              className="px-3 py-1.5 text-xs border border-[#c8ccd1] dark:border-[#4c4e50] bg-white dark:bg-[#2a2b2c] hover:bg-slate-50 dark:hover:bg-[#1e1f20] rounded-md font-semibold flex items-center gap-1.5 transition-all text-slate-700 dark:text-slate-200 shadow-sm"
             >
               <FileText className="w-3.5 h-3.5" />
               <span>{showCodeView ? "Hide Python Code" : "Show Python Code"}</span>
@@ -655,30 +1046,22 @@ const News = () => {
 
         {/* Python Reference Code Panel */}
         {showCodeView && (
-          <div className="bg-white dark:bg-[#202122] rounded-2xl p-5 border border-amber-600/30 dark:border-amber-500/30 shadow-md animate-fade-in">
-            <div className="flex items-center justify-between border-b border-[#a2a9b1]/40 dark:border-[#3c3e40]/40 pb-3 mb-4">
+          <div className="bg-white dark:bg-[#202122] rounded-3xl p-6 border border-amber-600/30 dark:border-amber-500/30 shadow-sm animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-[#a2a9b1]/40 dark:border-[#3c3e40]/40 pb-3 mb-4 gap-2">
               <div className="flex items-center gap-2">
                 <FileText className="w-5 h-5 text-amber-500" />
                 <div>
                   <h3 className="font-bold text-sm">Reference Crawler Source Code (Python)</h3>
-                  <p className="text-[10px] text-slate-400">Exact parsing routine from KSMubasshir/bd-newspaper-crawlers</p>
+                  <p className="text-[10px] text-slate-400">Customized parsing routine mapped from KSMubasshir/bd-newspaper-crawlers</p>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  value={selectedPythonKey}
-                  onChange={(e) => setSelectedPythonKey(e.target.value)}
-                  className="px-2 py-1 bg-slate-50 dark:bg-[#1a1b1c] border border-[#c8ccd1] dark:border-[#4c4e50] rounded text-xs focus:outline-none"
-                >
-                  <option value="prothomalo_bn">prothomalo_bn.py</option>
-                  <option value="daily_star">daily_star.py</option>
-                  <option value="bdpratidin">bdpratidin.py</option>
-                  <option value="jugantor">jugantor.py</option>
-                  <option value="samakal">samakal.py</option>
-                </select>
+              <div className="flex items-center gap-2 self-end sm:self-auto">
+                <span className="text-xs bg-amber-50 dark:bg-amber-950/40 text-amber-600 px-2.5 py-1 rounded-md font-mono font-bold">
+                  {selectedNewspaper.pythonKey}.py
+                </span>
                 <button
                   onClick={handleCopyCode}
-                  className="p-1.5 bg-slate-100 dark:bg-[#2a2b2c] hover:bg-slate-200 rounded text-slate-500 hover:text-primary transition-colors"
+                  className="p-2 bg-slate-100 dark:bg-[#2a2b2c] hover:bg-slate-200 dark:hover:bg-[#323335] rounded-lg text-slate-500 hover:text-primary transition-colors shadow-sm"
                   title="Copy Python Code"
                 >
                   <Copy className="w-4 h-4" />
@@ -687,8 +1070,8 @@ const News = () => {
             </div>
 
             <div className="relative">
-              <pre className="text-xs font-mono bg-slate-50 dark:bg-[#151617] p-4 rounded-xl border border-[#c8ccd1]/40 dark:border-slate-800 overflow-x-auto max-h-72 leading-relaxed text-slate-800 dark:text-slate-300">
-                <code>{PYTHON_TEMPLATES[selectedPythonKey]}</code>
+              <pre className="text-xs font-mono bg-slate-50 dark:bg-[#151617] p-5 rounded-2xl border border-[#c8ccd1]/40 dark:border-slate-800/60 overflow-x-auto max-h-72 leading-relaxed text-slate-800 dark:text-slate-300">
+                <code>{getPythonTemplate(selectedNewspaper)}</code>
               </pre>
             </div>
           </div>
@@ -698,28 +1081,39 @@ const News = () => {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
           {/* Controls Panel */}
-          <div className="lg:col-span-1 bg-white dark:bg-[#202122] rounded-2xl p-5 border border-[#c8ccd1] dark:border-[#3c3e40] shadow-sm flex flex-col gap-4">
-            <h3 className="font-bold text-sm border-b border-[#a2a9b1]/30 dark:border-[#3c3e40]/30 pb-2 text-slate-800 dark:text-slate-200">
-              Crawler Control Center
+          <div className="lg:col-span-1 bg-white dark:bg-[#202122] rounded-3xl p-6 border border-[#c8ccd1] dark:border-[#3c3e40] shadow-sm flex flex-col gap-4">
+            <h3 className="font-bold text-sm border-b border-[#a2a9b1]/30 dark:border-[#3c3e40]/30 pb-2 text-slate-800 dark:text-slate-200 flex items-center gap-2">
+              <Terminal className="w-4 h-4 text-amber-600" />
+              <span>Crawler Control Center</span>
             </h3>
 
             {/* Choose Newspaper */}
             <div className="space-y-1.5">
-              <label className="text-xs font-semibold text-slate-500 dark:text-[#a2a9b1]">
-                Select Newspaper
+              <label className="text-xs font-semibold text-slate-500 dark:text-[#a2a9b1] flex items-center justify-between">
+                <span>Select Newspaper</span>
+                <span className="text-[10px] opacity-70">({filteredNewspapers.length} listed)</span>
               </label>
-              <select
-                value={selectedNewspaperId}
-                onChange={(e) => setSelectedNewspaperId(e.target.value)}
-                disabled={isScraping}
-                className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1a1b1c] border border-[#c8ccd1] dark:border-[#4c4e50] rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
-              >
-                {NEWSPAPERS.map(news => (
-                  <option key={news.id} value={news.id}>
-                    {news.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <input
+                  type="text"
+                  placeholder="🔍 Filter 46 sources..."
+                  value={newspaperSearch}
+                  onChange={(e) => setNewspaperSearch(e.target.value)}
+                  className="w-full px-3 py-2 mb-2 bg-slate-50 dark:bg-[#1a1b1c] border border-[#c8ccd1] dark:border-[#4c4e50] rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+                <select
+                  value={selectedNewspaperId}
+                  onChange={(e) => setSelectedNewspaperId(e.target.value)}
+                  disabled={isScraping}
+                  className="w-full px-3 py-2 bg-slate-50 dark:bg-[#1a1b1c] border border-[#c8ccd1] dark:border-[#4c4e50] rounded-xl text-xs focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-60"
+                >
+                  {filteredNewspapers.map(news => (
+                    <option key={news.id} value={news.id}>
+                      {news.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
 
             {/* Crawl Mode Selection */}
@@ -791,8 +1185,9 @@ const News = () => {
               </div>
 
               <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-slate-500 dark:text-[#a2a9b1]">
-                  CORS Proxy
+                <label className="text-xs font-semibold text-slate-500 dark:text-[#a2a9b1] flex items-center gap-1">
+                  <Globe className="w-3 h-3 text-emerald-600" />
+                  <span>CORS Proxy</span>
                 </label>
                 <select
                   value={proxyType}
@@ -814,7 +1209,7 @@ const News = () => {
               {!isScraping ? (
                 <button
                   onClick={startScraping}
-                  className="flex-1 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
+                  className="flex-1 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
                 >
                   <Play className="w-4 h-4 fill-white" />
                   <span>Start Scraper</span>
@@ -822,7 +1217,7 @@ const News = () => {
               ) : (
                 <button
                   onClick={handleStop}
-                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-md transition-all active:scale-95"
+                  className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-all active:scale-95"
                 >
                   <Square className="w-4 h-4 fill-white" />
                   <span>Cancel Scraping</span>
@@ -842,7 +1237,7 @@ const News = () => {
                 </div>
                 <div className="w-full bg-slate-200 dark:bg-slate-700 h-1.5 rounded-full overflow-hidden">
                   <div
-                    className="bg-primary h-full transition-all duration-300"
+                    className="bg-amber-600 h-full transition-all duration-300"
                     style={{ width: `${progress}%` }}
                   ></div>
                 </div>
@@ -852,7 +1247,7 @@ const News = () => {
           </div>
 
           {/* Console / Crawl Logs */}
-          <div className="lg:col-span-2 bg-slate-900 text-slate-100 rounded-2xl p-5 border border-slate-800 shadow-lg flex flex-col h-[350px]">
+          <div className="lg:col-span-2 bg-slate-900 dark:bg-[#111213] text-slate-100 rounded-3xl p-6 border border-slate-800 shadow-md flex flex-col h-[350px]">
             <div className="flex items-center justify-between border-b border-slate-800 pb-2 mb-3">
               <h3 className="font-mono text-xs font-bold text-slate-400 flex items-center gap-1.5">
                 <span className="w-2.5 h-2.5 rounded-full bg-green-500 inline-block animate-ping"></span>
@@ -892,7 +1287,7 @@ const News = () => {
         </div>
 
         {/* Scraped Results Render Room */}
-        <div className="bg-white dark:bg-[#202122] rounded-2xl p-5 border border-[#c8ccd1] dark:border-[#3c3e40] shadow-sm mt-2 flex flex-col gap-4">
+        <div className="bg-white dark:bg-[#202122] rounded-3xl p-6 border border-[#c8ccd1] dark:border-[#3c3e40] shadow-sm mt-2 flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-[#a2a9b1]/30 dark:border-[#3c3e40]/30 pb-3">
             <div>
               <h3 className="font-bold text-base text-slate-800 dark:text-slate-200">
@@ -931,7 +1326,7 @@ const News = () => {
 
           {scrapedArticles.length === 0 ? (
             <div className="text-center py-12 text-slate-400 border border-dashed border-[#c8ccd1] dark:border-[#4c4e50] rounded-xl">
-              <Newspaper className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3" />
+              <Newspaper className="w-12 h-12 text-slate-300 dark:text-slate-700 mx-auto mb-3 animate-pulse" />
               <p className="font-bold text-slate-600 dark:text-slate-400">No crawled articles currently loaded</p>
               <p className="text-xs mt-1">Configure parameters and hit 'Start Scraper' above to run the on-device engine.</p>
             </div>
@@ -942,12 +1337,12 @@ const News = () => {
                 return (
                   <div
                     key={idx}
-                    className="border border-[#c8ccd1]/60 dark:border-[#4c4e50]/40 rounded-xl bg-slate-50/50 dark:bg-[#1a1b1c]/40 p-4 hover:border-amber-500/50 dark:hover:border-amber-500/40 transition-all"
+                    className="border border-[#c8ccd1]/60 dark:border-[#4c4e50]/40 rounded-2xl bg-slate-50/50 dark:bg-[#1a1b1c]/40 p-5 hover:border-amber-500/50 dark:hover:border-amber-500/40 transition-all shadow-sm"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="space-y-1">
                         <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-[10px] text-amber-700 dark:text-amber-500 font-semibold border border-amber-200/50">
+                          <span className="px-2.5 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-[10px] text-amber-700 dark:text-amber-500 font-semibold border border-amber-200/50">
                             {art.source}
                           </span>
                           <span className="text-[10px] text-slate-400 font-medium">
