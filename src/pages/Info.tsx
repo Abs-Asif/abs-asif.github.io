@@ -5,8 +5,8 @@ import { User, ArrowLeft } from "lucide-react";
 interface InfoItem {
   label: string;
   labelBn: string;
-  value: string;
-  valueBn: string;
+  value: string | null;
+  valueBn: string | null;
   selectable?: boolean;
 }
 
@@ -29,10 +29,58 @@ const ENCRYPTED_DATA = JSON.stringify({
 
 const TILES = [
   { id: 1, name: "Md. Abdullah Bari" },
-  { id: 2, name: "Md. Abdullah Bari" },
+  { id: 2, name: "Miss Musbihatul Jannat" },
   { id: 3, name: "Md. Abdullah Bari" },
   { id: 4, name: "Md. Abdullah Bari" },
 ];
+
+const TILE_2_DATA: DecryptedData = {
+  infoData: [
+    {
+      label: "Name",
+      labelBn: "নাম",
+      value: "Miss Musbihatul Jannat",
+      valueBn: "মিস মুসবিহাতুল জান্নাত",
+      selectable: true,
+    },
+    {
+      label: "Father's Name",
+      labelBn: "পিতার নাম",
+      value: "Shah Sufi Md Shahidulla Kutial",
+      valueBn: "শাহ সূফী মোঃ শহিদুল্লাহ কুটিয়াল",
+    },
+    {
+      label: "Mother's Name",
+      labelBn: "মাতার নাম",
+      value: "Arjina Begum",
+      valueBn: "আর্জিনা বেগম",
+    },
+    {
+      label: "Date of Birth",
+      labelBn: "জন্ম তারিখ",
+      value: "05 July 2008",
+      valueBn: "০৫ জুলাই ২০০৮",
+    },
+  ],
+  address: {
+    en: [
+      "Village: Koikuri, Balakandi.",
+      "Post office: Forkerhat,",
+      "Ward: 6, Omar Majid,",
+      "Upazila: Rajarhat,",
+      "District: Kurigram,",
+      "Division: Rangpur.",
+    ],
+    bn: [
+      "গ্রাম: কৈকুড়ী, বালাকান্দি,",
+      "ডাকঘর: ফরকেরহাট,",
+      "ওয়ার্ড: ৬, ওমর মজিদ,",
+      "উপজেলা: রাজারহাট,",
+      "জেলা: কুড়িগ্রাম,",
+      "বিভাগ: রংপুর।",
+    ],
+  },
+};
 
 const Info = () => {
   const [password, setPassword] = useState("");
@@ -133,7 +181,8 @@ const Info = () => {
     );
   }
 
-  const { infoData, address } = data;
+  const activeData = selectedTile === 2 ? TILE_2_DATA : data;
+  const { infoData, address } = activeData;
 
   // Unlocked state: Show 4 square buttons/tiles if no tile is selected
   if (selectedTile === null) {
@@ -220,15 +269,17 @@ const Info = () => {
                         item.selectable ? "select-text" : ""
                       }`}
                     >
-                      {item.value}
+                      {item.value ?? "—"}
                     </div>
-                    <div
-                      className={`text-base font-bangla text-slate-600 dark:text-slate-300 mt-1 ${
-                        item.selectable ? "select-text" : ""
-                      }`}
-                    >
-                      {item.valueBn}
-                    </div>
+                    {item.valueBn && (
+                      <div
+                        className={`text-base font-bangla text-slate-600 dark:text-slate-300 mt-1 ${
+                          item.selectable ? "select-text" : ""
+                        }`}
+                      >
+                        {item.valueBn}
+                      </div>
+                    )}
                   </td>
                 </tr>
               ))}
