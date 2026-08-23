@@ -2,15 +2,8 @@ import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route } from "react-router-dom";
-import Index from "./pages/Index";
+import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Info from "./pages/Info";
-import Book from "./pages/Book";
-import Quran from "./pages/Quran";
-import Medic from "./pages/Medic";
-import Secret from "./pages/Secret";
-import Law from "./pages/Law";
-import News from "./pages/News";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -22,15 +15,9 @@ const App = () => (
       <Sonner />
       <BrowserRouter>
         <Routes>
-          <Route path="/" element={<Index />} />
+          <Route path="/" element={<Info />} />
           <Route path="/INFO" element={<Info />} />
-          <Route path="/book" element={<Book />} />
-          <Route path="/quran" element={<Quran />} />
-          <Route path="/medic" element={<Medic />} />
-          <Route path="/secret" element={<Secret />} />
-          <Route path="/law" element={<Law />} />
-          <Route path="/news" element={<News />} />
-          <Route path="*" element={<NotFound />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>
       </BrowserRouter>
     </TooltipProvider>
