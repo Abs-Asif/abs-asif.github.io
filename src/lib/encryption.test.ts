@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import { encryptWithPassword, decryptWithPassword } from "./encryption";
 
-describe("Multi-level Password Encryption", () => {
+describe("AES-256-GCM + PBKDF2 Password Encryption", () => {
   const password = "@Abs21221150057";
   const sampleData = JSON.stringify({
     infoData: [
@@ -13,26 +13,26 @@ describe("Multi-level Password Encryption", () => {
     }
   });
 
-  it("successfully encrypts and decrypts with correct password", () => {
-    const cipher = encryptWithPassword(sampleData, password);
+  it("successfully encrypts and decrypts with correct password", async () => {
+    const cipher = await encryptWithPassword(sampleData, password);
     expect(cipher).not.toBe("");
     expect(cipher).not.toContain("Abdullah");
 
-    const decrypted = decryptWithPassword(cipher, password);
+    const decrypted = await decryptWithPassword(cipher, password);
     expect(decrypted).toBe(sampleData);
     expect(JSON.parse(decrypted).infoData[0].value).toBe("Md. Abdullah Bari");
   });
 
-  it("fails decryption when incorrect password is provided", () => {
-    const cipher = encryptWithPassword(sampleData, password);
-    const decrypted = decryptWithPassword(cipher, "wrong_password_123");
+  it("fails decryption when incorrect password is provided", async () => {
+    const cipher = await encryptWithPassword(sampleData, password);
+    const decrypted = await decryptWithPassword(cipher, "wrong_password_123");
     expect(decrypted).toBe("");
   });
 
-  it("returns empty string for empty inputs", () => {
-    expect(encryptWithPassword("", password)).toBe("");
-    expect(encryptWithPassword(sampleData, "")).toBe("");
-    expect(decryptWithPassword("", password)).toBe("");
-    expect(decryptWithPassword("invalid_cipher", password)).toBe("");
+  it("returns empty string for empty inputs", async () => {
+    expect(await encryptWithPassword("", password)).toBe("");
+    expect(await encryptWithPassword(sampleData, "")).toBe("");
+    expect(await decryptWithPassword("", password)).toBe("");
+    expect(await decryptWithPassword("invalid_cipher", password)).toBe("");
   });
 });
