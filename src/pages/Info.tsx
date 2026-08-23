@@ -40,20 +40,20 @@ const TILE_2_DATA: DecryptedData = {
       label: "Name",
       labelBn: "নাম",
       value: "Miss Musbihatul Jannat",
-      valueBn: "মিস মুসবিহাতুল জান্নাত",
+      valueBn: "মোছা: মুসবিহাতুল জান্নাত",
       selectable: true,
     },
     {
       label: "Father's Name",
       labelBn: "পিতার নাম",
       value: "Shah Sufi Md Shahidulla Kutial",
-      valueBn: "শাহ সূফী মোঃ শহিদুল্লাহ কুটিয়াল",
+      valueBn: "শাহ সুফি মোঃ শহিদুল্লাহ কুটিয়াল",
     },
     {
       label: "Mother's Name",
       labelBn: "মাতার নাম",
       value: "Arjina Begum",
-      valueBn: "আর্জিনা বেগম",
+      valueBn: "আরজিনা বেগম",
     },
     {
       label: "Date of Birth",
