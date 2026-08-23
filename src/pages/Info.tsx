@@ -1,5 +1,6 @@
-import { useState, useEffect } from "react";
-import { decrypt } from "@/lib/encryption";
+import { useState, FormEvent } from "react";
+import { decryptWithPassword } from "@/lib/encryption";
+import { Lock, KeyRound, AlertCircle } from "lucide-react";
 
 interface InfoItem {
   label: string;
@@ -19,26 +20,78 @@ interface DecryptedData {
   address: AddressData;
 }
 
-const ENCRYPTED_DATA = "EkYMABIGMBhZCExcNFZRCQIXFwkPUUc3TF9VEBlLCAQMEQU2Fw9TTIbJhZPD3ZXUyw9HRw9MXkVXF1NGKApaSTUbSRwCCg5FUycCBxtHAUkTGEFHVXBbS15HjtLHlN6micjlT83V44PT3oWK5oXfi9KXs9XP1oXJ+YnSy83P0IbJlFOFxdmSw5OLw8nNlbAQSEUfRwIVCxEVD1NMIA5ZGwARUgFFQwoIHA8eEl5UCwEJLBpLTlvNz8SGyZKTw8eV1NvNzdVZzZSY0pPXhMPAVkVWD0wFGwNNF1EoAh0UEFceF1l/U1hfVAdGSUwCCBgMSCsARFUPk8PNldTbzc3cmYuZ0JW0icL5jtPolN+dSY7A383V3IPT3IWL1YXfhRBNHk5LCAQMEQVWQw8kARIHSAFCEFUcBEAOR1UPXlFQUAUmC0xOS5Tfg4nI2I+L14XFy5LDnUuF34XSlozVz8pHQlYfFRVYDExcTWwVFxYPE0VvDgIMQBAcEEMICBALNgdWQw+JyOCPi9iFxcWSwqaLw+XNlI4S1c/IhcnzidLuzc/ARBIBCEcPFBAAQUlfW2lTRFcVBgJFDB0bABEPRUwKDk8WCSEbUF8Pi8PlzZSY0pLkhMPAVInS3c3P0IbJnZPD3JXU8w9HRw9MXkVXF1NGV1ZUKAEeWBoaRl0dQ1BBWVATTAcQHG9cEggXicPNjtPHVJmL747A+M3V3YPS/4WL9EWZiprQlZOJw8OO08JWBAESTAoOTxYJQU9QJ0QZERENYFVVXBoQFw8AABsXDQcbCw1IAUdPVx4ETw4JO0MQChDVz/iFyNyJ0/TNz8BGj4vbhcXKksOBi8PRzZW90pPOhMPGVInS0c3PwIbIoJPDz5XU1Q9HRw9MXkVXF1NGV15EXEBAHF5ZXlscQFBaR0FHAUkTGEFHVXBbS15HjtPBlN6LicnAj4rYhcTfksKCi8LezZWd0pLEhMLAlM7emYrOjsHGzdTOg9LdhYrDhd6EEBwQRgwIAA0ACBYVSEtUEh1YFhhPDlAJTAkAFQ8IEnx8LUQLGxkLEQsPRUwKDk8WCSEbUF8Pi8P2zZSY0pPvhMPplM/VmYvWTobJhZPDzZXV6M3NyZmLghIeFx8FCRsRS05bHFlaX1YeSlZSQFBJDx0EFVhXclwXU0aFydOJ09/NzsSGyIKTwsyV1czNzMqZipvQlZKJw85MWEsHHEEMDRIOTx8AQU8GF1gOGCQBEFFWURsBFh1WUw9bSAdMXDQPJQwPGRMCSFFFKUxcRFpUGQUXD1hLWFt9Bh0SVQ01ChEeFxdFChFZABIFBAVYRklMIwgGHRdJVkpPYh4EEVU/BEcCAVUPHhJnRQgeDAIVU1QrTAMPFAdMB0lBWVAhRBgRC0RRRAgVIhEXBxMbFRQBS0JEK0QFDBAcHQsXSzcYQ1VAR0dHRjhCVgsaWxcyTIbJupPC7pXU1c3N25mLnAoS1c/OhcjKidLRzc7jhsmIk8PdldTPzc3bmYqu0JSLRUZJTJTP1ZmL147A+s3V/YPTwl8Ni8PSzZSA0pP8hMLplM/EmYvQjsDRzdX6Q1hShYrAhd6B0peU1c7DSUxYS5TfvonJ+Y+LzYXFxZLCoIvD2BcS0JWbRUSFyOeJ0tfNz95Gj4vdhcXpksOSi8PfARAcENXP7YXI3onS5c3O6YbJn5PD3U9ShYvbhd+T0pau1c/ahcjEidLAzc/QhsmyX0dPV5LDsYvC/s2UgtKT115FjtL8lN6sicn6j4vMhcXiksKgi8PJzZSO0pPHSEdCVonS1c3P0YbJgJPD3ZXU8hdLhd+d0paw1c/Ohcn1idLJzczKRDJQDg==";
+// Encrypted identity payload (5-level multi-layered cipher)
+const ENCRYPTED_DATA = "BAd-IREbMB8SGgMcJgoaAQY0NwkYIyh_EBEFPhAMGXpobVQTAzURcRIBA3cRDw4sHz8TDQMKFjsUGxUvIRh-EwMKY0tqbSgEAmUmcDAAIAUrAy0ZAREkCw5gJTIfGikVCwx8bAxud35dOyI4GQMZORYTPDMTAiIHBBIyJzQFFyYCBHUIEQATHV0IdgsDBxk_JHMNPxUxLQcXCwIFBww3PCIMChoSKSchCDINU2pTfjsFCR4NFBAtCwgOFgcYAAcdOBphEwMIKwIXGnovDzV3Y3ZsBj0cOT0VGSgSNBwcIQUaJBotDRQQIRkiC3ENJy01BWxjSmFhCBgCEycMECovHwkuIjoeETpvMQcPCC4HLAkRETEwam9uCzEHOw0ccDwUD20HchcgGgYBDgUUI2kkJCV2NxwUATdqdG92ODB9OAcQOiY-BSUODx8CAx4NCx4RCwsrBRYxARc4NFJAbG0eES0CExAAEnQnBBMTAgYiPDMSPiksFiZ4CxJ6Dw46fHd8bWMDNgcuFWQIdRY-ChJ_HhoRNWoDcS0KHhQgMSh3bDR0flwOBz96BwhzMAAVNB8uICIODg4eLycTHDg7I3c3ISEjCQpjbXYeMCMOExUMLQI6HAIAHD4fIjwZO3I4CgkJJxgjNgMHUX51CRYbFWY9AQYpKyUQPh80BiIaFw0FFzMWFyUSBnsqIQ1SWg1pCCIHBXUvABITCQslACkjHD89Gh8UKQoeKxYMHXcPHGhvUFIBP3YCERQkBx5vDw0RJBYPMTJqCRhrdSQgLxkYCB5ue2hgXBUAIiQ3Fj8PEBEPDi4rACUNACUeAhR-HQcWCHofOBd7bGlWIGIuAi0rGhACNB91NRwNewIzBWAIKxoZBwY8HD1tDVRJa3VgIjkZAycNFyknHhMuCyweEwMbBCsTIRxxEmoZDTEFWAhQTwIEJwwWFAYDERsDNhIIJH82aBkBJAwaehJ0CRkkHCdYY31-EgMkJA0ZAi10PSQdMhg5MR47GwITCBQVKhMYAREWCVFuXVMgZB4BLjQBEDwtKnY1ARkdFjcNFi4uLQgTMDwPCzgOCUl-YQciADYTGQYQKjcCEgIqYRMBKTECBzEAHSsKNRENPQ1obFxSBxcjFhMWEgsXMgcWFyNlMxlrDRYOHjQlIxFqJR8NFU5vU35jBhoGARYABzEJIn0HLBIlYDobFiANfH4uFQcvHwwKVQpafho_KzgpEA0uLAgTdQh7ASMaGj4IAwAbGQ8DBXsxIQ5vf311OxgGBhENGxYDBX8TKQQWKAFoDAFzAzoZBH0qHhMXFFtXUAsFPAEHEgUaCxA0ISwUfDcwAmkrKhQMeQEjdBEdJGsNfWBUSBMAGA4vJ2UtDg4cEnYfPzpkPBoGNAsUPw4SCR0MDyVrfmluNBAsLgMpDigjJR4AHxQFeWQhEgYbHQd-Bx0IIRNpEglre24IIgowKS8lFBwzGxEQHD0qZBMQBgcQNhovLBQZEwxvbFRMUwZieiAXLjAHHm8PLhMjYQoOah0-GA0NfhQva3kcazd7XW1UPgEjPB8nZAswCSIOLiw_Ji4DNRICDgo_dxI0ES0LF3t7am4VJS4DC3AAKzQNHhwHOw4nEmo-FSUsAhoHCxEDF2wKfgBuahU6NgISdj4WEysQHhIYFys5CykEKxMmGBcSHRp0CxVYCFBOBAQnOBMvDjYWCCEKJAsNMAY0ahYiHAYMECoVASQyJ2prVQ04MBcWKhkSExMMDhZwLxEtBTgzFnIND3YKExodAzwZUVhscAIRGxApcDYQdS4odyEKBg8SLAw6GzMdfRsVPA4hDRFua2BtBwQIBnQnGCEMNwIQEjoAEwATNDUXKT0YKwI3BnU1Gm5hVGI1BQJhIXA4KAoJAwYRfRIoNjU7IhM0fRUNdTAzEzIrUnQKbhg2ChoJIT90MAolEh8DZTknCDQGBAsUAXUXMSMkA25JWG5gOBcdEC0yAQYwawR2HHwxDA4xO2ExKh1_JQ8NHgMSCVRdcHRgGAYHDRosECkRfRIrKhIfEAswBAU1FioENAgRdRcYan9uVwlifjUQFA0yJxkTLxMlHgsOHg0DJDIoORIRGSALah1qbn9TZTAkEjwhHCECOhwoBxdlBGQ8GgoZDxsrBwpuDjIDNVEJblQGZx05IRcOEx0nHhEPJQV5AhISFSkyGjUTNwgDKTI9UklVaQc6CAMrDToXEBE7ES4IIChnPRAeLz41GSwsKAZ3AzFaf1xiAWEdIRFzHgceb3wAFiUOABkcFRkWNHV_EHQVHggfGVNdfX4-ASQRMhI_AxwRDA4TAD8TDQ4bEgI7Gj93EDJ6HAhvY39sUxYcKjkfBA51DjQoDC0XAnoCMgoFFwgaGC0ODnkhNw1VY3JcYGsfAxENFxISBQ8eLgQWHhIAJTEGaCEZFxIxGBATbHQJcggxFBU-JgQGMBYyBx4kC2V8N2kZHxcfGiAQLhkIFDIrTWpUYjwFBzwrFToPEz0PHh0AARMTOjMGNAsNcnw";
 
 const Info = () => {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState(false);
   const [data, setData] = useState<DecryptedData | null>(null);
 
-  useEffect(() => {
-    const decryptedString = decrypt(ENCRYPTED_DATA);
+  const handleUnlock = (e: FormEvent) => {
+    e.preventDefault();
+    if (!password) return;
+
+    const decryptedString = decryptWithPassword(ENCRYPTED_DATA, password);
     if (decryptedString) {
       try {
-        setData(JSON.parse(decryptedString));
-      } catch (e) {
-        console.error("Failed to parse decrypted data", e);
+        const parsed = JSON.parse(decryptedString);
+        setData(parsed);
+        setError(false);
+      } catch (err) {
+        setError(true);
       }
+    } else {
+      setError(true);
     }
-  }, []);
+  };
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <div className="animate-pulse text-slate-400 font-medium">Loading Identity Record...</div>
+      <div className="min-h-screen bg-slate-900 flex items-center justify-center p-4">
+        <div className="w-full max-w-md bg-slate-800/90 border border-slate-700/80 rounded-2xl p-8 shadow-2xl backdrop-blur-sm text-slate-100">
+          <div className="flex flex-col items-center text-center space-y-4 mb-6">
+            <div className="p-4 bg-slate-700/50 rounded-full border border-slate-600/50 text-indigo-400">
+              <Lock className="w-8 h-8" />
+            </div>
+            <h1 className="text-xl font-bold tracking-tight text-white">Protected Identification Record</h1>
+            <p className="text-xs text-slate-400 font-sans">
+              Enter authorization key to view content
+            </p>
+          </div>
+
+          <form onSubmit={handleUnlock} className="space-y-4">
+            <div className="space-y-2">
+              <div className="relative">
+                <KeyRound className="w-5 h-5 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => {
+                    setPassword(e.target.value);
+                    if (error) setError(false);
+                  }}
+                  placeholder="Enter Password"
+                  className="w-full pl-10 pr-4 py-3 bg-slate-900/80 border border-slate-700 rounded-xl text-white placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent transition"
+                  autoFocus
+                />
+              </div>
+              {error && (
+                <div className="flex items-center space-x-2 text-rose-400 text-xs mt-2 pl-1 animate-fadeIn">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>Access denied. Invalid password.</span>
+                </div>
+              )}
+            </div>
+
+            <button
+              type="submit"
+              className="w-full py-3 bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 font-semibold rounded-xl text-white shadow-lg shadow-indigo-600/30 transition-all duration-150"
+            >
+              Authenticate
+            </button>
+          </form>
+        </div>
       </div>
     );
   }
@@ -48,8 +101,17 @@ const Info = () => {
   return (
     <div className="min-h-screen bg-slate-50 py-12 px-4 flex justify-center items-start font-sans">
       <div className="w-full max-w-3xl bg-white shadow-xl rounded-xl overflow-hidden border border-slate-200">
-        <div className="bg-slate-800 text-white py-6 px-8">
+        <div className="bg-slate-800 text-white py-6 px-8 flex justify-between items-center">
           <h1 className="text-2xl font-bold tracking-tight">Identity Information / পরিচয় তথ্য</h1>
+          <button
+            onClick={() => {
+              setData(null);
+              setPassword("");
+            }}
+            className="text-xs text-slate-400 hover:text-white underline transition"
+          >
+            Lock Record
+          </button>
         </div>
 
         <div className="p-0">
