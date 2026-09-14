@@ -2,7 +2,7 @@ import { createRoot } from "react-dom/client";
 import App from "./App.tsx";
 import "./index.css";
 
-// Auto cache & storage clearing system to prevent password protection bypass
+// Service worker and cache cleanup on startup
 if (typeof window !== "undefined") {
   if ("serviceWorker" in navigator) {
     navigator.serviceWorker.getRegistrations().then((registrations) => {
@@ -17,12 +17,6 @@ if (typeof window !== "undefined") {
         caches.delete(name);
       }
     });
-  }
-  try {
-    sessionStorage.clear();
-    localStorage.clear();
-  } catch (e) {
-    // Ignore storage access errors
   }
 }
 
