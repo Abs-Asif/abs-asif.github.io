@@ -19,7 +19,7 @@ jobs:
           cache: 'npm'
 
       - name: Install dependencies
-        run: npm install
+        run: npm install --legacy-peer-deps
 
       - name: Build
         run: npm run build
@@ -31,6 +31,9 @@ jobs:
 
           # Netlify _redirects for MPA 404
           echo '/* /404.html 404' > dist/_redirects
+
+          # GitHub Pages SPA 404 fallback
+          cp dist/index.html dist/404.html
 
       - name: Create package
         run: |
