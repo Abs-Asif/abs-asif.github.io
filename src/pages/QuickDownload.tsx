@@ -4,7 +4,7 @@ import { toast } from 'sonner';
 import { censorText } from '@/lib/censor';
 import { loadTypographySettings } from '@/lib/settings';
 import { generatePhotoCardInternal, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/renderer';
-import { formatSitemapTime, BGArchiveItem } from '@/lib/api';
+import { formatSitemapTime, BGArchiveItem, BG_API_ARCHIVE_URL } from '@/lib/api';
 
 interface QuickDownloadProps {
   contentId: string;
@@ -34,7 +34,7 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
         }
 
         // 1. Fetch metadata
-        const response = await fetch("https://backoffice.daily-bangladesh.com/api-en/archive", {
+        const response = await fetch(BG_API_ARCHIVE_URL, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ start_date: "", end_date: "", category_name: "", limit: 50, offset: 0 })
@@ -49,7 +49,7 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
 
         if (article) {
           title = article.ContentHeading;
-          imageUrl = `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
+          imageUrl = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
           articleUrl = `https://www.daily-bangladesh.com/${article.Slug}/${article.ContentID}`;
         } else {
           throw new Error("Article not found in recent archive.");
