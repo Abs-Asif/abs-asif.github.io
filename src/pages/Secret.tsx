@@ -13,8 +13,19 @@ const Secret = () => {
   const mainRef = useRef<HTMLElement>(null);
 
   const searchParams = new URLSearchParams(window.location.search);
-  const quickId = searchParams.get(''); // Handle ?=45310 where key is empty
-  const isQuickDownload = !!quickId && /^\d+$/.test(quickId);
+  const emptyQueryKey = searchParams.get(''); // Handle ?=45310 or ?45310
+  const idQueryParam = searchParams.get('id'); // Handle ?id=45310
+  const pathId = window.location.pathname.replace(/^\//, ''); // Handle /45310
+
+  const quickId = /^\d+$/.test(pathId)
+    ? pathId
+    : (emptyQueryKey && /^\d+$/.test(emptyQueryKey))
+    ? emptyQueryKey
+    : (idQueryParam && /^\d+$/.test(idQueryParam))
+    ? idQueryParam
+    : null;
+
+  const isQuickDownload = !!quickId;
 
   useEffect(() => {
     const updateTheme = () => {
