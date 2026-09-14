@@ -40,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
       {/* Mobile Header - Always Black as requested */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-20 bg-black border-b border-zinc-800 flex items-center justify-between px-6 z-50">
         <div className="flex items-center">
-          <img src="/logo.png" alt="Logo" className="h-12 object-contain" />
+          <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 object-contain" />
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-white hover:bg-white/10">
           {isOpen ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
@@ -61,7 +61,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-8 hidden lg:flex items-center justify-center xl:justify-start">
-          <img src="/logo.png" alt="Logo" className="h-12 xl:h-14 object-contain" />
+          <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 xl:h-14 object-contain" />
         </div>
 
         <nav className="flex-1 px-4 space-y-3 mt-24 lg:mt-6">

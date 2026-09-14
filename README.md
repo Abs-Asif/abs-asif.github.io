@@ -1,12 +1,12 @@
-# Bangladesh Guardian Photocard Automation
+# Daily Bangladesh Photocard Automation
 
-A professional, high-performance web application designed for social media managers of **Bangladesh Guardian**. This tool automates the creation of news photocards by fetching content directly from the website's backoffice API or sitemaps, applying text moderation, and rendering high-quality PNGs via HTML5 Canvas.
+A professional, high-performance web application designed for social media managers of **Daily Bangladesh**. This tool automates the creation of news photocards by fetching content directly from the website's backoffice API or sitemaps, applying text moderation, and rendering high-quality PNGs via HTML5 Canvas.
 
 ---
 
 ## 🚀 1. Overview
 
-The **Bangladesh Guardian Photocard Automation** is a specialized tool that streamlines the workflow of posting news to social media. It features an "Autopilot" engine that monitors the website for new articles and generates ready-to-share photocards instantly.
+The **Daily Bangladesh Photocard Automation** is a specialized tool that streamlines the workflow of posting news to social media. It features an "Autopilot" engine that monitors the website for new articles and generates ready-to-share photocards instantly.
 
 ### Key Features:
 - **Autopilot Engine:** Scans the news archive every 1-3 minutes and generates photocards in the background.
@@ -45,7 +45,7 @@ The **Bangladesh Guardian Photocard Automation** is a specialized tool that stre
 
 ## 🔗 3. Backoffice API & Scraper Integration
 
-The application integrates with the **Bangladesh Guardian Backoffice** to fetch the latest news articles.
+The application integrates with the **Daily Bangladesh Backoffice** to fetch the latest news articles.
 
 ### **The Archive API**
 - **Endpoint:** `https://backoffice.daily-bangladesh.com/api-en/archive`
@@ -169,7 +169,7 @@ Example: `https://bg-photocard.vercel.app/45310`
 
 ### **Workflow:**
 1. **Detection:** The app identifies the numeric ID from the path.
-2. **Authorization Bypass:** This specific route does not require the access key.
+2. **Authorization Bypass:** This specific route does not require any key.
 3. **Fetch & Render:** Automatically fetches the article metadata and renders the photocard using current settings.
 4. **Instant Download:** Triggers the browser download for the PNG file.
 5. **Auto-Exit:** The tab attempts to close or go back once the process is complete.

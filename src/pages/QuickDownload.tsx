@@ -110,7 +110,7 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
       <div className="w-full max-w-md space-y-8 bg-card/50 backdrop-blur-xl p-8 rounded-3xl border border-border shadow-2xl text-center">
         <div className="flex flex-col items-center space-y-6">
           <div className="p-4 bg-black rounded-2xl">
-            <img src="/logo.png" alt="BG Logo" className="h-12 object-contain" />
+            <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 object-contain" />
           </div>
 
           <div className="space-y-4">
