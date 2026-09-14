@@ -1,4 +1,6 @@
 import type { Config } from "tailwindcss";
+import tailwindAnimate from "tailwindcss-animate";
+import typography from "@tailwindcss/typography";
 
 export default {
   darkMode: ["class"],
@@ -17,7 +19,7 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['"Google Sans"', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['JetBrains Mono', 'monospace'],
       },
       colors: {
@@ -59,24 +61,11 @@ export default {
           2: "hsl(var(--surface-2))",
           3: "hsl(var(--surface-3))",
         },
-        m3: {
-          primary: "hsl(var(--m3-primary))",
-          "primary-container": "hsl(var(--m3-primary-container))",
-          "on-primary-container": "hsl(var(--m3-on-primary-container))",
-          secondary: "hsl(var(--m3-secondary))",
-          "secondary-container": "hsl(var(--m3-secondary-container))",
-          "on-secondary-container": "hsl(var(--m3-on-secondary-container))",
-          tertiary: "hsl(var(--m3-tertiary))",
-          "tertiary-container": "hsl(var(--m3-tertiary-container))",
-          "on-tertiary-container": "hsl(var(--m3-on-tertiary-container))",
-        }
       },
       borderRadius: {
         lg: "var(--radius)",
         md: "calc(var(--radius) - 2px)",
         sm: "calc(var(--radius) - 4px)",
-        '3xl': '1.5rem',
-        '4xl': '2rem',
       },
       keyframes: {
         "accordion-down": {
@@ -87,18 +76,12 @@ export default {
           from: { height: "var(--radix-accordion-content-height)" },
           to: { height: "0" },
         },
-        "mesh-gradient": {
-          "0%": { "background-position": "0% 50%" },
-          "50%": { "background-position": "100% 50%" },
-          "100%": { "background-position": "0% 50%" },
-        },
       },
       animation: {
         "accordion-down": "accordion-down 0.2s ease-out",
         "accordion-up": "accordion-up 0.2s ease-out",
-        "mesh": "mesh-gradient 15s ease infinite",
       },
     },
   },
-  plugins: [require("tailwindcss-animate")],
+  plugins: [tailwindAnimate, typography],
 } satisfies Config;
