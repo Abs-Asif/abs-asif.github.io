@@ -18,6 +18,7 @@ import {
 } from "@/lib/db";
 import {
   BGArchiveItem,
+  BG_API_ARCHIVE_URL,
   getMetadata,
   getRelativeDateStr,
   formatSitemapTime,
@@ -243,7 +244,7 @@ const Home = () => {
     setIsFetching(true);
     try {
       const contentId = trimmedUrl.split('/').pop();
-      const response = await fetch("https://backoffice.daily-bangladesh.com/api-en/archive", {
+      const response = await fetch(BG_API_ARCHIVE_URL, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ start_date: "", end_date: "", category_name: "", limit: 50, offset: 0 })
       });
@@ -251,7 +252,8 @@ const Home = () => {
       const article = (data.archive_data || []).find((item: BGArchiveItem) => String(item.ContentID) === contentId);
       let eTitle = '', eImage = '', postTime = '';
       if (article) {
-        eTitle = article.ContentHeading; eImage = `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
+        eTitle = article.ContentHeading;
+        eImage = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
         postTime = article.create_date ? formatSitemapTime(article.create_date) : '';
       } else {
         const meta = await getMetadata(trimmedUrl);

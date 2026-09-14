@@ -6,6 +6,9 @@ export interface BGArchiveItem {
   create_date?: string;
 }
 
+export const BG_API_ARCHIVE_URL = "https://backoffice.daily-bangladesh.com/api/archive";
+export const BG_SITEMAP_URL = "https://www.daily-bangladesh.com/news-sitemap.xml";
+
 export const fetchWithTimeout = async (url: string, options: RequestInit = {}, timeout = 8000) => {
   const controller = new AbortController();
   const id = setTimeout(() => controller.abort(), timeout);
@@ -21,9 +24,11 @@ export const fetchWithTimeout = async (url: string, options: RequestInit = {}, t
 
 export const fetchImageWithProxy = async (url: string, forceProxy: boolean = false): Promise<string> => {
   const proxies = [
-    (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
     (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
     (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+    (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`,
+    (u: string) => `https://cors-anywhere.herokuapp.com/${u}`
   ];
   if (!forceProxy) {
     try {
@@ -58,8 +63,9 @@ export const getMetadata = async (targetUrl: string, forceProxy: boolean = false
     const proxies = [
       { url: (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`, type: 'text' },
       { url: (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`, type: 'text' },
-      { url: (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, type: 'json' },
-      { url: (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`, type: 'text' }
+      { url: (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`, type: 'text' },
+      { url: (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`, type: 'text' },
+      { url: (u: string) => `https://api.allorigins.win/get?url=${encodeURIComponent(u)}`, type: 'json' }
     ];
     for (const proxy of proxies) {
       try {
@@ -92,6 +98,7 @@ export const getRelativeDateStr = (date: Date) => {
 export const formatSitemapTime = (isoStr: string) => {
   try {
     const date = new Date(isoStr);
+    if (isNaN(date.getTime())) return isoStr;
     const h = date.getHours(), m = date.getMinutes().toString().padStart(2, '0'), ampm = h >= 12 ? 'PM' : 'AM';
     return `[${h%12||12}:${m} ${ampm}] [${getRelativeDateStr(date)}]`;
   } catch (e) { return ''; }
@@ -99,26 +106,107 @@ export const formatSitemapTime = (isoStr: string) => {
 
 export const scrapeLatestLinks = async (fetchLimit: number = 3) => {
   try {
-    const response = await fetch("https://backoffice.daily-bangladesh.com/api-en/archive", {
+    const response = await fetch(BG_API_ARCHIVE_URL, {
       method: "POST", headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ start_date: "", end_date: "", category_name: "", limit: fetchLimit, offset: 0 })
     });
+    if (!response.ok) throw new Error("API connection failed");
     const data = await response.json();
     return (data.archive_data || []).map((item: BGArchiveItem) => ({
       url: `https://www.daily-bangladesh.com/${item.Slug}/${item.ContentID}`,
-      title: item.ContentHeading, image: `https://backoffice.daily-bangladesh.com/media/imgAll/${item.ImageBgPath}`,
-      postTime: item.create_date ? formatSitemapTime(item.create_date) : '', contentId: item.ContentID
+      title: item.ContentHeading,
+      image: item.ImageBgPath.startsWith('http') ? item.ImageBgPath : `https://backoffice.daily-bangladesh.com/media/imgAll/${item.ImageBgPath}`,
+      postTime: item.create_date ? formatSitemapTime(item.create_date) : '',
+      contentId: item.ContentID
     }));
   } catch (e) { return null; }
 };
 
+export const parseSitemapXml = (xmlText: string) => {
+  const items: Array<{ url: string; title: string; image: string; postTime: string; contentId: number }> = [];
+
+  try {
+    if (typeof DOMParser !== 'undefined') {
+      const xmlDoc = new DOMParser().parseFromString(xmlText, "text/xml");
+      const urlNodes = Array.from(xmlDoc.getElementsByTagName("url"));
+      for (const node of urlNodes) {
+        const loc = (
+          node.getElementsByTagName("loc")[0]?.textContent ||
+          node.getElementsByTagNameNS("*", "loc")[0]?.textContent ||
+          ""
+        ).trim();
+
+        const title = (
+          node.getElementsByTagName("news:title")[0]?.textContent ||
+          node.getElementsByTagName("title")[0]?.textContent ||
+          node.getElementsByTagName("image:title")[0]?.textContent ||
+          node.getElementsByTagNameNS("*", "title")[0]?.textContent ||
+          ""
+        ).trim();
+
+        const image = (
+          node.getElementsByTagName("image:loc")[0]?.textContent ||
+          node.getElementsByTagNameNS("*", "loc")[1]?.textContent ||
+          ""
+        ).trim();
+
+        const rawDate = (
+          node.getElementsByTagName("news:publication_date")[0]?.textContent ||
+          node.getElementsByTagName("lastmod")[0]?.textContent ||
+          node.getElementsByTagNameNS("*", "publication_date")[0]?.textContent ||
+          ""
+        ).trim();
+
+        if (loc) {
+          const contentId = parseInt(loc.replace(/\/$/, '').split('/').pop() || '0', 10);
+          items.push({
+            url: loc,
+            title,
+            image,
+            postTime: rawDate ? formatSitemapTime(rawDate) : '',
+            contentId
+          });
+        }
+      }
+    }
+  } catch (e) {
+    // Fallback
+  }
+
+  if (items.length === 0) {
+    const urlBlocks = xmlText.split(/<url>/i).slice(1);
+    for (const block of urlBlocks) {
+      const locMatch = block.match(/<loc>(.*?)<\/loc>/i);
+      const titleMatch = block.match(/<news:title>(.*?)<\/news:title>/i) || block.match(/<title>(.*?)<\/title>/i) || block.match(/<image:title>(.*?)<\/image:title>/i);
+      const imageMatch = block.match(/<image:loc>(.*?)<\/image:loc>/i);
+      const dateMatch = block.match(/<news:publication_date>(.*?)<\/news:publication_date>/i) || block.match(/<lastmod>(.*?)<\/lastmod>/i);
+
+      const loc = locMatch ? locMatch[1].trim() : '';
+      const title = titleMatch ? titleMatch[1].trim() : '';
+      const image = imageMatch ? imageMatch[1].trim() : '';
+      const rawDate = dateMatch ? dateMatch[1].trim() : '';
+
+      if (loc) {
+        const contentId = parseInt(loc.replace(/\/$/, '').split('/').pop() || '0', 10);
+        items.push({
+          url: loc,
+          title,
+          image,
+          postTime: rawDate ? formatSitemapTime(rawDate) : '',
+          contentId
+        });
+      }
+    }
+  }
+
+  return items.filter(i => i.url);
+};
+
 export const scrapeSitemapLinks = async () => {
-  const now = new Date();
-  const sitemapUrl = `https://www.daily-bangladesh.com/english-sitemap/sitemap-daily-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}.xml`;
   try {
     let xmlText = '';
     try {
-      const res = await fetch(sitemapUrl);
+      const res = await fetchWithTimeout(BG_SITEMAP_URL, {}, 8000);
       if (res.ok) xmlText = await res.text();
     } catch (e) {
       // Ignored
@@ -129,27 +217,37 @@ export const scrapeSitemapLinks = async () => {
         (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
         (u: string) => `https://api.codetabs.com/v1/proxy/?quest=${encodeURIComponent(u)}`,
         (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+        (u: string) => `https://thingproxy.freeboard.io/fetch/${u}`,
+        (u: string) => `https://cors-anywhere.herokuapp.com/${u}`
       ];
       for (const p of proxies) {
         try {
-          const res = await fetchWithTimeout(p(sitemapUrl));
-          if (res.ok) { xmlText = await res.text(); break; }
+          const res = await fetchWithTimeout(p(BG_SITEMAP_URL), {}, 8000);
+          if (res.ok) {
+            xmlText = await res.text();
+            if (xmlText && xmlText.includes('<url>')) break;
+          }
         } catch (e) {
           // Ignored
         }
       }
     }
 
+    if (!xmlText) {
+      try {
+        const res = await fetchWithTimeout(`https://api.allorigins.win/get?url=${encodeURIComponent(BG_SITEMAP_URL)}`, {}, 8000);
+        if (res.ok) {
+          const json = await res.json();
+          xmlText = json.contents || '';
+        }
+      } catch (e) {
+        // Ignored
+      }
+    }
+
     if (!xmlText) return null;
 
-    const xmlDoc = new DOMParser().parseFromString(xmlText, "text/xml");
-    return Array.from(xmlDoc.getElementsByTagName("url")).map(node => {
-      const loc = node.getElementsByTagName("loc")[0]?.textContent || '';
-      return {
-        url: loc.trim(), title: '', image: node.getElementsByTagName("image:loc")[0]?.textContent || '',
-        postTime: node.getElementsByTagName("lastmod")[0]?.textContent ? formatSitemapTime(node.getElementsByTagName("lastmod")[0].textContent!) : '',
-        contentId: parseInt(loc.replace(/\/$/, '').split('/').pop() || '0')
-      };
-    }).filter(i => i.url && i.image).reverse();
+    const items = parseSitemapXml(xmlText);
+    return items.length > 0 ? items : null;
   } catch (e) { return null; }
 };
