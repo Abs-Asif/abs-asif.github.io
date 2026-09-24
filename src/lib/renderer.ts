@@ -4,7 +4,7 @@ import { fetchImageWithProxy } from "./api";
 
 export const CANVAS_WIDTH = 2048;
 export const CANVAS_HEIGHT = 2048;
-export const BOX = { x: 0, y: 0, w: 2048, h: 1216 };
+export const BOX = { x: 0, y: 0, w: 2048, h: 1214 };
 const DATE_X = 1024;
 const DATE_Y = 1163;
 const TITLE_X = 1024;
