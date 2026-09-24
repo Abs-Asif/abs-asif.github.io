@@ -114,17 +114,18 @@ The engine is optimized for high-throughput. When new posts are detected, they a
 The photocard uses a multi-layered rendering system defined in `Home.tsx`.
 
 ### **Customizable Layers:**
-- **Background:** The selected template (Def.png, etc.).
-- **News Image:** Clipped with a 35px radius and a red border.
-- **Date/Time:** Dynamic localized date string.
-- **Title Text:** Supports word-level highlighting and automatic scaling (1-3 lines).
+- **Background:** The selected template (`Template BG 2.jpg`, etc.).
+- **News Image:** Clipped to 2048x1216px (top-to-bottom fit, cropped horizontally on sides as needed).
+- **Date/Time:** Dynamic localized date string (Bangla digits, Hind Siliguri 41px, slightly bold weight 600).
+- **Title Text:** Supports word-level highlighting and automatic scaling (Hind Siliguri 110px bold default, 1-3 lines).
 - **Ad Banner:** Optional advertisement loaded from IndexedDB.
 
 ### **Typography Settings:**
 Users can fine-tune the output in **Settings.tsx**:
-- Font size (Default: 70px)
-- Letter spacing (Default: -2.4px)
-- Line height factor (Default: 0.9)
+- Title font size (Default: 110px)
+- Date font size (Default: 41px)
+- Letter spacing (Default: 0px)
+- Line height factor (Default: 1.25)
 - X/Y offsets for every element.
 - Stacking order (e.g., placing the image behind or in front of the background).
 

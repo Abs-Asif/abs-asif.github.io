@@ -90,10 +90,10 @@ const Home = () => {
   const [livePreviewEnabled, setLivePreviewEnabled] = useState(false);
 
   // Typography
-  const [fontSize, setFontSize] = useState(70);
+  const [fontSize, setFontSize] = useState(110);
   const [dateXOffset, setDateXOffset] = useState(-40);
   const [dateYOffset, setDateYOffset] = useState(-30);
-  const [dateFontSize, setDateFontSize] = useState(20);
+  const [dateFontSize, setDateFontSize] = useState(41);
   const [titleLetterSpacing, setTitleLetterSpacing] = useState(-2.4);
   const [lineHeightFactor, setLineHeightFactor] = useState(0.9);
 
@@ -141,8 +141,8 @@ const Home = () => {
     const preloadFonts = async () => {
       try {
         await Promise.all([
-          document.fonts.load('bold 90px "Hind Siliguri"'),
-          document.fonts.load('36px "Hind Siliguri"'),
+          document.fonts.load('bold 110px "Hind Siliguri"'),
+          document.fonts.load('600 41px "Hind Siliguri"'),
           document.fonts.load('bold 70px "Cambria"'),
           document.fonts.load('20px "Cambria"'),
           document.fonts.load('400 16px "Solaiman Lipi"'),
