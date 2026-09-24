@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { RefreshCw, Zap, Download, XCircle } from 'lucide-react';
+import { Zap, XCircle } from 'lucide-react';
 import { toast } from 'sonner';
 import { censorText } from '@/lib/censor';
 import { loadTypographySettings } from '@/lib/settings';
 import { generatePhotoCardInternal, CANVAS_WIDTH, CANVAS_HEIGHT } from '@/lib/renderer';
-import { formatSitemapTime, BGArchiveItem, BG_API_ARCHIVE_URL } from '@/lib/api';
+import { BGArchiveItem, BG_API_ARCHIVE_URL } from '@/lib/api';
 
 interface QuickDownloadProps {
   contentId: string;
@@ -45,12 +45,11 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
         const data = await response.json();
         const article = (data.archive_data || []).find((item: BGArchiveItem) => String(item.ContentID) === contentId);
 
-        let title = '', imageUrl = '', articleUrl = '';
+        let title = '', imageUrl = '';
 
         if (article) {
           title = article.ContentHeading;
-          imageUrl = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
-          articleUrl = `https://www.daily-bangladesh.com/${article.Slug}/${article.ContentID}`;
+          imageUrl = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.channel24bd.tv/media/imgAll/${article.ImageBgPath}`;
         } else {
           throw new Error("Article not found in recent archive.");
         }
@@ -109,8 +108,8 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-6 text-foreground">
       <div className="w-full max-w-md space-y-8 bg-card/50 backdrop-blur-xl p-8 rounded-3xl border border-border shadow-2xl text-center">
         <div className="flex flex-col items-center space-y-6">
-          <div className="p-4 bg-black rounded-2xl">
-            <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 object-contain" />
+          <div className="p-4 bg-black rounded-2xl flex items-center justify-center">
+            <span className="text-white text-2xl font-bold font-sans tracking-tight">DrutoPost</span>
           </div>
 
           <div className="space-y-4">
@@ -154,7 +153,7 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
         </div>
 
         <div className="pt-8 border-t border-border text-center">
-          <p className="text-sm text-muted-foreground">Daily Bangladesh Autopilot</p>
+          <p className="text-sm text-muted-foreground">DrutoPost Autopilot</p>
         </div>
       </div>
       <canvas ref={canvasRef} width={CANVAS_WIDTH} height={CANVAS_HEIGHT} className="hidden" />

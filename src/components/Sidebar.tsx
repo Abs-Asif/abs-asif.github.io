@@ -40,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
       {/* Mobile Header - Always Black as requested */}
       <div className="lg:hidden fixed top-0 left-0 right-0 h-20 bg-black border-b border-zinc-800 flex items-center justify-between px-6 z-50">
         <div className="flex items-center">
-          <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 object-contain" />
+          <span className="text-white text-2xl font-bold font-sans tracking-tight">DrutoPost</span>
         </div>
         <Button variant="ghost" size="icon" onClick={() => setIsOpen(!isOpen)} className="text-white hover:bg-white/10">
           {isOpen ? <X className="w-7 h-7" /> : <Menu className="w-7 h-7" />}
@@ -61,7 +61,8 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
         isOpen ? "translate-x-0" : "-translate-x-full"
       )}>
         <div className="p-8 hidden lg:flex items-center justify-center xl:justify-start">
-          <img src="/logo.png" alt="Daily Bangladesh Logo" className="h-12 xl:h-14 object-contain" />
+          <span className="text-white text-2xl xl:text-3xl font-bold font-sans tracking-tight lg:hidden xl:inline">DrutoPost</span>
+          <span className="text-white text-xl font-bold font-sans tracking-tight hidden lg:inline xl:hidden">DP</span>
         </div>
 
         <nav className="flex-1 px-4 space-y-3 mt-24 lg:mt-6">
@@ -80,14 +81,14 @@ const Sidebar: React.FC<SidebarProps> = ({ currentPage, onPageChange }) => {
                 "w-6 h-6 shrink-0",
                 currentPage === item.id ? "text-white" : "group-hover:scale-110 transition-transform"
               )} />
-              <span className="lg:hidden xl:block font-bold text-sm  ">{item.label}</span>
+              <span className="lg:hidden xl:block font-bold text-sm">{item.label}</span>
             </button>
           ))}
         </nav>
 
         <div className="p-6 border-t border-zinc-900 bg-zinc-950/50">
           <div className="hidden xl:block p-4 bg-black border border-zinc-800">
-            <p className="text-sm text-zinc-500   font-semibold mb-1.5 uppercase tracking-widest">Automation Status</p>
+            <p className="text-sm text-zinc-500 font-semibold mb-1.5 uppercase tracking-widest">Automation Status</p>
             <div className="flex items-center gap-2">
               <div className={cn(
                 "w-2 h-2 rounded-full animate-pulse",

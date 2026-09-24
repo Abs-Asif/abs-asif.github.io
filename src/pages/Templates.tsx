@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
-import { Check, Layout } from "lucide-react";
+import React, { useState } from 'react';
+import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const templates = [
   { id: 'default', name: 'Basic (Default)', file: 'PhotocardTemplate.png', preview: '/Def.png' },
-  { id: 't1', name: 'Ramadan EID', file: 'PhotocardTemplate1.png', preview: '/Dif2.png' },
 ];
 
 const Templates = () => {
@@ -23,8 +22,8 @@ const Templates = () => {
   return (
     <div className="space-y-6 lg:space-y-8 animate-fade-in-up pb-20">
       <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold   text-foreground">Visual Templates</h1>
-        <p className="text-xs text-muted-foreground  ">Select background style for all generations</p>
+        <h1 className="text-3xl font-bold text-foreground">Visual Templates</h1>
+        <p className="text-xs text-muted-foreground">Select background style for all generations</p>
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 lg:gap-6">
@@ -56,14 +55,14 @@ const Templates = () => {
             <div className="p-5 flex items-center justify-between border-t border-border">
               <div className="min-w-0">
                 <h3 className={cn(
-                  "text-xs font-bold   transition-colors",
+                  "text-xs font-bold transition-colors",
                   selectedTemplate === template.file ? "text-primary" : "text-foreground"
                 )}>
                   {template.name}
                 </h3>
               </div>
               {selectedTemplate === template.file && (
-                <span className="text-xs font-bold text-primary  ">Active</span>
+                <span className="text-xs font-bold text-primary">Active</span>
               )}
             </div>
           </div>

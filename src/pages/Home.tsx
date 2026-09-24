@@ -19,6 +19,7 @@ import {
 import {
   BGArchiveItem,
   BG_API_ARCHIVE_URL,
+  extractContentId,
   getMetadata,
   getRelativeDateStr,
   formatSitemapTime,
@@ -243,17 +244,17 @@ const Home = () => {
     if (!trimmedUrl) { toast.error("Please enter a Post URL"); return; }
     setIsFetching(true);
     try {
-      const contentId = trimmedUrl.split('/').pop();
+      const contentId = extractContentId(trimmedUrl);
       const response = await fetch(BG_API_ARCHIVE_URL, {
         method: "POST", headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ start_date: "", end_date: "", category_name: "", limit: 50, offset: 0 })
       });
       const data = await response.json();
-      const article = (data.archive_data || []).find((item: BGArchiveItem) => String(item.ContentID) === contentId);
+      const article = (data.archive_data || []).find((item: BGArchiveItem) => Number(item.ContentID) === contentId);
       let eTitle = '', eImage = '', postTime = '';
       if (article) {
         eTitle = article.ContentHeading;
-        eImage = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.daily-bangladesh.com/media/imgAll/${article.ImageBgPath}`;
+        eImage = article.ImageBgPath.startsWith('http') ? article.ImageBgPath : `https://backoffice.channel24bd.tv/media/imgAll/${article.ImageBgPath}`;
         postTime = article.create_date ? formatSitemapTime(article.create_date) : '';
       } else {
         const meta = await getMetadata(trimmedUrl);
@@ -277,7 +278,7 @@ const Home = () => {
         layerOrder
       };
       const { dataUrl, appliedHighlights } = await generatePhotoCardInternal(canvasRef.current!, censored, eImage, settings, imageCacheRef.current, false);
-      const record: AutoRecord = { id: Math.random().toString(36).substr(2, 9), url: trimmedUrl, title: censored, imageUrl: eImage, previewUrl: dataUrl, timestamp: new Date().toISOString(), postTime, contentId: parseInt(contentId || '0'), highlightedIndices: appliedHighlights };
+      const record: AutoRecord = { id: Math.random().toString(36).substr(2, 9), url: trimmedUrl, title: censored, imageUrl: eImage, previewUrl: dataUrl, timestamp: new Date().toISOString(), postTime, contentId, highlightedIndices: appliedHighlights };
       await saveRecordDB(record);
       setAutoRecords(prev => sortRecords([record, ...prev]).slice(0, 50));
       setProcessedUrls(prev => new Map(prev).set(trimmedUrl, Date.now()));
@@ -310,7 +311,7 @@ const Home = () => {
       const articles = automationMode === 'main' ? await scrapeLatestLinks(limit) : await scrapeSitemapLinks();
 
       if (articles === null) {
-        addLog(`Fetch failed for ${automationMode} mode. Check connection or proxies.`, "error");
+        addLog(`Fetch failed for ${automationMode} mode. Check connection.`, "error");
         return;
       }
 
@@ -336,9 +337,7 @@ const Home = () => {
             }
             if (!artTitle || !artImage) return null;
 
-            // Optional verification with short delay if needed, but let's make it parallel
-            // We'll reduce the delay to 2s for parallel processing
-            await new Promise(r => setTimeout(r, 2000));
+            await new Promise(r => setTimeout(r, 1000));
             const verifyMeta = await getMetadata(article.url, automationMode === 'backup');
             if (verifyMeta && verifyMeta.title && verifyMeta.image) {
               if (shouldUpgradeTitle(artTitle, verifyMeta.title)) {
@@ -655,7 +654,7 @@ const Home = () => {
                   <Button variant="ghost" size="sm" className="h-6 text-xs font-bold text-primary p-0 hover:bg-transparent" onClick={() => { navigator.clipboard.readText().then(setPostUrl); }}>Paste from Clipboard</Button>
                 </div>
                 <div className="flex gap-4">
-                  <Input value={postUrl} onChange={e => setPostUrl(e.target.value)} placeholder="https://www.daily-bangladesh.com/..." className="bg-muted/50 border-border h-12 text-sm rounded-xl" />
+                  <Input value={postUrl} onChange={e => setPostUrl(e.target.value)} placeholder="https://channel24bd.tv/..." className="bg-muted/50 border-border h-12 text-sm rounded-xl" />
                   <Button variant="destructive" className="h-12 w-12 shrink-0 rounded-xl" onClick={fetchPostData} disabled={isFetching || !postUrl}>{isFetching ? <RefreshCw className="w-5 h-5 animate-spin" /> : <ChevronRight className="w-6 h-6" />}</Button>
                 </div>
               </div>
