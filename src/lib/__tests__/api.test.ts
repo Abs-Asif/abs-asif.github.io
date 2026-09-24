@@ -4,7 +4,9 @@ import {
   formatSitemapTime,
   BG_API_ARCHIVE_URL,
   getTodaySitemapUrl,
-  scrapeLatestLinks
+  scrapeLatestLinks,
+  fetchImageWithProxy,
+  getMetadata
 } from '../api';
 
 describe('API & Sitemap utilities', () => {
@@ -61,6 +63,67 @@ describe('API & Sitemap utilities', () => {
       expect(formatted).toBeDefined();
       expect(typeof formatted).toBe('string');
       expect(formatted.length).toBeGreaterThan(0);
+    });
+  });
+
+  describe('fetchImageWithProxy and getMetadata with proxies', () => {
+    beforeEach(() => {
+      vi.stubGlobal('fetch', vi.fn());
+      if (!URL.createObjectURL) {
+        URL.createObjectURL = vi.fn().mockReturnValue('blob:http://localhost/mock-blob');
+      } else {
+        vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:http://localhost/mock-blob');
+      }
+    });
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+      vi.restoreAllMocks();
+    });
+
+    it('should return blob or data URLs directly', async () => {
+      const blobUrl = 'blob:http://localhost/123';
+      const dataUrl = 'data:image/png;base64,xyz';
+      expect(await fetchImageWithProxy(blobUrl)).toBe(blobUrl);
+      expect(await fetchImageWithProxy(dataUrl)).toBe(dataUrl);
+    });
+
+    it('should fallback to proxy when direct image fetch fails', async () => {
+      const imageUrl = 'https://backoffice.channel24bd.tv/media/imgAll/sample.jpg';
+      const mockBlob = new Blob(['fake image content'], { type: 'image/jpeg' });
+
+      (global.fetch as any)
+        .mockRejectedValueOnce(new TypeError('Failed to fetch (CORS block)'))
+        .mockResolvedValueOnce({
+          ok: true,
+          blob: async () => mockBlob
+        });
+
+      const result = await fetchImageWithProxy(imageUrl);
+      expect(result).toBe('blob:http://localhost/mock-blob');
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect((global.fetch as any).mock.calls[1][0]).toContain('wsrv.nl');
+    });
+
+    it('should fallback to proxy when direct metadata fetch fails', async () => {
+      const articleUrl = 'https://channel24bd.tv/national/article/100';
+      const mockHtml = `<html><head><meta property="og:title" content="Proxy Title"/><meta property="og:image" content="https://img.com/a.jpg"/></head></html>`;
+
+      (global.fetch as any)
+        .mockRejectedValueOnce(new TypeError('CORS Error'))
+        .mockResolvedValueOnce({
+          ok: true,
+          text: async () => mockHtml
+        });
+
+      const meta = await getMetadata(articleUrl);
+      expect(meta).toEqual({
+        title: 'Proxy Title',
+        image: 'https://img.com/a.jpg',
+        publishDate: ''
+      });
+      expect(global.fetch).toHaveBeenCalledTimes(2);
+      expect((global.fetch as any).mock.calls[1][0]).toContain('allorigins.win');
     });
   });
 
