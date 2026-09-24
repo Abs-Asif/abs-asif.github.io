@@ -24,6 +24,8 @@ const QuickDownload: React.FC<QuickDownloadProps> = ({ contentId }) => {
         // 0. Preload Fonts
         try {
           await Promise.all([
+            document.fonts.load('bold 90px "Hind Siliguri"'),
+            document.fonts.load('36px "Hind Siliguri"'),
             document.fonts.load('bold 70px "Cambria"'),
             document.fonts.load('20px "Cambria"'),
             document.fonts.load('400 16px "Solaiman Lipi"'),

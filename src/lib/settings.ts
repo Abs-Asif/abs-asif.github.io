@@ -13,8 +13,8 @@ export interface TypographySettings {
 }
 
 export const loadTypographySettings = (): TypographySettings => {
-  const template = localStorage.getItem('bg_selected_template') || 'PhotocardTemplate.png';
-  const suffix = template === 'PhotocardTemplate.png' ? '' : `_${template}`;
+  const template = localStorage.getItem('bg_selected_template') || 'Template BG 2.jpg';
+  const suffix = (template === 'Template BG 2.jpg' || template === 'PhotocardTemplate.png') ? '' : `_${template}`;
 
   const getVal = (key: string, def: any) => {
     const saved = localStorage.getItem(`bg_${key}${suffix}`);
@@ -27,16 +27,16 @@ export const loadTypographySettings = (): TypographySettings => {
     return localStorage.getItem(`bg_${key}`) || def;
   };
 
-  const defaultLayerOrder = 'background,news_image,date_time,title_text';
+  const defaultLayerOrder = 'background,news_image,foreground,date_time,title_text';
   const savedLayerOrder = getVal('layer_order', defaultLayerOrder);
 
   return {
-    fontSize: Number(getDVal('font_size', 70)),
-    titleLetterSpacing: Number(getDVal('letter_spacing', -2.4)),
-    lineHeightFactor: Number(getDVal('line_height', 0.9)),
-    dateFontSize: Number(getDVal('date_font_size', 20)),
-    dateXOffset: Number(getDVal('date_x_offset', -40)),
-    dateYOffset: Number(getDVal('date_y_offset', -30)),
+    fontSize: Number(getDVal('font_size', 90)),
+    titleLetterSpacing: Number(getDVal('letter_spacing', 0)),
+    lineHeightFactor: Number(getDVal('line_height', 1.25)),
+    dateFontSize: Number(getDVal('date_font_size', 36)),
+    dateXOffset: Number(getDVal('date_x_offset', 0)),
+    dateYOffset: Number(getDVal('date_y_offset', 0)),
     imageXOffset: Number(getDVal('image_x_offset', 0)),
     imageYOffset: Number(getDVal('image_y_offset', 0)),
     titleXOffset: Number(getDVal('title_x_offset', 0)),
