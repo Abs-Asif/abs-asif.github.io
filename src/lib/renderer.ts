@@ -4,7 +4,7 @@ import { fetchImageWithProxy } from "./api";
 
 export const CANVAS_WIDTH = 2048;
 export const CANVAS_HEIGHT = 2048;
-export const BOX = { x: 0, y: 0, w: 2048, h: 1210 };
+export const BOX = { x: 0, y: 0, w: 2048, h: 1216 };
 const DATE_X = 1024;
 const DATE_Y = 1163;
 const TITLE_X = 1024;
@@ -89,10 +89,10 @@ export const generatePhotoCardInternal = async (
 
   const boxX = BOX.x + settings.imageXOffset;
   const boxY = BOX.y + settings.imageYOffset;
-  const scale = BOX.w / userImg.width;
-  const drawW = BOX.w;
-  const drawH = userImg.height * scale;
-  const drawX = boxX;
+  const scale = BOX.h / userImg.height;
+  const drawH = BOX.h;
+  const drawW = userImg.width * scale;
+  const drawX = boxX + (BOX.w - drawW) / 2;
   const drawY = boxY;
 
   let fgDrawn = false;

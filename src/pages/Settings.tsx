@@ -35,10 +35,10 @@ const Settings = () => {
   const [newReplacement, setNewReplacement] = useState('');
 
   // Typography
-  const [fontSize, setFontSize] = useState(90);
+  const [fontSize, setFontSize] = useState(110);
   const [letterSpacing, setLetterSpacing] = useState(0);
   const [lineHeight, setLineHeight] = useState(1.25);
-  const [dateFontSize, setDateFontSize] = useState(36);
+  const [dateFontSize, setDateFontSize] = useState(41);
   const [dateXOffset, setDateXOffset] = useState(0);
   const [dateYOffset, setDateYOffset] = useState(0);
   const [imageXOffset, setImageXOffset] = useState(0);
@@ -61,10 +61,10 @@ const Settings = () => {
       return localStorage.getItem(`bg_${key}`) || def;
     };
 
-    setFontSize(Number(getDVal('font_size', 90)));
+    setFontSize(Number(getDVal('font_size', 110)));
     setLetterSpacing(Number(getDVal('letter_spacing', 0)));
     setLineHeight(Number(getDVal('line_height', 1.25)));
-    setDateFontSize(Number(getDVal('date_font_size', 36)));
+    setDateFontSize(Number(getDVal('date_font_size', 41)));
     setDateXOffset(Number(getDVal('date_x_offset', 0)));
     setDateYOffset(Number(getDVal('date_y_offset', 0)));
     setImageXOffset(Number(getDVal('image_x_offset', 0)));
@@ -113,15 +113,15 @@ const Settings = () => {
   const playNotification = (file: string) => { new Audio(file).play().catch(() => {}); };
 
   const resetTypography = () => {
-    setFontSize(90); setLetterSpacing(0); setLineHeight(1.25);
-    setDateFontSize(36); setDateXOffset(0); setDateYOffset(0);
+    setFontSize(110); setLetterSpacing(0); setLineHeight(1.25);
+    setDateFontSize(41); setDateXOffset(0); setDateYOffset(0);
     setImageXOffset(0); setImageYOffset(0);
     setTitleXOffset(0); setTitleYOffset(0);
     const defaultOrder = ['background', 'news_image', 'foreground', 'date_time', 'title_text'];
     setLayerOrder(defaultOrder);
 
-    saveSetting('bg_font_size', 90); saveSetting('bg_letter_spacing', 0);
-    saveSetting('bg_line_height', 1.25); saveSetting('bg_date_font_size', 36);
+    saveSetting('bg_font_size', 110); saveSetting('bg_letter_spacing', 0);
+    saveSetting('bg_line_height', 1.25); saveSetting('bg_date_font_size', 41);
     saveSetting('bg_date_x_offset', 0); saveSetting('bg_date_y_offset', 0);
     saveSetting('bg_image_x_offset', 0); saveSetting('bg_image_y_offset', 0);
     saveSetting('bg_title_x_offset', 0); saveSetting('bg_title_y_offset', 0);

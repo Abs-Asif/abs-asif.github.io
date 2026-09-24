@@ -31,10 +31,10 @@ export const loadTypographySettings = (): TypographySettings => {
   const savedLayerOrder = getVal('layer_order', defaultLayerOrder);
 
   return {
-    fontSize: Number(getDVal('font_size', 90)),
+    fontSize: Number(getDVal('font_size', 110)),
     titleLetterSpacing: Number(getDVal('letter_spacing', 0)),
     lineHeightFactor: Number(getDVal('line_height', 1.25)),
-    dateFontSize: Number(getDVal('date_font_size', 36)),
+    dateFontSize: Number(getDVal('date_font_size', 41)),
     dateXOffset: Number(getDVal('date_x_offset', 0)),
     dateYOffset: Number(getDVal('date_y_offset', 0)),
     imageXOffset: Number(getDVal('image_x_offset', 0)),
