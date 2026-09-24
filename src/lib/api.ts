@@ -30,23 +30,74 @@ export const fetchWithTimeout = async (url: string, options: RequestInit = {}, t
   }
 };
 
-export const fetchImageWithProxy = async (url: string, _forceProxy: boolean = false): Promise<string> => {
-  try {
-    const res = await fetchWithTimeout(url, { mode: 'cors' });
-    if (res.ok) return URL.createObjectURL(await res.blob());
-  } catch {
-    // Fallback
+export const fetchImageWithProxy = async (url: string, forceProxy: boolean = false): Promise<string> => {
+  if (url.startsWith('blob:') || url.startsWith('data:')) {
+    return url;
   }
+
+  if (!forceProxy) {
+    try {
+      const res = await fetchWithTimeout(url, { mode: 'cors' });
+      if (res.ok) return URL.createObjectURL(await res.blob());
+    } catch {
+      // Fallback to proxy
+    }
+  }
+
+  const proxyGenerators = [
+    (u: string) => `https://wsrv.nl/?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://images.weserv.nl/?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(u)}`,
+    (u: string) => `https://corsproxy.io/?${encodeURIComponent(u)}`,
+  ];
+
+  for (const proxyGen of proxyGenerators) {
+    try {
+      const proxyUrl = proxyGen(url);
+      const res = await fetchWithTimeout(proxyUrl, {}, 8000);
+      if (res.ok) {
+        const blob = await res.blob();
+        if (blob.size > 0) {
+          return URL.createObjectURL(blob);
+        }
+      }
+    } catch {
+      // Try next proxy
+    }
+  }
+
   throw new Error("Failed to load image");
 };
 
-export const getMetadata = async (targetUrl: string, _forceProxy: boolean = false) => {
+export const getMetadata = async (targetUrl: string, forceProxy: boolean = false) => {
   let html = '';
-  try {
-    const response = await fetchWithTimeout(targetUrl);
-    if (response.ok) html = await response.text();
-  } catch (e) {
-    // Fallback
+  if (!forceProxy) {
+    try {
+      const response = await fetchWithTimeout(targetUrl);
+      if (response.ok) html = await response.text();
+    } catch (e) {
+      // Fallback
+    }
+  }
+
+  if (!html) {
+    const proxyUrls = [
+      `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`,
+      `https://corsproxy.io/?${encodeURIComponent(targetUrl)}`,
+      `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(targetUrl)}`
+    ];
+
+    for (const pUrl of proxyUrls) {
+      try {
+        const res = await fetchWithTimeout(pUrl, {}, 8000);
+        if (res.ok) {
+          html = await res.text();
+          if (html) break;
+        }
+      } catch {
+        // Try next proxy
+      }
+    }
   }
 
   if (!html) return null;
@@ -188,9 +239,33 @@ export const parseSitemapXml = (xmlText: string) => {
 export const scrapeSitemapLinks = async () => {
   try {
     const sitemapUrl = getTodaySitemapUrl();
-    const res = await fetchWithTimeout(sitemapUrl, {}, 8000);
-    if (!res.ok) return null;
-    const xmlText = await res.text();
+    let xmlText = '';
+    try {
+      const res = await fetchWithTimeout(sitemapUrl, {}, 8000);
+      if (res.ok) xmlText = await res.text();
+    } catch {
+      // Fallback to proxy
+    }
+
+    if (!xmlText) {
+      const proxyUrls = [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(sitemapUrl)}`,
+        `https://corsproxy.io/?${encodeURIComponent(sitemapUrl)}`,
+        `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(sitemapUrl)}`
+      ];
+      for (const pUrl of proxyUrls) {
+        try {
+          const res = await fetchWithTimeout(pUrl, {}, 8000);
+          if (res.ok) {
+            xmlText = await res.text();
+            if (xmlText) break;
+          }
+        } catch {
+          // Try next proxy
+        }
+      }
+    }
+
     if (!xmlText) return null;
 
     const items = parseSitemapXml(xmlText);
