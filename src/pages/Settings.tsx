@@ -48,7 +48,6 @@ const Settings = () => {
   const [layerOrder, setLayerOrder] = useState(['background', 'news_image', 'date_time', 'title_text']);
 
   const loadTypographySettings = (template: string) => {
-    const isRamadanEid = template === 'PhotocardTemplate1.png';
     const suffix = template === 'PhotocardTemplate.png' ? '' : `_${template}`;
 
     const getVal = (key: string, def: number | string) => {
@@ -56,24 +55,24 @@ const Settings = () => {
       return saved !== null ? saved : (localStorage.getItem(`bg_${key}`) || def);
     };
 
-    const getDVal = (key: string, def: number | string, eidDef: number | string) => {
+    const getDVal = (key: string, def: number | string) => {
       const saved = localStorage.getItem(`bg_${key}${suffix}`);
       if (saved !== null) return saved;
-      return isRamadanEid ? eidDef : (localStorage.getItem(`bg_${key}`) || def);
+      return localStorage.getItem(`bg_${key}`) || def;
     };
 
-    setFontSize(Number(getDVal('font_size', 70, 57)));
-    setLetterSpacing(Number(getDVal('letter_spacing', -2.4, -0.6)));
-    setLineHeight(Number(getDVal('line_height', 0.9, 1)));
-    setDateFontSize(Number(getDVal('date_font_size', 20, 19)));
-    setDateXOffset(Number(getDVal('date_x_offset', -40, -40)));
-    setDateYOffset(Number(getDVal('date_y_offset', -30, 18)));
-    setImageXOffset(Number(getDVal('image_x_offset', 0, 0)));
-    setImageYOffset(Number(getDVal('image_y_offset', 0, 25)));
-    setTitleXOffset(Number(getDVal('title_x_offset', 0, 0)));
-    setTitleYOffset(Number(getDVal('title_y_offset', 0, 35)));
+    setFontSize(Number(getDVal('font_size', 70)));
+    setLetterSpacing(Number(getDVal('letter_spacing', -2.4)));
+    setLineHeight(Number(getDVal('line_height', 0.9)));
+    setDateFontSize(Number(getDVal('date_font_size', 20)));
+    setDateXOffset(Number(getDVal('date_x_offset', -40)));
+    setDateYOffset(Number(getDVal('date_y_offset', -30)));
+    setImageXOffset(Number(getDVal('image_x_offset', 0)));
+    setImageYOffset(Number(getDVal('image_y_offset', 0)));
+    setTitleXOffset(Number(getDVal('title_x_offset', 0)));
+    setTitleYOffset(Number(getDVal('title_y_offset', 0)));
 
-    const defaultLayerOrder = isRamadanEid ? 'news_image,background,title_text,date_time' : 'background,news_image,date_time,title_text';
+    const defaultLayerOrder = 'background,news_image,date_time,title_text';
     const savedOrder = getVal('layer_order', defaultLayerOrder);
     setLayerOrder(String(savedOrder).split(','));
   };
