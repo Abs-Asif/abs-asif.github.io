@@ -24,7 +24,7 @@ const Settings = () => {
   const [autoHighlight, setAutoHighlight] = useState(localStorage.getItem('bg_auto_highlight_two_lines') !== 'false');
   const [expandedTile, setExpandedTile] = useState<string | null>(null);
 
-  const [currentTemplate, setCurrentTemplate] = useState(() => localStorage.getItem('bg_selected_template') || 'PhotocardTemplate.png');
+  const [currentTemplate, setCurrentTemplate] = useState(() => localStorage.getItem('bg_selected_template') || 'Template BG 2.jpg');
 
   // Word Restrictions
   const [wordRestrictions, setWordRestrictions] = useState<Record<string, string>>(() => {
@@ -35,20 +35,20 @@ const Settings = () => {
   const [newReplacement, setNewReplacement] = useState('');
 
   // Typography
-  const [fontSize, setFontSize] = useState(70);
-  const [letterSpacing, setLetterSpacing] = useState(-2.4);
-  const [lineHeight, setLineHeight] = useState(0.9);
-  const [dateFontSize, setDateFontSize] = useState(20);
-  const [dateXOffset, setDateXOffset] = useState(-40);
-  const [dateYOffset, setDateYOffset] = useState(-30);
+  const [fontSize, setFontSize] = useState(90);
+  const [letterSpacing, setLetterSpacing] = useState(0);
+  const [lineHeight, setLineHeight] = useState(1.25);
+  const [dateFontSize, setDateFontSize] = useState(36);
+  const [dateXOffset, setDateXOffset] = useState(0);
+  const [dateYOffset, setDateYOffset] = useState(0);
   const [imageXOffset, setImageXOffset] = useState(0);
   const [imageYOffset, setImageYOffset] = useState(0);
   const [titleXOffset, setTitleXOffset] = useState(0);
   const [titleYOffset, setTitleYOffset] = useState(0);
-  const [layerOrder, setLayerOrder] = useState(['background', 'news_image', 'date_time', 'title_text']);
+  const [layerOrder, setLayerOrder] = useState(['background', 'news_image', 'foreground', 'date_time', 'title_text']);
 
   const loadTypographySettings = (template: string) => {
-    const suffix = template === 'PhotocardTemplate.png' ? '' : `_${template}`;
+    const suffix = (template === 'Template BG 2.jpg' || template === 'PhotocardTemplate.png') ? '' : `_${template}`;
 
     const getVal = (key: string, def: number | string) => {
       const saved = localStorage.getItem(`bg_${key}${suffix}`);
@@ -61,18 +61,18 @@ const Settings = () => {
       return localStorage.getItem(`bg_${key}`) || def;
     };
 
-    setFontSize(Number(getDVal('font_size', 70)));
-    setLetterSpacing(Number(getDVal('letter_spacing', -2.4)));
-    setLineHeight(Number(getDVal('line_height', 0.9)));
-    setDateFontSize(Number(getDVal('date_font_size', 20)));
-    setDateXOffset(Number(getDVal('date_x_offset', -40)));
-    setDateYOffset(Number(getDVal('date_y_offset', -30)));
+    setFontSize(Number(getDVal('font_size', 90)));
+    setLetterSpacing(Number(getDVal('letter_spacing', 0)));
+    setLineHeight(Number(getDVal('line_height', 1.25)));
+    setDateFontSize(Number(getDVal('date_font_size', 36)));
+    setDateXOffset(Number(getDVal('date_x_offset', 0)));
+    setDateYOffset(Number(getDVal('date_y_offset', 0)));
     setImageXOffset(Number(getDVal('image_x_offset', 0)));
     setImageYOffset(Number(getDVal('image_y_offset', 0)));
     setTitleXOffset(Number(getDVal('title_x_offset', 0)));
     setTitleYOffset(Number(getDVal('title_y_offset', 0)));
 
-    const defaultLayerOrder = 'background,news_image,date_time,title_text';
+    const defaultLayerOrder = 'background,news_image,foreground,date_time,title_text';
     const savedOrder = getVal('layer_order', defaultLayerOrder);
     setLayerOrder(String(savedOrder).split(','));
   };
@@ -83,7 +83,7 @@ const Settings = () => {
 
   useEffect(() => {
     const handleStorage = () => {
-      const template = localStorage.getItem('bg_selected_template') || 'PhotocardTemplate.png';
+      const template = localStorage.getItem('bg_selected_template') || 'Template BG 2.jpg';
       if (template !== currentTemplate) setCurrentTemplate(template);
     };
     window.addEventListener('storage', handleStorage);
@@ -102,7 +102,7 @@ const Settings = () => {
       'bg_title_x_offset', 'bg_title_y_offset', 'bg_layer_order'
     ].includes(key);
 
-    if (isTypoSetting && currentTemplate !== 'PhotocardTemplate.png') {
+    if (isTypoSetting && currentTemplate !== 'Template BG 2.jpg' && currentTemplate !== 'PhotocardTemplate.png') {
       localStorage.setItem(`${key}_${currentTemplate}`, String(value));
     } else {
       localStorage.setItem(key, String(value));
@@ -113,16 +113,16 @@ const Settings = () => {
   const playNotification = (file: string) => { new Audio(file).play().catch(() => {}); };
 
   const resetTypography = () => {
-    setFontSize(70); setLetterSpacing(-2.4); setLineHeight(0.9);
-    setDateFontSize(20); setDateXOffset(-40); setDateYOffset(-30);
+    setFontSize(90); setLetterSpacing(0); setLineHeight(1.25);
+    setDateFontSize(36); setDateXOffset(0); setDateYOffset(0);
     setImageXOffset(0); setImageYOffset(0);
     setTitleXOffset(0); setTitleYOffset(0);
-    const defaultOrder = ['background', 'news_image', 'date_time', 'title_text'];
+    const defaultOrder = ['background', 'news_image', 'foreground', 'date_time', 'title_text'];
     setLayerOrder(defaultOrder);
 
-    saveSetting('bg_font_size', 70); saveSetting('bg_letter_spacing', -2.4);
-    saveSetting('bg_line_height', 0.9); saveSetting('bg_date_font_size', 20);
-    saveSetting('bg_date_x_offset', -40); saveSetting('bg_date_y_offset', -30);
+    saveSetting('bg_font_size', 90); saveSetting('bg_letter_spacing', 0);
+    saveSetting('bg_line_height', 1.25); saveSetting('bg_date_font_size', 36);
+    saveSetting('bg_date_x_offset', 0); saveSetting('bg_date_y_offset', 0);
     saveSetting('bg_image_x_offset', 0); saveSetting('bg_image_y_offset', 0);
     saveSetting('bg_title_x_offset', 0); saveSetting('bg_title_y_offset', 0);
     saveSetting('bg_layer_order', defaultOrder.join(','));
@@ -304,10 +304,10 @@ const Settings = () => {
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-8 gap-y-6">
               {[
-                { label: 'Title Font Size', val: fontSize, set: setFontSize, k: 'bg_font_size', min: 40, max: 120 },
+                { label: 'Title Font Size', val: fontSize, set: setFontSize, k: 'bg_font_size', min: 40, max: 140 },
                 { label: 'Letter Spacing', val: letterSpacing, set: setLetterSpacing, k: 'bg_letter_spacing', min: -10, max: 10, step: 0.1 },
                 { label: 'Line Height', val: lineHeight, set: setLineHeight, k: 'bg_line_height', min: 0.5, max: 2, step: 0.05 },
-                { label: 'Date Font Size', val: dateFontSize, set: setDateFontSize, k: 'bg_date_font_size', min: 10, max: 40 }
+                { label: 'Date Font Size', val: dateFontSize, set: setDateFontSize, k: 'bg_date_font_size', min: 10, max: 60 }
               ].map(s => (
                 <div key={s.label} className="space-y-3">
                   <div className="flex justify-between text-xs text-muted-foreground">
@@ -352,13 +352,13 @@ const Settings = () => {
             </div>
 
             <div className="space-y-4 pt-6 border-t border-border">
-              <Label className="text-xs text-muted-foreground">Layer Stacking Order (Top to Bottom: 4 to 1)</Label>
+              <Label className="text-xs text-muted-foreground">Layer Stacking Order</Label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {[0, 1, 2, 3].map((index) => (
                   <div key={index} className="space-y-2">
                     <Label className="text-[10px] text-muted-foreground uppercase">Layer {index + 1} ( {index === 0 ? 'Bottom' : index === 3 ? 'Top' : 'Middle'} )</Label>
                     <CustomSelect
-                      value={layerOrder[index]}
+                      value={layerOrder[index] || 'background'}
                       onChange={(val) => {
                         const newOrder = [...layerOrder];
                         newOrder[index] = val;
@@ -368,6 +368,7 @@ const Settings = () => {
                       options={[
                         { id: 'background', label: 'Background Image' },
                         { id: 'news_image', label: 'News Image' },
+                        { id: 'foreground', label: 'Foreground Overlay' },
                         { id: 'date_time', label: 'Date and Time' },
                         { id: 'title_text', label: 'Title Text' }
                       ]}

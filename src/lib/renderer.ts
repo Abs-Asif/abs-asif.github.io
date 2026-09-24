@@ -2,20 +2,34 @@ import { TypographySettings } from "./settings";
 import { getSelectedAd } from "./db";
 import { fetchImageWithProxy } from "./api";
 
-export const CANVAS_WIDTH = 1080;
-export const CANVAS_HEIGHT = 1080;
-export const BOX = { x: 30, y: 32, w: 1020, h: 574 };
-const GRAY_BAR_Y = 660;
-const GRAY_BAR_H = 85;
-const DATE_X = 88;
-const DATE_Y = GRAY_BAR_Y + (GRAY_BAR_H / 2);
-const TITLE_X = CANVAS_WIDTH / 2;
-const TITLE_Y = 860;
+export const CANVAS_WIDTH = 2048;
+export const CANVAS_HEIGHT = 2048;
+export const BOX = { x: 0, y: 0, w: 2048, h: 1210 };
+const DATE_X = 1024;
+const DATE_Y = 1163;
+const TITLE_X = 1024;
+const TITLE_Y = 1500;
 
-const formatDate = (date: Date) => {
-  const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-  return `${days[date.getDay()]} | ${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
+const BANGLA_DIGITS = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
+const BANGLA_MONTHS = [
+  'জানুয়ারি', 'ফেব্রুয়ারি', 'মার্চ', 'এপ্রিল', 'মে', 'জুন',
+  'জুলাই', 'আগস্ট', 'সেপ্টেম্বর', 'অক্টোবর', 'নভেম্বর', 'ডিসেম্বর'
+];
+
+export const toBanglaDigit = (num: number | string): string => {
+  return String(num).replace(/\d/g, (d) => BANGLA_DIGITS[Number(d)]);
+};
+
+export const formatBanglaDate = (dateInput: Date | string = new Date()): string => {
+  let date = dateInput instanceof Date ? dateInput : new Date(dateInput);
+  if (isNaN(date.getTime())) {
+    if (typeof dateInput === 'string') return dateInput;
+    date = new Date();
+  }
+  const day = toBanglaDigit(date.getDate());
+  const month = BANGLA_MONTHS[date.getMonth()];
+  const year = toBanglaDigit(date.getFullYear());
+  return `${day} ${month} ${year}`;
 };
 
 export const generatePhotoCardInternal = async (
@@ -29,7 +43,7 @@ export const generatePhotoCardInternal = async (
 ): Promise<{ dataUrl: string, appliedHighlights: number[] }> => {
   const ctx = canvas.getContext('2d', { willReadFrequently: true })!;
   let appliedHighlightsResult: number[] = [];
-  const templateName = localStorage.getItem('bg_selected_template') || 'PhotocardTemplate.png';
+  const selectedTemplate = localStorage.getItem('bg_selected_template') || 'Template BG 2.jpg';
 
   const getCachedImage = async (src: string, isData = false): Promise<HTMLImageElement> => {
     if (imageCache.has(src)) return imageCache.get(src)!;
@@ -44,7 +58,15 @@ export const generatePhotoCardInternal = async (
     return img;
   };
 
-  const template = await getCachedImage(`/${templateName}`);
+  let bgTemplateName = 'Template BG 2.jpg';
+  let fgTemplateName = 'Template Fg.png';
+
+  if (selectedTemplate !== 'PhotocardTemplate.png' && selectedTemplate !== 'Template BG 2.jpg' && selectedTemplate !== 'default') {
+    bgTemplateName = selectedTemplate;
+  }
+
+  const bgTemplate = await getCachedImage(`/${bgTemplateName}`);
+  const fgTemplate = await getCachedImage(`/${fgTemplateName}`);
 
   let adImg: HTMLImageElement | null = null;
   const selectedAdId = localStorage.getItem('bg_selected_ad');
@@ -56,6 +78,7 @@ export const generatePhotoCardInternal = async (
   }
 
   const adHeight = adImg ? (CANVAS_WIDTH / adImg.width) * adImg.height : 0;
+  canvas.width = CANVAS_WIDTH;
   canvas.height = CANVAS_HEIGHT + adHeight;
   ctx.clearRect(0, 0, canvas.width, canvas.height);
 
@@ -64,45 +87,61 @@ export const generatePhotoCardInternal = async (
   userImg.src = userImgBlobUrl;
   await new Promise(r => { userImg.onload = r; });
 
-  const scale = Math.max(BOX.w / userImg.width, BOX.h / userImg.height);
-  const drawW = userImg.width * scale, drawH = userImg.height * scale;
-  const drawX = BOX.x + (BOX.w - drawW) / 2 + settings.imageXOffset, drawY = BOX.y + (BOX.h - drawH) / 2 + settings.imageYOffset;
-  const boxX = BOX.x + settings.imageXOffset, boxY = BOX.y + settings.imageYOffset;
+  const boxX = BOX.x + settings.imageXOffset;
+  const boxY = BOX.y + settings.imageYOffset;
+  const scale = BOX.w / userImg.width;
+  const drawW = BOX.w;
+  const drawH = userImg.height * scale;
+  const drawX = boxX;
+  const drawY = boxY;
+
+  let fgDrawn = false;
+
+  const renderFg = () => {
+    if (!fgDrawn) {
+      ctx.drawImage(fgTemplate, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      fgDrawn = true;
+    }
+  };
 
   const renderLayers: Record<string, () => void> = {
     background: () => {
-      ctx.drawImage(template, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.drawImage(bgTemplate, 0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
       if (adImg) ctx.drawImage(adImg, 0, CANVAS_HEIGHT, CANVAS_WIDTH, adHeight);
     },
     news_image: () => {
-      const radius = 35;
-      const definePath = () => {
-        ctx.beginPath();
-        ctx.moveTo(boxX + radius, boxY); ctx.lineTo(boxX + BOX.w - radius, boxY);
-        ctx.quadraticCurveTo(boxX + BOX.w, boxY, boxX + BOX.w, boxY + radius);
-        ctx.lineTo(boxX + BOX.w, boxY + BOX.h - radius);
-        ctx.quadraticCurveTo(boxX + BOX.w, boxY + BOX.h, boxX + BOX.w - radius, boxY + BOX.h);
-        ctx.lineTo(boxX + radius, boxY + BOX.h);
-        ctx.quadraticCurveTo(boxX, boxY + BOX.h, boxX, boxY + BOX.h - radius);
-        ctx.lineTo(boxX, boxY + radius);
-        ctx.quadraticCurveTo(boxX, boxY, boxX + radius, boxY);
-        ctx.closePath();
-      };
-      ctx.save(); definePath(); ctx.clip(); ctx.drawImage(userImg, drawX, drawY, drawW, drawH); ctx.restore();
-      ctx.save(); definePath(); ctx.lineWidth = 2; ctx.strokeStyle = '#FF0000'; ctx.stroke(); ctx.restore();
+      ctx.save();
+      ctx.beginPath();
+      ctx.rect(boxX, boxY, BOX.w, BOX.h);
+      ctx.clip();
+      ctx.drawImage(userImg, drawX, drawY, drawW, drawH);
+      ctx.restore();
+    },
+    foreground: () => {
+      renderFg();
     },
     date_time: () => {
-      ctx.font = `${settings.dateFontSize}px "Cambria"`; ctx.fillStyle = 'white'; ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-      ctx.fillText(formatDate(new Date()), DATE_X + settings.dateXOffset, DATE_Y + settings.dateYOffset);
+      renderFg();
+      ctx.font = `600 ${settings.dateFontSize}px "Hind Siliguri"`;
+      ctx.fillStyle = '#111111';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(formatBanglaDate(new Date()), DATE_X + settings.dateXOffset, DATE_Y + settings.dateYOffset);
     },
     title_text: () => {
+      renderFg();
       const highlightColor = localStorage.getItem('bg_highlight_color') || '#FFFF00';
-      let curFS = settings.fontSize; ctx.textAlign = 'center'; ctx.letterSpacing = `${settings.titleLetterSpacing}px`;
+      let curFS = settings.fontSize;
+      ctx.textAlign = 'center';
+      if ('letterSpacing' in ctx) {
+        ctx.letterSpacing = `${settings.titleLetterSpacing}px`;
+      }
       const allWords = targetTitle.split(' ');
       let lines: { text: string; wordIndices: number[] }[] = [];
+      const MAX_TITLE_WIDTH = 1700;
 
       for (let i = 0; i < 10; i++) {
-        ctx.font = `bold ${curFS}px "Cambria"`;
+        ctx.font = `bold ${curFS}px "Hind Siliguri"`;
         lines = [];
         let currentLineText = '';
         let currentLineIndices: number[] = [];
@@ -110,7 +149,7 @@ export const generatePhotoCardInternal = async (
         for (let j = 0; j < allWords.length; j++) {
           const word = allWords[j];
           const testLine = currentLineText ? currentLineText + ' ' + word : word;
-          if (ctx.measureText(testLine).width > 980 && currentLineText !== '') {
+          if (ctx.measureText(testLine).width > MAX_TITLE_WIDTH && currentLineText !== '') {
             lines.push({ text: currentLineText, wordIndices: currentLineIndices });
             currentLineText = word;
             currentLineIndices = [j];
@@ -121,7 +160,7 @@ export const generatePhotoCardInternal = async (
         }
         lines.push({ text: currentLineText, wordIndices: currentLineIndices });
 
-        if (lines.length <= 3 && Math.max(...lines.map(l => ctx.measureText(l.text).width)) <= 980) break;
+        if (lines.length <= 3 && Math.max(...lines.map(l => ctx.measureText(l.text).width)) <= MAX_TITLE_WIDTH) break;
         curFS *= 0.9;
       }
 
@@ -141,9 +180,10 @@ export const generatePhotoCardInternal = async (
         const y = TITLE_Y + settings.titleYOffset - ((lines.length - 1) * lh / 2) + (i * lh);
 
         ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
         line.wordIndices.forEach((wordIdx, idxInLine) => {
           const word = allWords[wordIdx];
-          ctx.fillStyle = appliedHighlights!.includes(wordIdx) ? highlightColor : 'white';
+          ctx.fillStyle = appliedHighlights!.includes(wordIdx) ? highlightColor : '#FFFFFF';
           ctx.fillText(word, currentX, y);
           currentX += ctx.measureText(word).width;
           if (idxInLine < line.wordIndices.length - 1) {

@@ -9,6 +9,8 @@ const ASSETS = [
   '/logo.png',
   '/PhotocardTemplate.png',
   '/PhotocardTemplate1.png',
+  '/Template BG 2.jpg',
+  '/Template Fg.png',
   '/Def.png',
   '/Alert.mp3',
   '/Instant.mp3',

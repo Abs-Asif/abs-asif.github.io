@@ -4,12 +4,12 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 const templates = [
-  { id: 'default', name: 'Basic (Default)', file: 'PhotocardTemplate.png', preview: '/Def.png' },
+  { id: 'default', name: 'Basic (Default)', file: 'Template BG 2.jpg', preview: '/Def.png' },
 ];
 
 const Templates = () => {
   const [selectedTemplate, setSelectedTemplate] = useState(() => {
-    return localStorage.getItem('bg_selected_template') || 'PhotocardTemplate.png';
+    return localStorage.getItem('bg_selected_template') || 'Template BG 2.jpg';
   });
 
   const handleSelect = (file: string) => {
