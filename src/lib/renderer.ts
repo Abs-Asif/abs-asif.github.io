@@ -1,6 +1,7 @@
 import { TypographySettings } from "./settings";
 import { getSelectedAd } from "./db";
 import { fetchImageWithProxy } from "./api";
+import { highlightTitleWithModel } from "./transformer";
 
 export const CANVAS_WIDTH = 2048;
 export const CANVAS_HEIGHT = 2048;
@@ -95,6 +96,21 @@ export const generatePhotoCardInternal = async (
   const drawX = boxX + (BOX.w - drawW) / 2;
   const drawY = boxY;
 
+  let transformerHighlights: number[] | undefined = undefined;
+  const isTransformerEnabled = localStorage.getItem('bg_transformer_enabled') === 'true';
+
+  if (!manualHighlights && isTransformerEnabled) {
+    try {
+      const selectedModel = localStorage.getItem('bg_selected_model') || 'Xenova/LaMini-Flan-T5-248M';
+      const { highlightedIndices } = await highlightTitleWithModel(targetTitle, selectedModel);
+      if (highlightedIndices && highlightedIndices.length > 0) {
+        transformerHighlights = highlightedIndices;
+      }
+    } catch (err) {
+      console.warn('Transformer auto highlight failed, falling back:', err);
+    }
+  }
+
   let fgDrawn = false;
 
   const renderFg = () => {
@@ -165,7 +181,7 @@ export const generatePhotoCardInternal = async (
       }
 
       const lh = curFS * settings.lineHeightFactor;
-      let appliedHighlights = manualHighlights;
+      let appliedHighlights = manualHighlights || transformerHighlights;
       const autoHighlightEnabled = localStorage.getItem('bg_auto_highlight_two_lines') !== 'false';
 
       if (!appliedHighlights && lines.length === 2 && autoHighlightEnabled) {

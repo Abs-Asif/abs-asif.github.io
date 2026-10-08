@@ -7,7 +7,8 @@ import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 import { censorText } from "@/lib/censor";
 import { shouldUpgradeTitle } from "@/lib/title-utils";
-import { Download, RefreshCw, Image as ImageIcon, ChevronRight, List, Zap, Play, Square, Trash2, Copy, X, PenTool, Share2 } from "lucide-react";
+import { Download, RefreshCw, Image as ImageIcon, ChevronRight, List, Zap, Play, Square, Trash2, Copy, X, PenTool, Share2, Cpu } from "lucide-react";
+import { TransformerModal } from "@/components/TransformerModal";
 import { toast } from "sonner";
 import {
   AutoRecord,
@@ -62,6 +63,10 @@ const Home = () => {
   const [tempHighlights, setTempHighlights] = useState<number[]>([]);
   const [mobileActiveId, setMobileActiveId] = useState<string | null>(null);
   const [isSavingEdit, setIsSavingEdit] = useState(false);
+  const [isTransformerModalOpen, setIsTransformerModalOpen] = useState(false);
+  const [transformerEnabled, setTransformerEnabled] = useState(
+    () => localStorage.getItem('bg_transformer_enabled') === 'true'
+  );
 
   const sortRecords = (records: AutoRecord[]) => {
     return [...records].sort((a, b) => {
@@ -114,6 +119,7 @@ const Home = () => {
       if (sm) setAutomationMode(sm);
       setSelectedAudio(localStorage.getItem('bg_secret_audio') || '/Alert.mp3');
       setLivePreviewEnabled(localStorage.getItem('bg_live_preview') === 'true');
+      setTransformerEnabled(localStorage.getItem('bg_transformer_enabled') === 'true');
 
       const settings = loadTypographySettings();
       setFontSize(settings.fontSize);
@@ -593,6 +599,21 @@ const Home = () => {
                 <h3 className="text-sm font-bold   text-foreground">Autopilot Interface</h3>
               </div>
               <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setIsTransformerModalOpen(true)}
+                  className={cn(
+                    "h-8 px-3 text-xs font-bold gap-1.5 rounded-lg transition-all",
+                    transformerEnabled
+                      ? "bg-primary/10 border-primary text-primary hover:bg-primary/20"
+                      : "border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <Cpu className="w-3.5 h-3.5" />
+                  <span>Transformer AI</span>
+                  {transformerEnabled && <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />}
+                </Button>
                 <div className={cn("w-2 h-2 rounded-full", !autoModeActive ? 'bg-muted' : isLeader ? 'bg-green-500 animate-pulse' : 'bg-amber-500')} />
                 <span className="text-xs  font-bold  text-muted-foreground uppercase tracking-widest">{!autoModeActive ? 'IDLE' : isLeader ? 'ACTIVE' : 'STANDBY'}</span>
               </div>
@@ -831,6 +852,11 @@ const Home = () => {
           )}
         </div>
       </div>
+
+      <TransformerModal
+        open={isTransformerModalOpen}
+        onOpenChange={setIsTransformerModalOpen}
+      />
 
       {editingRecord && createPortal(
         <div
